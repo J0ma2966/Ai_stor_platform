@@ -53,7 +53,7 @@ func TestNormalize(t *testing.T) {
 	in := checkoutReq{
 		Items:           []checkoutItem{{ProductID: uuid.New(), Qty: 1}},
 		CustomerName:    " Азиз ",
-		Delivery:        deliveryReq{Street: "  Амира Темура\t", House: "12a", Entrance: "3‮", Lat: f(41.3), Lng: f(69.2)},
+		Delivery:        deliveryReq{Street: "  Амира Темура\t", House: "12a", Entrance: "3\u202e", Lat: f(41.3), Lng: f(69.2)},
 		CustomerComment: "Позвоните\n\n\n\nзаранее\x00",
 	}
 	if errs := in.Normalize(); errs != nil {
