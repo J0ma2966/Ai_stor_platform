@@ -25,9 +25,14 @@
     "@vitejs/plugin-react": "4.6.0",
     "jsdom": "26.1.0",
     "typescript": "5.9.3",
-    "vitest": "3.2.4"
+    "vitest": "4.1.12"
   },
   "overrides": {
     "postcss": "^8.5.18"
+  },
+  "allowScripts": {
+    "@parcel/watcher": false,
+    "esbuild": false,
+    "@swc/core": false
   }
 }
