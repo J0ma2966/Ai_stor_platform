@@ -57,6 +57,23 @@ jobs:
           sudo apt-get update -qq && sudo apt-get install -y -qq age postgresql-client-16 || sudo apt-get install -y -qq age postgresql-client
           ../deploy/backup/verify-restore.sh
 
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults: {run: {working-directory: web}}
+    env: {NEXT_TELEMETRY_DISABLED: "1"}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22, cache: npm, cache-dependency-path: web/package-lock.json}
+      - run: npm ci --no-audit --no-fund
+      - name: typecheck
+        run: npm run lint
+      - name: unit tests
+        run: npm test
+      - name: build
+        run: npm run build
+
   gosec:
     runs-on: ubuntu-latest
     permissions: {contents: read, security-events: write}
