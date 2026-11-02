@@ -19,12 +19,16 @@ import (
 	"github.com/boutique-market/backend/internal/tokens"
 )
 
-type Handlers struct{ DB *pgxpool.Pool }
+type Handlers struct {
+	DB      *pgxpool.Pool
+	Revoker *auth.Revoker
+}
 
 func (h *Handlers) Routes(r chi.Router) {
 	r.Post("/stores", h.createStore)
 	r.Post("/stores/{id}/status", h.setStoreStatus)
 	r.Post("/users/{id}/tokens", h.adjustTokens)
+	r.Post("/users/{id}/status", h.setUserStatus)
 }
 
 type createStoreReq struct {
@@ -101,10 +105,22 @@ func (h *Handlers) setStoreStatus(w http.ResponseWriter, r *http.Request) {
 			return db.ErrNotFound
 		}
 		if req.Status != "active" {
-			// блокировка/архив сразу выкидывает сессии магазина
+			// блокировка/архив сразу выкидывает сессии магазина: refresh в БД + access через Redis
 			if _, err := tx.Exec(r.Context(), `
 				UPDATE refresh_tokens SET revoked_at = now()
 				WHERE revoked_at IS NULL AND user_id IN (SELECT id FROM users WHERE store_id = $1)`, id); err != nil {
+				return err
+			}
+			rows, err := tx.Query(r.Context(), `SELECT id FROM users WHERE store_id = $1`, id)
+			if err != nil {
+				return err
+			}
+			ids, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+			if err != nil {
+				return err
+			}
+			// до коммита: если Redis недоступен, операция откатывается и админ повторит её
+			if err := h.Revoker.RevokeUser(r.Context(), ids...); err != nil {
 				return err
 			}
 		}
@@ -119,6 +135,52 @@ func (h *Handlers) setStoreStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"id": id, "status": req.Status})
+}
+
+type userStatusReq struct {
+	Status string `json:"status" validate:"required,oneof=active blocked"`
+	Reason string `json:"reason" validate:"required,min=3,max=500"`
+}
+
+// setUserStatus — блокировка/разблокировка клиента; блокировка действует мгновенно.
+func (h *Handlers) setUserStatus(w http.ResponseWriter, r *http.Request) {
+	uid, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		httpx.Fail(w, r, httpx.ErrNotFound)
+		return
+	}
+	var req userStatusReq
+	if err := httpx.Decode(w, r, &req); err != nil {
+		httpx.Fail(w, r, err)
+		return
+	}
+	err = db.Tx(r.Context(), h.DB, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(r.Context(), `UPDATE users SET status = $2::user_status WHERE id = $1 AND role = 'client'`, uid, req.Status)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return db.ErrNotFound
+		}
+		if req.Status == "blocked" {
+			if _, err := tx.Exec(r.Context(), `UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL`, uid); err != nil {
+				return err
+			}
+			if err := h.Revoker.RevokeUser(r.Context(), uid); err != nil {
+				return err
+			}
+		}
+		return audit.Log(r.Context(), tx, "user.status", "user", uid.String(), map[string]any{"status": req.Status, "reason": req.Reason})
+	})
+	if errors.Is(err, db.ErrNotFound) {
+		httpx.Fail(w, r, httpx.ErrNotFound)
+		return
+	}
+	if err != nil {
+		httpx.Fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"id": uid, "status": req.Status})
 }
 
 type adjustReq struct {

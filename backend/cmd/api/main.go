@@ -25,6 +25,7 @@ import (
 	"github.com/boutique-market/backend/internal/media"
 	"github.com/boutique-market/backend/internal/platform/cache"
 	"github.com/boutique-market/backend/internal/platform/db"
+	"github.com/boutique-market/backend/internal/products"
 	"github.com/boutique-market/backend/internal/server"
 )
 
@@ -95,9 +96,12 @@ func run(log *slog.Logger, args []string) error {
 		return errors.New("SMS provider is not configured for prod")
 	}
 
+	views := &products.ViewCounter{Redis: rdb, DB: pool, Log: log}
+	go views.Run(ctx, 30*time.Second)
+
 	api := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           server.New(server.Deps{Cfg: cfg, Log: log, DB: pool, Redis: rdb, Storage: store, SMS: sms}),
+		Handler:           server.New(server.Deps{Cfg: cfg, Log: log, DB: pool, Redis: rdb, Storage: store, SMS: sms, Views: views}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       60 * time.Second,
 		WriteTimeout:      75 * time.Second,

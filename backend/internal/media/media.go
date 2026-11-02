@@ -31,6 +31,17 @@ const (
 	PurposeStoreBranding Purpose = "store"    // логотип/обложка
 )
 
+// Public: фото товаров и оформление магазина публичны — отдаются по постоянному URL
+// через CDN (кэшируются). Фото клиента и места доставки — только по подписанной ссылке.
+func (p Purpose) Public() bool { return p == PurposeProductImage || p == PurposeStoreBranding }
+
+func visibility(p Purpose) string {
+	if p.Public() {
+		return "pub"
+	}
+	return "priv"
+}
+
 func (p Purpose) Valid() bool {
 	switch p {
 	case PurposeProductImage, PurposeBodyPhoto, PurposeDeliveryPhoto, PurposeStoreBranding:
@@ -40,8 +51,10 @@ func (p Purpose) Valid() bool {
 }
 
 const (
-	MaxPixels   = 40_000_000 // защита от «декомпрессионной бомбы»
-	MaxSide     = 4096       // длинная сторона после обработки
+	// Защита от «декомпрессионной бомбы»: 20 Мп покрывают фото любого телефона (обычно 12 Мп),
+	// память на одно декодирование ~80 МБ (RGBA) + до ~67 МБ на уменьшение.
+	MaxPixels   = 20_000_000
+	MaxSide     = 4096 // длинная сторона после обработки
 	JPEGQuality = 85
 )
 
@@ -101,17 +114,26 @@ func fit(src image.Image, max int) image.Image {
 }
 
 // NewKey — случайный непредсказуемый ключ, привязанный к владельцу:
-// u/<owner>/<purpose>/<random>.jpg. Владелец проверяется через OwnsKey.
+// <pub|priv>/u/<owner>/<purpose>/<random>.jpg. Владелец проверяется через OwnsKey.
+// Публичным в бакете делается только префикс pub/.
 func NewKey(owner uuid.UUID, p Purpose) string {
 	var b [16]byte
 	_, _ = rand.Read(b[:])
-	return fmt.Sprintf("u/%s/%s/%s.jpg", owner, p, hex.EncodeToString(b[:]))
+	return fmt.Sprintf("%s/u/%s/%s/%s.jpg", visibility(p), owner, p, hex.EncodeToString(b[:]))
+}
+
+// PublicURL — постоянный URL публичного файла (CDN). Для приватных ключей — пусто.
+func PublicURL(base, key string) string {
+	if !strings.HasPrefix(key, "pub/") {
+		return ""
+	}
+	return strings.TrimRight(base, "/") + "/" + key
 }
 
 // OwnsKey: ключ загружен этим владельцем и для этой цели. Использовать при
 // привязке ключа к сущности (заказ, товар), чтобы нельзя было подставить чужой файл.
 func OwnsKey(owner uuid.UUID, p Purpose, key string) bool {
-	prefix := fmt.Sprintf("u/%s/%s/", owner, p)
+	prefix := fmt.Sprintf("%s/u/%s/%s/", visibility(p), owner, p)
 	rest, ok := strings.CutPrefix(key, prefix)
 	return ok && len(rest) == 32+4 && strings.HasSuffix(rest, ".jpg") && isHex(rest[:32])
 }

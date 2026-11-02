@@ -41,7 +41,8 @@ func TestJWT(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := s.Parse(tok)
-	if err != nil || got != p {
+	p.IssuedAt = got.IssuedAt
+	if err != nil || got != p || got.IssuedAt == 0 {
 		t.Fatalf("roundtrip: %v %+v", err, got)
 	}
 

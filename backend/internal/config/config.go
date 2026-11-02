@@ -31,6 +31,8 @@ type Config struct {
 	OTPCooldown time.Duration
 	OTPMaxTries int
 	OTPPepper   []byte
+	// Префиксы номеров, на которые разрешено слать SMS (защита от SMS pumping).
+	OTPAllowedPrefixes []string
 
 	S3Endpoint  string
 	S3Region    string
@@ -39,6 +41,9 @@ type Config struct {
 	S3SecretKey string
 	S3UseSSL    bool
 	MaxUploadMB int
+	// Базовый URL публичных картинок (CDN или публичный префикс бакета), напр. https://cdn.example.uz
+	PublicMediaURL    string
+	UploadConcurrency int // одновременных декодирований изображений на инстанс
 
 	AutoMigrate bool
 }
@@ -47,31 +52,34 @@ func (c Config) IsProd() bool { return c.Env == "prod" }
 
 func Load() (Config, error) {
 	c := Config{
-		Env:          get("APP_ENV", "dev"),
-		HTTPAddr:     get("HTTP_ADDR", ":8080"),
-		InternalAddr: get("INTERNAL_ADDR", "127.0.0.1:9090"),
-		DatabaseURL:  os.Getenv("DATABASE_URL"),
-		DBMaxConns:   int32(min(max(getInt("DB_MAX_CONNS", 20), 1), 1000)), // #nosec G115 -- clamped
-		RedisURL:     get("REDIS_URL", "redis://localhost:6379/0"),
-		JWTSecret:    []byte(os.Getenv("JWT_SECRET")),
-		AccessTTL:    getDur("ACCESS_TTL", 15*time.Minute),
-		RefreshTTL:   getDur("REFRESH_TTL", 30*24*time.Hour),
-		CookieDomain: os.Getenv("COOKIE_DOMAIN"),
-		CookieSecure: getBool("COOKIE_SECURE", true),
-		CORSOrigins:  splitList(os.Getenv("CORS_ORIGINS")),
-		TrustedProxy: getBool("TRUSTED_PROXY", false),
-		OTPTTL:       getDur("OTP_TTL", 5*time.Minute),
-		OTPCooldown:  getDur("OTP_COOLDOWN", 60*time.Second),
-		OTPMaxTries:  getInt("OTP_MAX_TRIES", 5),
-		OTPPepper:    []byte(os.Getenv("OTP_PEPPER")),
-		S3Endpoint:   get("S3_ENDPOINT", "localhost:9000"),
-		S3Region:     get("S3_REGION", "us-east-1"),
-		S3Bucket:     get("S3_BUCKET", "boutique-private"),
-		S3AccessKey:  os.Getenv("S3_ACCESS_KEY"),
-		S3SecretKey:  os.Getenv("S3_SECRET_KEY"),
-		S3UseSSL:     getBool("S3_USE_SSL", true),
-		MaxUploadMB:  getInt("MAX_UPLOAD_MB", 10),
-		AutoMigrate:  getBool("AUTO_MIGRATE", false),
+		Env:                get("APP_ENV", "dev"),
+		HTTPAddr:           get("HTTP_ADDR", ":8080"),
+		InternalAddr:       get("INTERNAL_ADDR", "127.0.0.1:9090"),
+		DatabaseURL:        os.Getenv("DATABASE_URL"),
+		DBMaxConns:         int32(min(max(getInt("DB_MAX_CONNS", 20), 1), 1000)), // #nosec G115 -- clamped
+		RedisURL:           get("REDIS_URL", "redis://localhost:6379/0"),
+		JWTSecret:          []byte(os.Getenv("JWT_SECRET")),
+		AccessTTL:          getDur("ACCESS_TTL", 15*time.Minute),
+		RefreshTTL:         getDur("REFRESH_TTL", 30*24*time.Hour),
+		CookieDomain:       os.Getenv("COOKIE_DOMAIN"),
+		CookieSecure:       getBool("COOKIE_SECURE", true),
+		CORSOrigins:        splitList(os.Getenv("CORS_ORIGINS")),
+		TrustedProxy:       getBool("TRUSTED_PROXY", false),
+		OTPTTL:             getDur("OTP_TTL", 5*time.Minute),
+		OTPCooldown:        getDur("OTP_COOLDOWN", 60*time.Second),
+		OTPMaxTries:        getInt("OTP_MAX_TRIES", 5),
+		OTPPepper:          []byte(os.Getenv("OTP_PEPPER")),
+		OTPAllowedPrefixes: splitList(get("OTP_ALLOWED_PREFIXES", "+998")),
+		S3Endpoint:         get("S3_ENDPOINT", "localhost:9000"),
+		S3Region:           get("S3_REGION", "us-east-1"),
+		S3Bucket:           get("S3_BUCKET", "boutique-media"),
+		S3AccessKey:        os.Getenv("S3_ACCESS_KEY"),
+		S3SecretKey:        os.Getenv("S3_SECRET_KEY"),
+		S3UseSSL:           getBool("S3_USE_SSL", true),
+		MaxUploadMB:        getInt("MAX_UPLOAD_MB", 10),
+		PublicMediaURL:     get("PUBLIC_MEDIA_URL", "http://localhost:9000/boutique-media"),
+		UploadConcurrency:  min(max(getInt("UPLOAD_CONCURRENCY", 4), 1), 64),
+		AutoMigrate:        getBool("AUTO_MIGRATE", false),
 	}
 	var errs []error
 	if c.DatabaseURL == "" {

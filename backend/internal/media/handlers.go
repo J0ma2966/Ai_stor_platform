@@ -1,10 +1,13 @@
 package media
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 
 	"github.com/boutique-market/backend/internal/auth"
 	"github.com/boutique-market/backend/internal/httpx"
@@ -12,10 +15,18 @@ import (
 )
 
 type Handlers struct {
-	Store    Storage
-	Limiter  *ratelimit.Limiter
-	MaxBytes int64
+	Store      Storage
+	Limiter    *ratelimit.Limiter
+	Redis      *redis.Client
+	MaxBytes   int64
+	PublicBase string
+	// Sem ограничивает одновременные декодирования на инстанс (память). Создаётся NewSem.
+	Sem chan struct{}
 }
+
+func NewSem(n int) chan struct{} { return make(chan struct{}, n) }
+
+var errBusy = httpx.NewError(http.StatusServiceUnavailable, "upload_busy", "too many uploads in progress, retry shortly")
 
 var ruleUpload = ratelimit.Rule{Name: "upload_user", Limit: 60, Window: time.Hour}
 
@@ -37,6 +48,25 @@ func (h *Handlers) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !h.Limiter.Check(w, r, ruleUpload, p.UserID.String()) {
+		return
+	}
+	// один одновременный upload на пользователя (во всех инстансах)
+	lock := "upl:lock:" + p.UserID.String()
+	if ok, err := h.Redis.SetNX(r.Context(), lock, 1, 90*time.Second).Result(); err == nil && !ok {
+		w.Header().Set("Retry-After", "2")
+		httpx.Fail(w, r, httpx.NewError(http.StatusTooManyRequests, "upload_in_progress", "previous upload is still processing"))
+		return
+	}
+	defer h.Redis.Del(context.WithoutCancel(r.Context()), lock)
+	// глобальный лимит декодирований на инстанс: ждём не дольше 3 с, иначе 503
+	select {
+	case h.Sem <- struct{}{}:
+		defer func() { <-h.Sem }()
+	case <-time.After(3 * time.Second):
+		w.Header().Set("Retry-After", "3")
+		httpx.Fail(w, r, errBusy)
+		return
+	case <-r.Context().Done():
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, h.MaxBytes+1)
@@ -66,10 +96,12 @@ func (h *Handlers) Upload(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, r, httpx.ErrUnavailable)
 		return
 	}
-	u, err := h.Store.PresignGet(r.Context(), key, 15*time.Minute)
-	if err != nil {
-		httpx.Fail(w, r, err)
-		return
+	u := PublicURL(h.PublicBase, key)
+	if u == "" {
+		if u, err = h.Store.PresignGet(r.Context(), key, 15*time.Minute); err != nil {
+			httpx.Fail(w, r, err)
+			return
+		}
 	}
 	httpx.JSON(w, http.StatusCreated, map[string]any{"key": key, "url": u, "bytes": len(data)})
 }

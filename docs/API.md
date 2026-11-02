@@ -23,12 +23,12 @@
 | HTTP | Типичные `code` |
 |---|---|
 | 400 | `invalid_json`, `bad_cursor`, `bad_filter`, `bad_sort` |
-| 401 | `unauthorized`, `token_invalid` (нужен refresh), `otp_invalid`, `bad_credentials`, `refresh_invalid` |
+| 401 | `unauthorized`, `token_invalid` (нужен refresh), `token_revoked` (аккаунт заблокирован, на экран входа), `otp_invalid`, `bad_credentials`, `refresh_invalid` |
 | 403 | `forbidden`, `account_blocked`, `store_not_active` |
 | 404 | `not_found` (в том числе для чужих объектов) |
 | 409 | `conflict`, `sku_taken`, `slug_taken`, `login_taken` |
 | 413/415 | `payload_too_large`, `file_too_large`, `unsupported_type` |
-| 422 | `validation_failed` (+ `fields`), `invalid_purpose`, `insufficient_tokens` |
+| 422 | `validation_failed` (+ `fields`), `invalid_purpose`, `insufficient_tokens`, `phone_not_allowed` |
 | 429 | `rate_limited`, `otp_cooldown` (+ заголовок `Retry-After`) |
 | 500/503 | `internal`, `unavailable` |
 
@@ -49,7 +49,7 @@
 
 ## Загрузка файлов
 
-`POST /v1/uploads?purpose=<product|store|body|delivery>`, тело — сам файл (JPEG/PNG/WebP, до 10 МБ). Ответ `{key, url}`. Затем `key` передаётся в бизнес-запрос (товар, заказ). Чужие ключи отклоняются.
+`POST /v1/uploads?purpose=<product|store|body|delivery>`, тело — сам файл (JPEG/PNG/WebP, до 10 МБ). Ответ `{key, url}`. Для `product` и `store` `url` постоянный (CDN), для `body` и `delivery` это подписанная ссылка на 15 минут. Затем `key` передаётся в бизнес-запрос (товар, заказ). Чужие ключи отклоняются. Одна загрузка на пользователя одновременно (`429 upload_in_progress`). Если сервер перегружен, ответ `503 upload_busy` с `Retry-After`.
 
 | purpose | кто может |
 |---|---|
@@ -70,7 +70,7 @@
 | POST | `/v1/uploads` | любая |
 | GET/POST | `/v1/store/products` | store |
 | PATCH | `/v1/store/products/{id}/status` | store |
-| POST | `/v1/admin/stores`, `/v1/admin/stores/{id}/status`, `/v1/admin/users/{id}/tokens` | admin |
+| POST | `/v1/admin/stores`, `/v1/admin/stores/{id}/status`, `/v1/admin/users/{id}/status`, `/v1/admin/users/{id}/tokens` | admin |
 
 Фильтры каталога: `q`, `category`, `store`, `brand`, `price_min`, `price_max`, `in_stock=true`, `sort=new|price_asc|price_desc|popular`.
 

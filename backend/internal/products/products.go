@@ -3,7 +3,6 @@
 package products
 
 import (
-	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -24,8 +23,9 @@ import (
 )
 
 type Handlers struct {
-	DB    *pgxpool.Pool
-	Media media.Storage
+	DB         *pgxpool.Pool
+	PublicBase string // базовый URL CDN для публичных картинок
+	Views      *ViewCounter
 }
 
 type Product struct {
@@ -184,7 +184,7 @@ func (h *Handlers) list(w http.ResponseWriter, r *http.Request) {
 		next = encodeCursor(last.sortVal, last.ID)
 	}
 	for i := range items {
-		items[i].Images = h.sign(r.Context(), items[i].imageKeys)
+		items[i].Images = h.urls(items[i].imageKeys)
 	}
 	if items == nil {
 		items = []Product{}
@@ -200,11 +200,10 @@ func (h *Handlers) get(w http.ResponseWriter, r *http.Request) {
 	}
 	var p Product
 	err = h.DB.QueryRow(r.Context(), `
-		UPDATE products p SET views_count = views_count + 1
-		FROM stores s
-		WHERE p.id = $1 AND s.id = p.store_id AND p.status = 'published' AND s.status = 'active'
-		RETURNING p.id, p.store_id, s.name, p.category_id, p.title, p.description, p.brand, p.price, p.in_stock, p.created_at,
-		  COALESCE((SELECT jsonb_object_agg(angle, key) FROM product_images pi WHERE pi.product_id = p.id), '{}')`, id).
+		SELECT p.id, p.store_id, s.name, p.category_id, p.title, p.description, p.brand, p.price, p.in_stock, p.created_at,
+		  COALESCE((SELECT jsonb_object_agg(angle, key) FROM product_images pi WHERE pi.product_id = p.id), '{}')
+		FROM products p JOIN stores s ON s.id = p.store_id
+		WHERE p.id = $1 AND p.status = 'published' AND s.status = 'active'`, id).
 		Scan(&p.ID, &p.StoreID, &p.StoreName, &p.CategoryID, &p.Title, &p.Description, &p.Brand, &p.Price, &p.InStock, &p.CreatedAt, &p.imageKeys)
 	if errors.Is(err, pgx.ErrNoRows) {
 		httpx.Fail(w, r, httpx.ErrNotFound)
@@ -214,14 +213,17 @@ func (h *Handlers) get(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, r, err)
 		return
 	}
-	p.Images = h.sign(r.Context(), p.imageKeys)
+	p.Images = h.urls(p.imageKeys)
+	h.Views.Hit(r.Context(), p.ID)
+	w.Header().Set("Cache-Control", "public, max-age=30")
 	httpx.JSON(w, http.StatusOK, p)
 }
 
-func (h *Handlers) sign(ctx context.Context, keys map[string]string) map[string]string {
+// urls — постоянные CDN-ссылки (кэшируются браузером и CDN).
+func (h *Handlers) urls(keys map[string]string) map[string]string {
 	out := make(map[string]string, len(keys))
 	for angle, k := range keys {
-		if u, err := h.Media.PresignGet(ctx, k, time.Hour); err == nil {
+		if u := media.PublicURL(h.PublicBase, k); u != "" {
 			out[angle] = u
 		}
 	}

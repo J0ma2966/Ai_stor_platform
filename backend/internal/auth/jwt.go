@@ -19,9 +19,10 @@ const (
 
 // Principal — кто делает запрос. Все запросы к данным обязаны фильтроваться по нему.
 type Principal struct {
-	UserID  uuid.UUID
-	Role    Role
-	StoreID uuid.UUID // только для роли store
+	UserID   uuid.UUID
+	Role     Role
+	StoreID  uuid.UUID // только для роли store
+	IssuedAt int64     // unix-время выпуска токена (для мгновенного отзыва)
 }
 
 type claims struct {
@@ -67,7 +68,7 @@ func (s *Signer) Parse(tok string) (Principal, error) {
 	var c claims
 	_, err := jwt.ParseWithClaims(tok, &c, func(t *jwt.Token) (any, error) { return s.secret, nil },
 		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
-		jwt.WithIssuer(issuer), jwt.WithExpirationRequired(), jwt.WithTimeFunc(s.now), jwt.WithLeeway(5*time.Second))
+		jwt.WithIssuer(issuer), jwt.WithExpirationRequired(), jwt.WithIssuedAt(), jwt.WithTimeFunc(s.now), jwt.WithLeeway(5*time.Second))
 	if err != nil {
 		return Principal{}, ErrInvalidToken
 	}
@@ -76,6 +77,9 @@ func (s *Signer) Parse(tok string) (Principal, error) {
 		return Principal{}, ErrInvalidToken
 	}
 	p := Principal{UserID: uid, Role: c.Role}
+	if c.IssuedAt != nil {
+		p.IssuedAt = c.IssuedAt.Unix()
+	}
 	switch c.Role {
 	case RoleClient, RoleAdmin:
 	case RoleStore:

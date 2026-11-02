@@ -3,6 +3,7 @@ package auth
 import (
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -14,19 +15,23 @@ import (
 const refreshCookie = "rt"
 
 type Handlers struct {
-	Svc          *Service
-	Limiter      *ratelimit.Limiter
-	CookieDomain string
-	CookieSecure bool
+	Svc             *Service
+	AllowedPrefixes []string // пусто = любые номера
+	Limiter         *ratelimit.Limiter
+	CookieDomain    string
+	CookieSecure    bool
 }
 
 var (
-	ruleOTPPhone  = ratelimit.Rule{Name: "otp_phone", Limit: 5, Window: time.Hour}
-	ruleOTPIP     = ratelimit.Rule{Name: "otp_ip", Limit: 20, Window: time.Hour}
-	ruleVerifyIP  = ratelimit.Rule{Name: "otp_verify_ip", Limit: 30, Window: 15 * time.Minute}
-	ruleLoginIP   = ratelimit.Rule{Name: "login_ip", Limit: 20, Window: 15 * time.Minute}
-	ruleLoginUser = ratelimit.Rule{Name: "login_user", Limit: 10, Window: 15 * time.Minute}
-	ruleRefreshIP = ratelimit.Rule{Name: "refresh_ip", Limit: 120, Window: 15 * time.Minute}
+	ruleOTPPhone = ratelimit.Rule{Name: "otp_phone", Limit: 5, Window: time.Hour}
+	ruleOTPIP    = ratelimit.Rule{Name: "otp_ip", Limit: 20, Window: time.Hour}
+	ruleVerifyIP = ratelimit.Rule{Name: "otp_verify_ip", Limit: 30, Window: 15 * time.Minute}
+	ruleLoginIP  = ratelimit.Rule{Name: "login_ip", Limit: 20, Window: 15 * time.Minute}
+	// логин+IP: злоумышленник не может заблокировать вход админу с другого адреса;
+	// login (общий): ограничивает распределённый перебор одного аккаунта.
+	ruleLoginUserIP = ratelimit.Rule{Name: "login_user_ip", Limit: 10, Window: 15 * time.Minute}
+	ruleLoginUser   = ratelimit.Rule{Name: "login_user", Limit: 100, Window: 15 * time.Minute}
+	ruleRefreshIP   = ratelimit.Rule{Name: "refresh_ip", Limit: 120, Window: 15 * time.Minute}
 )
 
 func (h *Handlers) Routes(r chi.Router) {
@@ -45,6 +50,9 @@ func (h *Handlers) requestOTP(w http.ResponseWriter, r *http.Request) {
 	var req otpRequest
 	if err := httpx.Decode(w, r, &req); err != nil {
 		httpx.Fail(w, r, err)
+		return
+	}
+	if !h.phoneAllowed(w, r, req.Phone) {
 		return
 	}
 	if !h.Limiter.Check(w, r, ruleOTPIP, httpx.ClientIP(r.Context())) || !h.Limiter.Check(w, r, ruleOTPPhone, req.Phone) {
@@ -75,7 +83,7 @@ func (h *Handlers) verifyOTP(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, r, err)
 		return
 	}
-	if !h.Limiter.Check(w, r, ruleVerifyIP, httpx.ClientIP(r.Context())) {
+	if !h.phoneAllowed(w, r, req.Phone) || !h.Limiter.Check(w, r, ruleVerifyIP, httpx.ClientIP(r.Context())) {
 		return
 	}
 	sess, err := h.Svc.VerifyOTP(r.Context(), req.Phone, req.Code, meta(r))
@@ -93,7 +101,9 @@ func (h *Handlers) login(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, r, err)
 		return
 	}
-	if !h.Limiter.Check(w, r, ruleLoginIP, httpx.ClientIP(r.Context())) || !h.Limiter.Check(w, r, ruleLoginUser, req.Login) {
+	ip := httpx.ClientIP(r.Context())
+	if !h.Limiter.Check(w, r, ruleLoginIP, ip) || !h.Limiter.Check(w, r, ruleLoginUserIP, req.Login+"|"+ip) ||
+		!h.Limiter.Check(w, r, ruleLoginUser, req.Login) {
 		return
 	}
 	sess, err := h.Svc.Login(r.Context(), req.Login, req.Password, meta(r))
@@ -168,6 +178,20 @@ func (h *Handlers) clearCookie(w http.ResponseWriter) {
 		Name: refreshCookie, Value: "", Path: "/v1/auth", Domain: h.CookieDomain, MaxAge: -1,
 		HttpOnly: true, Secure: h.CookieSecure, SameSite: http.SameSiteLaxMode,
 	})
+}
+
+func (h *Handlers) phoneAllowed(w http.ResponseWriter, r *http.Request, phone string) bool {
+	if len(h.AllowedPrefixes) == 0 {
+		return true
+	}
+	for _, p := range h.AllowedPrefixes {
+		if strings.HasPrefix(phone, p) {
+			return true
+		}
+	}
+	httpx.Fail(w, r, &httpx.Error{Status: http.StatusUnprocessableEntity, Code: "phone_not_allowed",
+		Message: "phone numbers of this country are not supported", Fields: map[string]string{"phone": "country"}})
+	return false
 }
 
 func meta(r *http.Request) ClientMeta {

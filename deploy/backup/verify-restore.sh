@@ -33,4 +33,7 @@ n=$(psql -tAq "$target" -c "SELECT count(*) FROM pg_trigger WHERE tgname IN ('to
 if [[ "$n" != "4" ]]; then
   echo "append-only trigger missing after restore"; fail=1
 fi
+# инварианты данных (баланс = сумма журнала и т. п.) на восстановленной копии
+check="${CONSISTENCY_SQL:-$here/../../scripts/consistency-check.sql}"
+psql -q -v ON_ERROR_STOP=1 "$target" -f "$check" || { echo "consistency check failed"; fail=1; }
 exit $fail

@@ -7,6 +7,7 @@ import (
 	"image/color"
 	"image/jpeg"
 	"image/png"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -70,6 +71,14 @@ func TestProcessRejects(t *testing.T) {
 	}
 }
 
+// PNG 6300x6300 весит ~50 КБ, но декодируется в ~160 МБ — должен отклоняться до декодирования.
+func TestProcessRejectsDecompressionBomb(t *testing.T) {
+	bomb := pngBytes(t, 6300, 6300)
+	if _, err := Process(bytes.NewReader(bomb), 10<<20); !errors.Is(err, ErrTooLarge) {
+		t.Fatalf("bomb accepted: %v", err)
+	}
+}
+
 func TestProcessDownscales(t *testing.T) {
 	out, err := Process(bytes.NewReader(pngBytes(t, 5000, 100)), 10<<20)
 	if err != nil {
@@ -93,7 +102,14 @@ func TestOwnsKey(t *testing.T) {
 	if OwnsKey(u, PurposeBodyPhoto, k) {
 		t.Fatal("wrong purpose accepted")
 	}
-	if OwnsKey(u, PurposeDeliveryPhoto, "u/"+u.String()+"/delivery/../../etc/passwd.jpg") {
+	pk := NewKey(u, PurposeProductImage)
+	if !strings.HasPrefix(pk, "pub/") || !strings.HasPrefix(k, "priv/") {
+		t.Fatalf("visibility prefixes wrong: %s %s", pk, k)
+	}
+	if PublicURL("https://cdn", k) != "" || PublicURL("https://cdn/", pk) != "https://cdn/"+pk {
+		t.Fatal("PublicURL must only expose pub/ keys")
+	}
+	if OwnsKey(u, PurposeDeliveryPhoto, "priv/u/"+u.String()+"/delivery/../../etc/passwd.jpg") {
 		t.Fatal("path traversal accepted")
 	}
 }

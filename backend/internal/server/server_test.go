@@ -25,6 +25,7 @@ import (
 	"github.com/boutique-market/backend/internal/config"
 	"github.com/boutique-market/backend/internal/media"
 	"github.com/boutique-market/backend/internal/platform/db"
+	"github.com/boutique-market/backend/internal/products"
 	"github.com/boutique-market/backend/internal/testutil"
 	"github.com/boutique-market/backend/internal/tokens"
 )
@@ -63,7 +64,8 @@ func setup(t *testing.T) *env {
 		Cfg: config.Config{
 			Env: "test", JWTSecret: []byte(strings.Repeat("k", 32)), AccessTTL: 15 * time.Minute, RefreshTTL: 24 * time.Hour,
 			OTPTTL: 5 * time.Minute, OTPCooldown: time.Minute, OTPMaxTries: 5, OTPPepper: []byte("pepper-pepper-pepper"),
-			MaxUploadMB: 5, CookieSecure: false,
+			MaxUploadMB: 5, CookieSecure: false, OTPAllowedPrefixes: []string{"+998"},
+			PublicMediaURL: "https://cdn.test", UploadConcurrency: 2,
 		},
 		Log: slog.New(slog.NewJSONHandler(io.Discard, nil)), DB: pool,
 		Redis: redis.NewClient(&redis.Options{Addr: mr.Addr()}), Storage: media.NewMemory(), SMS: sms,
@@ -430,3 +432,72 @@ func TestLedgerInvariants(t *testing.T) {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+func TestViewsCountedInRedisAndFlushed(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	var storeID, catID, pid uuid.UUID
+	_ = e.d.DB.QueryRow(ctx, `INSERT INTO stores (slug, name, status) VALUES ('views', 'V', 'active') RETURNING id`).Scan(&storeID)
+	_ = e.d.DB.QueryRow(ctx, `SELECT id FROM categories LIMIT 1`).Scan(&catID)
+	_ = e.d.DB.QueryRow(ctx, `INSERT INTO products (store_id, category_id, sku, title, description, brand, price, status)
+		VALUES ($1, $2, 'v1', 'T', 'D', 'B', 100, 'published') RETURNING id`, storeID, catID).Scan(&pid)
+	_, _ = e.d.DB.Exec(ctx, `INSERT INTO product_images (product_id, angle, key) VALUES ($1, 'front', $2)`, pid, media.NewKey(uuid.New(), media.PurposeProductImage))
+
+	vc := &products.ViewCounter{Redis: e.d.Redis, DB: e.d.DB, Log: e.d.Log}
+	e.d.Views = vc
+	srv := httptest.NewServer(New(e.d))
+	defer srv.Close()
+	e.srv = srv
+	anon := e.client()
+	var first string
+	for i := 0; i < 3; i++ {
+		img := anon.must(200, "GET", "/v1/products/"+pid.String(), nil).data()["images"].(map[string]any)["front"].(string)
+		if !strings.HasPrefix(img, "https://cdn.test/pub/") {
+			t.Fatalf("product image must be a stable CDN URL: %s", img)
+		}
+		if first != "" && img != first {
+			t.Fatal("image URL changes between requests (not cacheable)")
+		}
+		first = img
+	}
+	var n int64
+	_ = e.d.DB.QueryRow(ctx, `SELECT views_count FROM products WHERE id = $1`, pid).Scan(&n)
+	if n != 0 {
+		t.Fatal("views must not be written per request")
+	}
+	if err := vc.Flush(ctx); err != nil {
+		t.Fatal(err)
+	}
+	_ = e.d.DB.QueryRow(ctx, `SELECT views_count FROM products WHERE id = $1`, pid).Scan(&n)
+	if n != 3 {
+		t.Fatalf("views_count=%d, want 3", n)
+	}
+	if err := vc.Flush(ctx); err != nil { // пустой сброс — не ошибка
+		t.Fatal(err)
+	}
+}
+
+func TestBlockedClientLosesAccessImmediately(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	_, _ = admin.CreateAdmin(ctx, e.d.DB, "root", "admin-password-123")
+	adm := e.client()
+	adm.token = adm.must(200, "POST", "/v1/auth/login", map[string]any{"login": "root", "password": "admin-password-123"}).data()["access_token"].(string)
+	c := e.client()
+	uid := c.loginClient("+998904444444").data()["user"].(map[string]any)["id"].(string)
+	c.must(200, "GET", "/v1/me", nil)
+	adm.must(422, "POST", "/v1/admin/users/"+uid+"/status", map[string]any{"status": "blocked"})
+	adm.must(200, "POST", "/v1/admin/users/"+uid+"/status", map[string]any{"status": "blocked", "reason": "fraud"})
+	if r := c.do("GET", "/v1/me", nil); r.Status != 401 || r.errCode() != "token_revoked" {
+		t.Fatalf("blocked client still has access: %d %s", r.Status, r.Raw)
+	}
+	if r := c.do("POST", "/v1/auth/refresh", nil); r.Status != 401 && r.Status != 403 {
+		t.Fatalf("blocked client refresh: %d", r.Status)
+	}
+	c.token = ""
+	c.e.mr.Del("otp:cd:+998904444444")
+	c.must(202, "POST", "/v1/auth/otp/request", map[string]any{"phone": "+998904444444"})
+	if r := c.do("POST", "/v1/auth/otp/verify", map[string]any{"phone": "+998904444444", "code": e.sms.last("+998904444444")}); r.errCode() != "account_blocked" {
+		t.Fatalf("blocked client must not log in: %s", r.Raw)
+	}
+}

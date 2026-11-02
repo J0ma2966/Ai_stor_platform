@@ -28,6 +28,7 @@ type Deps struct {
 	Redis   *redis.Client
 	Storage media.Storage
 	SMS     auth.SMSSender
+	Views   *products.ViewCounter // nil — просмотры не считаются (тесты)
 }
 
 func New(d Deps) http.Handler {
@@ -37,11 +38,14 @@ func New(d Deps) http.Handler {
 		DB: d.DB, Signer: signer, SMS: d.SMS, RefreshTTL: d.Cfg.RefreshTTL,
 		OTP: auth.NewOTP(d.Redis, d.Cfg.OTPPepper, d.Cfg.OTPTTL, d.Cfg.OTPCooldown, d.Cfg.OTPMaxTries),
 	}
-	authH := &auth.Handlers{Svc: authSvc, Limiter: limiter, CookieDomain: d.Cfg.CookieDomain, CookieSecure: d.Cfg.CookieSecure}
+	revoker := auth.NewRevoker(d.Redis, d.Cfg.AccessTTL)
+	authH := &auth.Handlers{Svc: authSvc, Limiter: limiter, AllowedPrefixes: d.Cfg.OTPAllowedPrefixes,
+		CookieDomain: d.Cfg.CookieDomain, CookieSecure: d.Cfg.CookieSecure}
 	usersH := &users.Handlers{DB: d.DB}
-	productsH := &products.Handlers{DB: d.DB, Media: d.Storage}
-	mediaH := &media.Handlers{Store: d.Storage, Limiter: limiter, MaxBytes: int64(d.Cfg.MaxUploadMB) << 20}
-	adminH := &admin.Handlers{DB: d.DB}
+	productsH := &products.Handlers{DB: d.DB, PublicBase: d.Cfg.PublicMediaURL, Views: d.Views}
+	mediaH := &media.Handlers{Store: d.Storage, Limiter: limiter, Redis: d.Redis, PublicBase: d.Cfg.PublicMediaURL,
+		MaxBytes: int64(d.Cfg.MaxUploadMB) << 20, Sem: media.NewSem(max(d.Cfg.UploadConcurrency, 1))}
+	adminH := &admin.Handlers{DB: d.DB, Revoker: revoker}
 
 	r := chi.NewRouter()
 	r.Use(httpx.RequestContext(d.Log, d.Cfg.TrustedProxy))
@@ -55,28 +59,34 @@ func New(d Deps) http.Handler {
 
 	r.Route("/v1", func(r chi.Router) {
 		r.Use(limiter.ByIP(ratelimit.Rule{Name: "global_ip", Limit: 600, Window: time.Minute}))
-		r.Use(auth.Authenticate(signer))
-		r.Use(timeout(15 * time.Second))
+		r.Use(auth.Authenticate(signer, revoker))
 
-		r.Route("/auth", authH.Routes)
-		productsH.PublicRoutes(r)
+		// Загрузка файлов — отдельно: медленный мобильный интернет, свой таймаут 60 с.
+		r.With(timeout(60*time.Second), auth.RequireRole(auth.RoleClient, auth.RoleStore, auth.RoleAdmin)).
+			Post("/uploads", mediaH.Upload)
 
 		r.Group(func(r chi.Router) {
-			r.Use(auth.RequireRole(auth.RoleClient, auth.RoleStore, auth.RoleAdmin))
-			r.Route("/me", usersH.Routes)
-			r.With(timeout(60*time.Second)).Post("/uploads", mediaH.Upload)
-			// TODO(orders): r.Route("/orders", ordersH.ClientRoutes) — за RequireRole(client)
-		})
+			r.Use(timeout(15 * time.Second))
 
-		r.Route("/store", func(r chi.Router) {
-			r.Use(auth.RequireRole(auth.RoleStore))
-			productsH.StoreRoutes(r)
-			// TODO(orders): r.Route("/orders", ordersH.StoreRoutes) — окно доставки магазина
-		})
+			r.Route("/auth", authH.Routes)
+			productsH.PublicRoutes(r)
 
-		r.Route("/admin", func(r chi.Router) {
-			r.Use(auth.RequireRole(auth.RoleAdmin))
-			adminH.Routes(r)
+			r.Group(func(r chi.Router) {
+				r.Use(auth.RequireRole(auth.RoleClient, auth.RoleStore, auth.RoleAdmin))
+				r.Route("/me", usersH.Routes)
+				// TODO(orders): r.Route("/orders", ordersH.ClientRoutes) — за RequireRole(client)
+			})
+
+			r.Route("/store", func(r chi.Router) {
+				r.Use(auth.RequireRole(auth.RoleStore))
+				productsH.StoreRoutes(r)
+				// TODO(orders): r.Route("/orders", ordersH.StoreRoutes) — окно доставки магазина
+			})
+
+			r.Route("/admin", func(r chi.Router) {
+				r.Use(auth.RequireRole(auth.RoleAdmin))
+				adminH.Routes(r)
+			})
 		})
 	})
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) { httpx.Fail(w, r, httpx.ErrNotFound) })
