@@ -105,6 +105,11 @@ func run(log *slog.Logger, args []string) error {
 		Run: func(ctx context.Context) (int64, error) {
 			return orders.PurgeDeliveryPhotos(ctx, pool, store, orders.PhotoRetention, time.Now())
 		},
+	}, {
+		Name: "orphan_delivery_photos",
+		Run: func(ctx context.Context) (int64, error) {
+			return orders.PurgeOrphanDeliveryPhotos(ctx, pool, store, time.Now())
+		},
 	}}}).Run(ctx, time.Hour)
 
 	api := &http.Server{
