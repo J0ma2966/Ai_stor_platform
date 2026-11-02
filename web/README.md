@@ -15,7 +15,8 @@ npm run build
 - Ошибки показываются через `ErrorBox` с `request_id`; коды ошибок переводятся в `messages/*.json` (`errors.*`).
 - Деньги приходят в тийинах: форматировать через `formatSum`.
 - Пользовательский текст выводить только как текст (без `dangerouslySetInnerHTML`).
-- CSP и заголовки безопасности: `next.config.ts`.
+- CSP с nonce на каждый запрос: `src/middleware.ts` + `src/lib/csp.ts` (скрипты только с nonce и `'strict-dynamic'`), поэтому страницы рендерятся динамически. HSTS и прочие заголовки: `next.config.ts`.
+- `NEXT_PUBLIC_MEDIA_ORIGIN` может быть списком через запятую (CDN картинок товаров + хранилище приватных фото).
 
 ## Экраны заказов и доставки
 | Путь | Кто | Что |
