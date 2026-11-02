@@ -49,13 +49,13 @@ jobs:
           go build -o /tmp/api ./cmd/api
           /tmp/api migrate up && /tmp/api migrate down && /tmp/api migrate up
       - name: backup and restore check
-        env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
-          ADMIN_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
-          PGPASSWORD: postgres
+        # pg_dump/pg_restore той же major-версии, что и сервер (на раннере клиент новее и
+        # пишет в дамп параметры, которых PostgreSQL 16 не знает) — как в образе deploy/backup.
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq age postgresql-client-16 || sudo apt-get install -y -qq age postgresql-client
-          ../deploy/backup/verify-restore.sh
+          docker run --rm --network host -v "$GITHUB_WORKSPACE:/w" -w /w \
+            -e DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres \
+            -e ADMIN_DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres \
+            postgres:16-alpine sh -c 'apk add -q --no-cache age bash coreutils python3 && deploy/backup/verify-restore.sh'
 
   web:
     runs-on: ubuntu-latest
