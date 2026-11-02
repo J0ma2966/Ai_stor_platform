@@ -153,6 +153,9 @@ func (h *Handlers) list(w http.ResponseWriter, r *http.Request) {
 		where = append(where, fmt.Sprintf("(%s, p.id) %s (%s::%s, %s)", srt.col, cmp, arg(val), srt.cast, arg(id)))
 	}
 	limit := httpx.Limit(r, 24, 60)
+	// В строку подставляются только константы из карты sorts и фрагменты WHERE с плейсхолдерами $N;
+	// все значения пользователя идут через args.
+	// nosemgrep: go.lang.security.injection.tainted-sql-string
 	sql := fmt.Sprintf(`
 		SELECT p.id, p.store_id, s.name, p.category_id, p.title, p.brand, p.price, p.in_stock, p.created_at, (%s)::text,
 		       COALESCE((SELECT jsonb_object_agg(angle, key) FROM product_images pi WHERE pi.product_id = p.id), '{}')

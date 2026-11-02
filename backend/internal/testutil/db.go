@@ -32,7 +32,8 @@ func DB(t testing.TB) *pgxpool.Pool {
 	var b [6]byte
 	_, _ = rand.Read(b[:])
 	name := "test_" + hex.EncodeToString(b[:])
-	if _, err := admin.Exec(ctx, "CREATE DATABASE "+name); err != nil {
+	// имя — случайный hex; идентификаторы нельзя передать плейсхолдером
+	if _, err := admin.Exec(ctx, "CREATE DATABASE "+pgx.Identifier{name}.Sanitize()); err != nil { // nosemgrep: tests.security.sql-string-concat
 		t.Fatalf("create db: %v", err)
 	}
 	u, _ := url.Parse(base)
@@ -46,7 +47,7 @@ func DB(t testing.TB) *pgxpool.Pool {
 	}
 	t.Cleanup(func() {
 		pool.Close()
-		_, _ = admin.Exec(ctx, "DROP DATABASE IF EXISTS "+name+" WITH (FORCE)")
+		_, _ = admin.Exec(ctx, "DROP DATABASE IF EXISTS "+pgx.Identifier{name}.Sanitize()+" WITH (FORCE)") // nosemgrep: tests.security.sql-string-concat
 		_ = admin.Close(ctx)
 	})
 	return pool

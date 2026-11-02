@@ -160,7 +160,7 @@ func (h *Handlers) finish(w http.ResponseWriter, r *http.Request, sess *Session,
 		return
 	}
 	// #nosec G124 -- HttpOnly+SameSite всегда; Secure=false допускается только вне prod (проверяет config.Load)
-	http.SetCookie(w, &http.Cookie{
+	http.SetCookie(w, &http.Cookie{ // nosemgrep: go.lang.security.audit.net.cookie-missing-secure -- Secure=COOKIE_SECURE, обязательно true в prod (config.Load)
 		Name: refreshCookie, Value: sess.refreshToken, Path: "/v1/auth", Domain: h.CookieDomain,
 		Expires: sess.refreshExp, HttpOnly: true, Secure: h.CookieSecure, SameSite: http.SameSiteLaxMode,
 	})
@@ -174,7 +174,7 @@ func (h *Handlers) finish(w http.ResponseWriter, r *http.Request, sess *Session,
 
 func (h *Handlers) clearCookie(w http.ResponseWriter) {
 	// #nosec G124 -- см. выше
-	http.SetCookie(w, &http.Cookie{
+	http.SetCookie(w, &http.Cookie{ // nosemgrep: go.lang.security.audit.net.cookie-missing-secure -- см. выше
 		Name: refreshCookie, Value: "", Path: "/v1/auth", Domain: h.CookieDomain, MaxAge: -1,
 		HttpOnly: true, Secure: h.CookieSecure, SameSite: http.SameSiteLaxMode,
 	})
