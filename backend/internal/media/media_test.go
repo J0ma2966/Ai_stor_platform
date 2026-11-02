@@ -2,6 +2,7 @@ package media
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"image"
 	"image/color"
@@ -9,6 +10,7 @@ import (
 	"image/png"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -111,5 +113,39 @@ func TestOwnsKey(t *testing.T) {
 	}
 	if OwnsKey(u, PurposeDeliveryPhoto, "priv/u/"+u.String()+"/delivery/../../etc/passwd.jpg") {
 		t.Fatal("path traversal accepted")
+	}
+}
+
+func TestBiometricRouting(t *testing.T) {
+	owner := uuid.New()
+	body, deliv, res := NewKey(owner, PurposeBodyPhoto), NewKey(owner, PurposeDeliveryPhoto), NewKey(owner, PurposeTryOnResult)
+	if !IsBiometricKey(body) || !IsBiometricKey(res) || IsBiometricKey(deliv) || IsBiometricKey("priv/u/x/body") {
+		t.Fatal("biometric key detection")
+	}
+	main, bio := NewMemory(), NewMemory()
+	r := Routed{Default: main, Biometric: bio}
+	ctx := context.Background()
+	for _, k := range []string{body, deliv, res} {
+		if err := r.Put(ctx, k, []byte("x"), "image/jpeg"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !bio.Has(body) || !bio.Has(res) || bio.Has(deliv) || !main.Has(deliv) || main.Has(body) {
+		t.Fatal("biometric objects must go only to the biometric storage")
+	}
+	if b, err := r.Get(ctx, body); err != nil || string(b) != "x" {
+		t.Fatal("routed get")
+	}
+	var listed []string
+	_ = r.List(ctx, "priv/", time.Now().Add(time.Second), func(k string) error { listed = append(listed, k); return nil })
+	if len(listed) != 3 {
+		t.Fatalf("list: %v", listed)
+	}
+	_ = r.Delete(ctx, body)
+	if bio.Has(body) {
+		t.Fatal("routed delete")
+	}
+	if _, err := main.Get(ctx, "nope"); err != ErrObjectNotFound {
+		t.Fatal("missing object error")
 	}
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/boutique-market/backend/internal/orders"
 	"github.com/boutique-market/backend/internal/products"
 	"github.com/boutique-market/backend/internal/ratelimit"
+	"github.com/boutique-market/backend/internal/tryon"
 	"github.com/boutique-market/backend/internal/users"
 )
 
@@ -48,6 +49,8 @@ func New(d Deps) http.Handler {
 		MaxBytes: int64(d.Cfg.MaxUploadMB) << 20, Sem: media.NewSem(max(d.Cfg.UploadConcurrency, 1))}
 	adminH := &admin.Handlers{DB: d.DB, Revoker: revoker}
 	ordersH := &orders.Handlers{DB: d.DB, Media: d.Storage, Limiter: limiter, PublicBase: d.Cfg.PublicMediaURL}
+	tryonH := &tryon.Handlers{DB: d.DB, Store: d.Storage, Limiter: limiter, Redis: d.Redis, PublicBase: d.Cfg.PublicMediaURL,
+		Retention: RetentionFrom(d.Cfg), MaxActive: d.Cfg.TryOn.MaxActive, Provider: d.Cfg.TryOn.Provider}
 
 	r := chi.NewRouter()
 	r.Use(httpx.RequestContext(d.Log, d.Cfg.TrustedProxy))
@@ -72,12 +75,15 @@ func New(d Deps) http.Handler {
 
 			r.Route("/auth", authH.Routes)
 			productsH.PublicRoutes(r)
+			tryonH.PublicRoutes(r)
 
 			r.Group(func(r chi.Router) {
 				r.Use(auth.RequireRole(auth.RoleClient, auth.RoleStore, auth.RoleAdmin))
 				r.Route("/me", usersH.Routes)
 				// Заказы клиента: оформление, список, статусы.
 				r.With(auth.RequireRole(auth.RoleClient)).Route("/orders", ordersH.ClientRoutes)
+				// AI-примерка: фото, генерации, сохранённые образы.
+				r.With(auth.RequireRole(auth.RoleClient)).Route("/tryon", tryonH.ClientRoutes)
 			})
 
 			r.Route("/store", func(r chi.Router) {
@@ -91,6 +97,7 @@ func New(d Deps) http.Handler {
 				r.Use(auth.RequireRole(auth.RoleAdmin))
 				adminH.Routes(r)
 				r.Route("/orders", ordersH.AdminRoutes)
+				r.Route("/tryon", tryonH.AdminRoutes)
 			})
 		})
 	})
@@ -126,4 +133,9 @@ func timeout(d time.Duration) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// RetentionFrom — сроки хранения биометрии из конфигурации.
+func RetentionFrom(c config.Config) tryon.Retention {
+	return tryon.Retention{Photo: c.TryOn.PhotoTTL, SavedPhoto: c.TryOn.SavedPhotoTTL, Result: c.TryOn.ResultTTL, SavedLook: c.TryOn.SavedLookTTL}
 }
