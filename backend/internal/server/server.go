@@ -16,6 +16,7 @@ import (
 	"github.com/boutique-market/backend/internal/config"
 	"github.com/boutique-market/backend/internal/httpx"
 	"github.com/boutique-market/backend/internal/media"
+	"github.com/boutique-market/backend/internal/orders"
 	"github.com/boutique-market/backend/internal/products"
 	"github.com/boutique-market/backend/internal/ratelimit"
 	"github.com/boutique-market/backend/internal/users"
@@ -46,6 +47,7 @@ func New(d Deps) http.Handler {
 	mediaH := &media.Handlers{Store: d.Storage, Limiter: limiter, Redis: d.Redis, PublicBase: d.Cfg.PublicMediaURL,
 		MaxBytes: int64(d.Cfg.MaxUploadMB) << 20, Sem: media.NewSem(max(d.Cfg.UploadConcurrency, 1))}
 	adminH := &admin.Handlers{DB: d.DB, Revoker: revoker}
+	ordersH := &orders.Handlers{DB: d.DB, Media: d.Storage, Limiter: limiter}
 
 	r := chi.NewRouter()
 	r.Use(httpx.RequestContext(d.Log, d.Cfg.TrustedProxy))
@@ -74,18 +76,21 @@ func New(d Deps) http.Handler {
 			r.Group(func(r chi.Router) {
 				r.Use(auth.RequireRole(auth.RoleClient, auth.RoleStore, auth.RoleAdmin))
 				r.Route("/me", usersH.Routes)
-				// TODO(orders): r.Route("/orders", ordersH.ClientRoutes) — за RequireRole(client)
+				// Заказы клиента: оформление, список, статусы.
+				r.With(auth.RequireRole(auth.RoleClient)).Route("/orders", ordersH.ClientRoutes)
 			})
 
 			r.Route("/store", func(r chi.Router) {
 				r.Use(auth.RequireRole(auth.RoleStore))
 				productsH.StoreRoutes(r)
-				// TODO(orders): r.Route("/orders", ordersH.StoreRoutes) — окно доставки магазина
+				// Окно доставки магазина: только заказы своего магазина.
+				r.Route("/orders", ordersH.StoreRoutes)
 			})
 
 			r.Route("/admin", func(r chi.Router) {
 				r.Use(auth.RequireRole(auth.RoleAdmin))
 				adminH.Routes(r)
+				r.Route("/orders", ordersH.AdminRoutes)
 			})
 		})
 	})

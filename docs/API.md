@@ -71,6 +71,11 @@
 | GET/POST | `/v1/store/products` | store |
 | PATCH | `/v1/store/products/{id}/status` | store |
 | POST | `/v1/admin/stores`, `/v1/admin/stores/{id}/status`, `/v1/admin/users/{id}/status`, `/v1/admin/users/{id}/tokens` | admin |
+| POST/GET | `/v1/orders`, `/v1/orders/{id}` | client |
+| GET/POST | `/v1/store/orders`, `/v1/store/orders/{id}`, `/v1/store/orders/{id}/status` | store |
+| GET/POST | `/v1/admin/orders`, `/v1/admin/orders/{id}`, `/v1/admin/orders/{id}/status` | admin |
+
+Заказы и окно доставки подробно: [ORDERS.md](ORDERS.md).
 
 Фильтры каталога: `q`, `category`, `store`, `brand`, `price_min`, `price_max`, `in_stock=true`, `sort=new|price_asc|price_desc|popular`.
 
