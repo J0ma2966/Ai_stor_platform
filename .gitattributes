@@ -1,0 +1,12 @@
+# Скрипты и конфиги, которые выполняются внутри Linux-контейнеров, всегда с LF,
+# даже если репозиторий склонирован на Windows (core.autocrlf=true).
+* text=auto
+*.sh     text eol=lf
+*.sql    text eol=lf
+*.go     text eol=lf
+*.yml    text eol=lf
+*.yaml   text eol=lf
+Dockerfile text eol=lf
+.env*    text eol=lf
+Makefile text eol=lf
+*.ps1    text eol=crlf
