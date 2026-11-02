@@ -15,8 +15,32 @@
 ```bash
 cp .env.example .env            # заполнить секреты
 make up                         # postgres, redis, minio, api, backup
-docker compose -f deploy/docker-compose.yml exec api /api create-admin root   # с ADMIN_PASSWORD в окружении
+ADMIN_PASSWORD=... docker compose -f deploy/docker-compose.yml exec -e ADMIN_PASSWORD api /api create-admin root
 curl localhost:8080/readyz
+```
+
+### Windows (PowerShell, без make)
+
+Нужны [Docker Desktop](https://www.docker.com/products/docker-desktop/) (запущенный) и, для сайта, [Node.js 20+](https://nodejs.org/). `make` ставить не нужно, всё делает скрипт `scripts\dev.ps1`:
+
+```powershell
+.\scripts\dev.ps1 up            # создаст .env, если его нет, поднимет всё и дождётся /readyz
+.\scripts\dev.ps1 admin root    # создать администратора, пароль спросит (минимум 10 символов)
+.\scripts\dev.ps1 web           # сайт на http://localhost:3000 (в отдельном окне)
+.\scripts\dev.ps1 otp           # последние SMS-коды для входа по телефону (в dev они только в логах)
+.\scripts\dev.ps1 logs          # логи API; .\scripts\dev.ps1 logs postgres — логи другого сервиса
+.\scripts\dev.ps1 down          # остановить; reset — остановить и удалить все локальные данные
+```
+
+Если PowerShell пишет «выполнение сценариев отключено», запускайте так:
+`powershell -ExecutionPolicy Bypass -File .\scripts\dev.ps1 up`.
+
+То же самое без скрипта:
+
+```powershell
+docker compose -f deploy/docker-compose.yml up -d --build
+docker compose -f deploy/docker-compose.yml exec -e ADMIN_PASSWORD="ВашПароль123" api /api create-admin root
+cd web; npm ci; $env:NEXT_PUBLIC_API_URL="http://localhost:8080"; $env:NEXT_PUBLIC_MEDIA_ORIGIN="http://localhost:9000"; npm run dev
 ```
 
 Тесты (нужна PostgreSQL 16, Redis не нужен — используется miniredis):
