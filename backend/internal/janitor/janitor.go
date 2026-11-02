@@ -26,9 +26,16 @@ var Tasks = []Task{
 	                     OR revoked_at < now() - interval '7 days'`},
 }
 
+// Job — задача, которой мало одного SQL (например, нужно удалить файлы в хранилище).
+type Job struct {
+	Name string
+	Run  func(ctx context.Context) (int64, error)
+}
+
 type Janitor struct {
-	DB  *pgxpool.Pool
-	Log *slog.Logger
+	DB   *pgxpool.Pool
+	Log  *slog.Logger
+	Jobs []Job // выполняются под тем же advisory lock после Tasks
 }
 
 // RunOnce выполняет все задачи, если удалось взять advisory lock.
@@ -51,6 +58,15 @@ func (j *Janitor) RunOnce(ctx context.Context) error {
 		}
 		if n := tag.RowsAffected(); n > 0 {
 			j.Log.Info("janitor cleaned", slog.String("task", t.Name), slog.Int64("rows", n))
+		}
+	}
+	for _, job := range j.Jobs {
+		n, err := job.Run(ctx)
+		if err != nil {
+			j.Log.Error("janitor job failed", slog.String("task", job.Name), slog.String("err", err.Error()))
+		}
+		if n > 0 {
+			j.Log.Info("janitor cleaned", slog.String("task", job.Name), slog.Int64("rows", n))
 		}
 	}
 	return nil

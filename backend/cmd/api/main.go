@@ -24,6 +24,7 @@ import (
 	"github.com/boutique-market/backend/internal/config"
 	"github.com/boutique-market/backend/internal/janitor"
 	"github.com/boutique-market/backend/internal/media"
+	"github.com/boutique-market/backend/internal/orders"
 	"github.com/boutique-market/backend/internal/platform/cache"
 	"github.com/boutique-market/backend/internal/platform/db"
 	"github.com/boutique-market/backend/internal/products"
@@ -99,7 +100,12 @@ func run(log *slog.Logger, args []string) error {
 
 	views := &products.ViewCounter{Redis: rdb, DB: pool, Log: log}
 	go views.Run(ctx, 30*time.Second)
-	go (&janitor.Janitor{DB: pool, Log: log}).Run(ctx, time.Hour)
+	go (&janitor.Janitor{DB: pool, Log: log, Jobs: []janitor.Job{{
+		Name: "delivery_photos",
+		Run: func(ctx context.Context) (int64, error) {
+			return orders.PurgeDeliveryPhotos(ctx, pool, store, orders.PhotoRetention, time.Now())
+		},
+	}}}).Run(ctx, time.Hour)
 
 	api := &http.Server{
 		Addr:              cfg.HTTPAddr,

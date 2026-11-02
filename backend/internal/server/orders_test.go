@@ -7,11 +7,13 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/boutique-market/backend/internal/admin"
 	"github.com/boutique-market/backend/internal/media"
+	ordersPkg "github.com/boutique-market/backend/internal/orders"
 )
 
 // doH — запрос с дополнительными заголовками (отдельный http.Client с той же cookie-jar,
@@ -312,4 +314,60 @@ func (c *client) mustH(status int, method, path string, body any, hdr map[string
 		c.e.t.Fatalf("%s %s: status %d, want %d: %s", method, path, r.Status, status, r.Raw)
 	}
 	return r
+}
+
+func TestDeliveryPhotoRetention(t *testing.T) {
+	f := newOrderFixture(t)
+	ctx := context.Background()
+	c := f.e.client()
+	c.loginClient("+998901110009")
+	photo := c.must(201, "POST", "/v1/uploads?purpose=delivery", pngFile(t)).data()["key"].(string)
+	body := checkoutBody(item(f.prodA, 1), item(f.prodB, 1))
+	body["delivery"].(map[string]any)["photo_key"] = photo
+	orders := c.mustH(201, "POST", "/v1/orders", body, idem("retention-01")).data()["orders"].([]any)
+	oa := orders[0].(map[string]any)["id"].(string)
+	ob := orders[1].(map[string]any)["id"].(string)
+	store := f.e.d.Storage.(*media.Memory)
+	if _, ok := store.Objs[photo]; !ok {
+		t.Fatal("photo not stored")
+	}
+	purge := func() int64 {
+		n, err := ordersPkg.PurgeDeliveryPhotos(ctx, f.e.d.DB, store, ordersPkg.PhotoRetention, time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	age := func(id string, days int) {
+		if _, err := f.e.d.DB.Exec(ctx, `ALTER TABLE orders DISABLE TRIGGER orders_touch`); err != nil {
+			t.Fatal(err)
+		}
+		_, _ = f.e.d.DB.Exec(ctx, `UPDATE orders SET updated_at = now() - make_interval(days => $2) WHERE id = $1`, id, days)
+		_, _ = f.e.d.DB.Exec(ctx, `ALTER TABLE orders ENABLE TRIGGER orders_touch`)
+	}
+	// заказ A доставлен 31 день назад, но заказ B того же оформления ещё в работе — фото нужно B
+	for _, s := range []string{"confirmed", "assembling", "in_delivery", "delivered"} {
+		f.storeA.must(200, "POST", "/v1/store/orders/"+oa+"/status", map[string]any{"status": s})
+	}
+	age(oa, 31)
+	if n := purge(); n != 0 {
+		t.Fatalf("purged while another order still needs the photo: %d", n)
+	}
+	// B отклонён 29 дней назад — срок ещё не вышел
+	f.storeB.must(200, "POST", "/v1/store/orders/"+ob+"/status", map[string]any{"status": "rejected", "reason": "нет размера"})
+	age(ob, 29)
+	if n := purge(); n != 0 {
+		t.Fatalf("purged before retention: %d", n)
+	}
+	age(ob, 31)
+	if n := purge(); n != 2 {
+		t.Fatalf("want 2 rows cleared, got %d", n)
+	}
+	if _, ok := store.Objs[photo]; ok {
+		t.Fatal("photo object must be deleted")
+	}
+	d := f.storeA.must(200, "GET", "/v1/store/orders/"+oa, nil).data()["delivery"].(map[string]any)
+	if d["has_photo"] != false || d["photo_url"] != nil {
+		t.Fatalf("photo still referenced: %v", d)
+	}
 }
