@@ -47,7 +47,7 @@ func New(d Deps) http.Handler {
 	mediaH := &media.Handlers{Store: d.Storage, Limiter: limiter, Redis: d.Redis, PublicBase: d.Cfg.PublicMediaURL,
 		MaxBytes: int64(d.Cfg.MaxUploadMB) << 20, Sem: media.NewSem(max(d.Cfg.UploadConcurrency, 1))}
 	adminH := &admin.Handlers{DB: d.DB, Revoker: revoker}
-	ordersH := &orders.Handlers{DB: d.DB, Media: d.Storage, Limiter: limiter}
+	ordersH := &orders.Handlers{DB: d.DB, Media: d.Storage, Limiter: limiter, PublicBase: d.Cfg.PublicMediaURL}
 
 	r := chi.NewRouter()
 	r.Use(httpx.RequestContext(d.Log, d.Cfg.TrustedProxy))

@@ -33,6 +33,8 @@ type Handlers struct {
 	DB      *pgxpool.Pool
 	Media   media.Storage
 	Limiter *ratelimit.Limiter
+	// PublicBase — базовый URL CDN для публичных картинок товаров.
+	PublicBase string
 }
 
 var ruleCheckout = ratelimit.Rule{Name: "checkout_user", Limit: 20, Window: time.Hour}
@@ -552,9 +554,7 @@ func (h *Handlers) sign(ctx context.Context, o *Detail) {
 	}
 	for i := range o.Items {
 		if k := o.Items[i].imageKey; k != nil {
-			if u, err := h.Media.PresignGet(ctx, *k, time.Hour); err == nil {
-				o.Items[i].ImageURL = u
-			}
+			o.Items[i].ImageURL = media.PublicURL(h.PublicBase, *k) // pub/ — постоянная ссылка CDN
 		}
 	}
 }
