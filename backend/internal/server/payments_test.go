@@ -168,6 +168,12 @@ func TestTokenPurchase_ClickAndPayme(t *testing.T) {
 	if len(paid) != 1 || paid[0].(map[string]any)["id"] != p2["id"] {
 		t.Fatalf("admin filter: %v", paid)
 	}
+	if row := paid[0].(map[string]any); row["user_phone"] != "+998901230000" || row["provider_txn_id"] != "pm-777" {
+		t.Fatalf("admin row: %v", row)
+	}
+	if _, leaked := mine[0].(map[string]any)["user_phone"]; leaked {
+		t.Fatal("client list must not include user_phone")
+	}
 	adm.must(400, "GET", "/v1/admin/payments?status=weird", nil)
 	adm.must(200, "PATCH", "/v1/admin/tariffs/"+tariff["id"].(string), map[string]any{"price": 2000000, "is_published": false})
 	if l := anon.must(200, "GET", "/v1/tariffs", nil).Body["data"].([]any); len(l) != 0 {

@@ -102,3 +102,11 @@ input:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visib
 .copy-text { font-family: ui-monospace, Menlo, monospace; font-size: .875rem; }
 .history li { padding: 4px 0; }
 .reason-box { margin-block: 12px; }
+
+/* Баланс и покупка токенов */
+.balance-value { font-size: 1.6rem; font-weight: 700; margin: 0; }
+.tariff-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.tariff-hl { border-color: var(--accent); }
+.tariff-grid .row { flex-wrap: wrap; }
+.alert-ok { border-color: var(--ok); }
+.stack-tight { display: flex; flex-direction: column; gap: 2px; }

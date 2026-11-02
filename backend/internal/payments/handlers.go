@@ -224,17 +224,23 @@ type Payment struct {
 	Amount      int64      `json:"amount"`
 	Tokens      int64      `json:"tokens"`
 	Status      string     `json:"status"`
+	ProviderTxn *string    `json:"provider_txn_id"`
 	PaidAt      *time.Time `json:"paid_at"`
 	CancelledAt *time.Time `json:"cancelled_at"`
 	CreatedAt   time.Time  `json:"created_at"`
 	CheckoutURL string     `json:"checkout_url,omitempty"`
+	UserPhone   *string    `json:"user_phone,omitempty"` // только в админке
 }
 
-const paymentCols = `id, number, user_id, tariff_id, provider::text, amount, tokens::bigint, status::text, paid_at, cancelled_at, created_at`
+const paymentCols = `p.id, p.number, p.user_id, p.tariff_id, p.provider::text, p.amount, p.tokens::bigint, p.status::text, p.provider_txn_id, p.paid_at, p.cancelled_at, p.created_at`
 
-func scanPayment(row pgx.Row) (*Payment, error) {
+func scanPayment(row pgx.Row, extra ...any) (*Payment, error) {
 	var p Payment
-	err := row.Scan(&p.ID, &p.Number, &p.UserID, &p.TariffID, &p.Provider, &p.Amount, &p.Tokens, &p.Status, &p.PaidAt, &p.CancelledAt, &p.CreatedAt)
+	dst := []any{&p.ID, &p.Number, &p.UserID, &p.TariffID, &p.Provider, &p.Amount, &p.Tokens, &p.Status, &p.ProviderTxn, &p.PaidAt, &p.CancelledAt, &p.CreatedAt}
+	if len(extra) > 0 {
+		dst = append(dst, &p.UserPhone)
+	}
+	err := row.Scan(dst...)
 	if err != nil {
 		return nil, db.NotFound(err)
 	}
@@ -325,7 +331,7 @@ func (h *Handlers) create(w http.ResponseWriter, r *http.Request) {
 	err := db.Tx(r.Context(), h.DB, func(tx pgx.Tx) error {
 		var err error
 		p, err = scanPayment(tx.QueryRow(r.Context(), `
-			INSERT INTO payments (user_id, tariff_id, provider, amount, tokens, idempotency_key)
+			INSERT INTO payments AS p (user_id, tariff_id, provider, amount, tokens, idempotency_key)
 			SELECT $1::uuid, t.id, $3::payment_provider, t.price, t.tokens, NULLIF($4::text, '') FROM tariffs t WHERE t.id = $2 AND t.is_published
 			ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
 			RETURNING `+paymentCols, uid, req.TariffID, req.Provider, key))
@@ -336,8 +342,8 @@ func (h *Handlers) create(w http.ResponseWriter, r *http.Request) {
 			return httpx.NewError(http.StatusUnprocessableEntity, "tariff_not_found", "tariff not found or not published")
 		}
 		// повтор с тем же ключом (или тариф не найден)
-		p, err = scanPayment(tx.QueryRow(r.Context(), `SELECT `+paymentCols+` FROM payments
-			WHERE user_id = $1 AND idempotency_key = $2`, uid, key))
+		p, err = scanPayment(tx.QueryRow(r.Context(), `SELECT `+paymentCols+` FROM payments p
+			WHERE p.user_id = $1 AND p.idempotency_key = $2`, uid, key))
 		if errors.Is(err, db.ErrNotFound) {
 			return httpx.NewError(http.StatusUnprocessableEntity, "tariff_not_found", "tariff not found or not published")
 		}
@@ -365,7 +371,7 @@ func (h *Handlers) getMine(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, r, httpx.ErrNotFound)
 		return
 	}
-	p, err := scanPayment(h.DB.QueryRow(r.Context(), `SELECT `+paymentCols+` FROM payments WHERE id = $1 AND user_id = $2`, id, uid))
+	p, err := scanPayment(h.DB.QueryRow(r.Context(), `SELECT `+paymentCols+` FROM payments p WHERE p.id = $1 AND p.user_id = $2`, id, uid))
 	if errors.Is(err, db.ErrNotFound) {
 		httpx.Fail(w, r, httpx.ErrNotFound)
 		return
@@ -379,7 +385,7 @@ func (h *Handlers) getMine(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) listMine(w http.ResponseWriter, r *http.Request) {
-	h.list(w, r, auth.MustFrom(r.Context()).UserID.String(), "", "")
+	h.list(w, r, auth.MustFrom(r.Context()).UserID.String(), "", "", false)
 }
 
 func (h *Handlers) adminPayments(w http.ResponseWriter, r *http.Request) {
@@ -398,11 +404,11 @@ func (h *Handlers) adminPayments(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	h.list(w, r, q.Get("user_id"), q.Get("status"), q.Get("provider"))
+	h.list(w, r, q.Get("user_id"), q.Get("status"), q.Get("provider"), true)
 }
 
 // list — keyset-пагинация по number (новые сверху).
-func (h *Handlers) list(w http.ResponseWriter, r *http.Request, userID, status, provider string) {
+func (h *Handlers) list(w http.ResponseWriter, r *http.Request, userID, status, provider string, withPhone bool) {
 	limit := httpx.Limit(r, 20, 100)
 	before := int64(1 << 62)
 	if c := r.URL.Query().Get("cursor"); c != "" {
@@ -413,12 +419,13 @@ func (h *Handlers) list(w http.ResponseWriter, r *http.Request, userID, status, 
 		}
 		before = v
 	}
-	rows, err := h.DB.Query(r.Context(), `SELECT `+paymentCols+` FROM payments
-		WHERE number < $1
-		  AND ($2::text = '' OR user_id = NULLIF($2::text, '')::uuid)
-		  AND ($3::text = '' OR status = NULLIF($3::text, '')::payment_status)
-		  AND ($4::text = '' OR provider = NULLIF($4::text, '')::payment_provider)
-		ORDER BY number DESC LIMIT $5`, before, userID, status, provider, limit+1)
+	rows, err := h.DB.Query(r.Context(), `SELECT `+paymentCols+`, CASE WHEN $6 THEN u.phone END
+		FROM payments p JOIN users u ON u.id = p.user_id
+		WHERE p.number < $1
+		  AND ($2::text = '' OR p.user_id = NULLIF($2::text, '')::uuid)
+		  AND ($3::text = '' OR p.status = NULLIF($3::text, '')::payment_status)
+		  AND ($4::text = '' OR p.provider = NULLIF($4::text, '')::payment_provider)
+		ORDER BY p.number DESC LIMIT $5`, before, userID, status, provider, limit+1, withPhone)
 	if err != nil {
 		httpx.Fail(w, r, err)
 		return
@@ -426,7 +433,7 @@ func (h *Handlers) list(w http.ResponseWriter, r *http.Request, userID, status, 
 	defer rows.Close()
 	items := []*Payment{}
 	for rows.Next() {
-		p, err := scanPayment(rows)
+		p, err := scanPayment(rows, true)
 		if err != nil {
 			httpx.Fail(w, r, err)
 			return
