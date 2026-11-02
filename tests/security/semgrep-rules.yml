@@ -1,0 +1,56 @@
+# Project-specific rules on top of the public Semgrep packs.
+rules:
+  - id: sql-string-concat
+    languages: [go]
+    severity: ERROR
+    message: SQL built with fmt.Sprintf/concatenation. Use pgx placeholders ($1, $2).
+    patterns:
+      - pattern-either:
+          - pattern: $DB.Query($CTX, fmt.Sprintf(...), ...)
+          - pattern: $DB.QueryRow($CTX, fmt.Sprintf(...), ...)
+          - pattern: $DB.Exec($CTX, fmt.Sprintf(...), ...)
+          - pattern: $DB.Query($CTX, "..." + $X, ...)
+          - pattern: $DB.QueryRow($CTX, "..." + $X, ...)
+          - pattern: $DB.Exec($CTX, "..." + $X, ...)
+
+  - id: log-pii-field
+    languages: [go]
+    severity: ERROR
+    message: Do not log phone numbers, addresses, OTP codes or tokens. Log IDs instead.
+    pattern-either:
+      - pattern: slog.$F(..., "phone", ...)
+      - pattern: slog.$F(..., "otp", ...)
+      - pattern: slog.$F(..., "address", ...)
+      - pattern: slog.$F(..., "token", ...)
+      - pattern: $L.$F(..., "phone", ...)
+      - pattern: $L.$F(..., "otp", ...)
+      - pattern: $L.$F(..., "address", ...)
+      - pattern: $L.$F(..., "refresh_token", ...)
+      - pattern: $L.$F(..., "access_token", ...)
+
+  - id: math-rand-for-secrets
+    languages: [go]
+    severity: ERROR
+    message: math/rand is not cryptographically secure. Use crypto/rand for OTPs, tokens and keys.
+    pattern-either:
+      - pattern: |
+          import "math/rand"
+      - pattern: |
+          import "math/rand/v2"
+    paths:
+      include: ["backend/internal/auth/**", "backend/internal/payments/**", "backend/internal/tokens/**"]
+
+  - id: react-dangerous-html
+    languages: [typescript]
+    severity: ERROR
+    message: dangerouslySetInnerHTML is forbidden; user text (comments, addresses) must render as text.
+    pattern: "<$EL dangerouslySetInnerHTML={...} />"
+
+  - id: insecure-cookie
+    languages: [go]
+    severity: ERROR
+    message: Auth cookies must be HttpOnly and Secure.
+    patterns:
+      - pattern: http.Cookie{...}
+      - pattern-not: 'http.Cookie{..., HttpOnly: true, ..., Secure: $S, ...}'
+      - pattern-not: 'http.Cookie{..., Secure: $S, ..., HttpOnly: true, ...}'

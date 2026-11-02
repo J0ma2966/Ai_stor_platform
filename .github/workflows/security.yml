@@ -1,0 +1,86 @@
+# Security checks that complement the foundation CI (vet, staticcheck, govulncheck, gosec, race tests).
+# Access-matrix and abuse tests live in backend/internal/server/security_test.go and run in ci.yml.
+# High/critical findings fail the job and block merge.
+name: security
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 2 * * *" # nightly: full image scan + ZAP baseline
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  sast:
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep:1.95.0
+    steps:
+      - uses: actions/checkout@v4
+      - run: >
+          semgrep scan --error --metrics=off
+          --config p/golang --config p/typescript --config p/react
+          --config p/owasp-top-ten --config p/secrets
+          --config tests/security/semgrep-rules.yml
+
+  deps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trivy filesystem scan (go.mod, package-lock.json, Dockerfiles, IaC)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scanners: vuln,misconfig,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: npm audit (web)
+        if: hashFiles('web/package-lock.json') != ''
+        working-directory: web
+        run: npm audit --omit=dev --audit-level=high
+
+  images:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build API image
+        if: hashFiles('backend/Dockerfile') != ''
+        run: docker build -t boutique-api:scan backend
+      - name: Trivy image scan
+        if: hashFiles('backend/Dockerfile') != ''
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: boutique-api:scan
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+  zap-baseline:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start stack
+        run: docker compose -f deploy/docker-compose.yml up -d --build --wait
+      - uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: http://localhost:8080/v1/products
+          rules_file_name: tests/security/zap-rules.tsv
+          fail_action: true
+          allow_issue_writing: false
