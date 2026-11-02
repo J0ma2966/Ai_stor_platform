@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 )
@@ -72,10 +73,16 @@ func (v *ViewCounter) Flush(ctx context.Context) error {
 			ids, counts = append(ids, id), append(counts, n)
 		}
 	}
+	// Общий счётчик и дневная статистика (для отчёта магазина за период) — одним запросом.
 	_, err = v.DB.Exec(ctx, `
-		UPDATE products p SET views_count = p.views_count + x.n
-		FROM unnest($1::uuid[], $2::bigint[]) AS x(id, n)
-		WHERE p.id = x.id`, ids, counts)
+		WITH u AS (
+			UPDATE products p SET views_count = p.views_count + x.n
+			FROM unnest($1::uuid[], $2::bigint[]) AS x(id, n)
+			WHERE p.id = x.id RETURNING p.id, x.n
+		)
+		INSERT INTO product_stats_daily (product_id, day, views)
+		SELECT id, `+StatsDay+`, n FROM u
+		ON CONFLICT (product_id, day) DO UPDATE SET views = product_stats_daily.views + EXCLUDED.views`, ids, counts)
 	if err != nil {
 		pipe := v.Redis.TxPipeline()
 		for i, id := range ids {
@@ -85,4 +92,20 @@ func (v *ViewCounter) Flush(ctx context.Context) error {
 		return err
 	}
 	return v.Redis.Del(ctx, tmp).Err()
+}
+
+// StatsDay — «сегодня» для дневной статистики, по времени Ташкента.
+const StatsDay = `(now() AT TIME ZONE 'Asia/Tashkent')::date`
+
+// RecordFittingAdd — товар добавлен в примерочную: общий счётчик и дневная статистика.
+// Вызывает модуль примерочной (дедупликацию по клиенту делает он).
+func RecordFittingAdd(ctx context.Context, q interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+}, productID uuid.UUID) error {
+	_, err := q.Exec(ctx, `
+		WITH u AS (UPDATE products SET fitting_adds = fitting_adds + 1 WHERE id = $1 RETURNING id)
+		INSERT INTO product_stats_daily (product_id, day, fitting_adds)
+		SELECT id, `+StatsDay+`, 1 FROM u
+		ON CONFLICT (product_id, day) DO UPDATE SET fitting_adds = product_stats_daily.fitting_adds + 1`, productID)
+	return err
 }

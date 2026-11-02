@@ -19,7 +19,11 @@ import (
 	"github.com/boutique-market/backend/internal/tokens"
 )
 
-type Handlers struct{ DB *pgxpool.Pool }
+type Handlers struct {
+	DB      *pgxpool.Pool
+	Revoker *auth.Revoker // отзыв access-токенов при удалении аккаунта
+	Purge   []PurgeFunc   // очистка данных в других модулях при удалении аккаунта
+}
 
 // Routes монтируются за RequireRole(client) — кроме GET /me, доступного всем ролям.
 func (h *Handlers) Routes(r chi.Router) {
@@ -29,6 +33,7 @@ func (h *Handlers) Routes(r chi.Router) {
 		r.Patch("/", h.update)
 		r.Post("/complete-registration", h.completeRegistration)
 		r.Get("/tokens", h.tokenHistory)
+		r.Delete("/", h.deleteAccount)
 	})
 }
 
@@ -45,20 +50,20 @@ type Me struct {
 	WeightKG     *float64        `json:"weight_kg"`
 	BodyParams   json.RawMessage `json:"body_params"`
 	Registered   bool            `json:"registration_complete"`
+	PDConsentAt  *time.Time      `json:"pd_consent_at"`
 	CreatedAt    time.Time       `json:"created_at"`
 }
 
 func (h *Handlers) load(r *http.Request, id uuid.UUID) (*Me, error) {
 	var m Me
-	var consent *time.Time
 	err := h.DB.QueryRow(r.Context(), `
 		SELECT id, role, phone, login, store_id, gender, lang, token_balance, height_cm, weight_kg::float8, body_params, pd_consent_at, created_at
 		FROM users WHERE id = $1`, id).
-		Scan(&m.ID, &m.Role, &m.Phone, &m.Login, &m.StoreID, &m.Gender, &m.Lang, &m.TokenBalance, &m.HeightCM, &m.WeightKG, &m.BodyParams, &consent, &m.CreatedAt)
+		Scan(&m.ID, &m.Role, &m.Phone, &m.Login, &m.StoreID, &m.Gender, &m.Lang, &m.TokenBalance, &m.HeightCM, &m.WeightKG, &m.BodyParams, &m.PDConsentAt, &m.CreatedAt)
 	if err != nil {
 		return nil, db.NotFound(err)
 	}
-	m.Registered = m.Role != "client" || (m.Gender != nil && consent != nil)
+	m.Registered = m.Role != "client" || (m.Gender != nil && m.PDConsentAt != nil)
 	return &m, nil
 }
 

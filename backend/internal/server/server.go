@@ -13,12 +13,16 @@ import (
 
 	"github.com/boutique-market/backend/internal/admin"
 	"github.com/boutique-market/backend/internal/auth"
+	"github.com/boutique-market/backend/internal/catalogadmin"
 	"github.com/boutique-market/backend/internal/config"
 	"github.com/boutique-market/backend/internal/httpx"
 	"github.com/boutique-market/backend/internal/media"
+	"github.com/boutique-market/backend/internal/notify"
 	"github.com/boutique-market/backend/internal/orders"
 	"github.com/boutique-market/backend/internal/products"
 	"github.com/boutique-market/backend/internal/ratelimit"
+	"github.com/boutique-market/backend/internal/shop"
+	"github.com/boutique-market/backend/internal/stores"
 	"github.com/boutique-market/backend/internal/users"
 )
 
@@ -30,6 +34,8 @@ type Deps struct {
 	Storage media.Storage
 	SMS     auth.SMSSender
 	Views   *products.ViewCounter // nil — просмотры не считаются (тесты)
+	// UserPurge — очистка данных клиента в других модулях при удалении аккаунта.
+	UserPurge []users.PurgeFunc
 }
 
 func New(d Deps) http.Handler {
@@ -42,8 +48,12 @@ func New(d Deps) http.Handler {
 	revoker := auth.NewRevoker(d.Redis, d.Cfg.AccessTTL)
 	authH := &auth.Handlers{Svc: authSvc, Limiter: limiter, AllowedPrefixes: d.Cfg.OTPAllowedPrefixes,
 		CookieDomain: d.Cfg.CookieDomain, CookieSecure: d.Cfg.CookieSecure}
-	usersH := &users.Handlers{DB: d.DB}
-	productsH := &products.Handlers{DB: d.DB, PublicBase: d.Cfg.PublicMediaURL, Views: d.Views}
+	usersH := &users.Handlers{DB: d.DB, Revoker: revoker, Purge: d.UserPurge}
+	productsH := &products.Handlers{DB: d.DB, PublicBase: d.Cfg.PublicMediaURL, Views: d.Views, Media: d.Storage}
+	shopH := &shop.Handlers{DB: d.DB, PublicBase: d.Cfg.PublicMediaURL}
+	storesH := &stores.Handlers{DB: d.DB, PublicBase: d.Cfg.PublicMediaURL}
+	notifyH := &notify.Handlers{DB: d.DB}
+	catalogH := &catalogadmin.Handlers{DB: d.DB, PublicBase: d.Cfg.PublicMediaURL}
 	mediaH := &media.Handlers{Store: d.Storage, Limiter: limiter, Redis: d.Redis, PublicBase: d.Cfg.PublicMediaURL,
 		MaxBytes: int64(d.Cfg.MaxUploadMB) << 20, Sem: media.NewSem(max(d.Cfg.UploadConcurrency, 1))}
 	adminH := &admin.Handlers{DB: d.DB, Revoker: revoker}
@@ -72,10 +82,17 @@ func New(d Deps) http.Handler {
 
 			r.Route("/auth", authH.Routes)
 			productsH.PublicRoutes(r)
+			storesH.PublicRoutes(r)
+			catalogH.PublicRoutes(r)
 
 			r.Group(func(r chi.Router) {
 				r.Use(auth.RequireRole(auth.RoleClient, auth.RoleStore, auth.RoleAdmin))
-				r.Route("/me", usersH.Routes)
+				r.Route("/me", func(r chi.Router) {
+					usersH.Routes(r)
+					r.Route("/notifications", notifyH.Routes)
+					r.With(auth.RequireRole(auth.RoleClient)).Route("/cart", shopH.CartRoutes)
+					r.With(auth.RequireRole(auth.RoleClient)).Route("/favorites", shopH.FavoriteRoutes)
+				})
 				// Заказы клиента: оформление, список, статусы.
 				r.With(auth.RequireRole(auth.RoleClient)).Route("/orders", ordersH.ClientRoutes)
 			})
@@ -83,6 +100,7 @@ func New(d Deps) http.Handler {
 			r.Route("/store", func(r chi.Router) {
 				r.Use(auth.RequireRole(auth.RoleStore))
 				productsH.StoreRoutes(r)
+				storesH.StoreRoutes(r)
 				// Окно доставки магазина: только заказы своего магазина.
 				r.Route("/orders", ordersH.StoreRoutes)
 			})
@@ -90,6 +108,7 @@ func New(d Deps) http.Handler {
 			r.Route("/admin", func(r chi.Router) {
 				r.Use(auth.RequireRole(auth.RoleAdmin))
 				adminH.Routes(r)
+				catalogH.AdminRoutes(r)
 				r.Route("/orders", ordersH.AdminRoutes)
 			})
 		})

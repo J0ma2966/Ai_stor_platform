@@ -28,6 +28,9 @@ var publicRoutes = map[string]bool{
 	"GET /v1/categories":        true,
 	"GET /v1/products":          true,
 	"GET /v1/products/{id}":     true,
+	"GET /v1/stores":            true,
+	"GET /v1/stores/{slug}":     true,
+	"GET /v1/platform":          true,
 	"POST /v1/payments/click/*": true, // provider webhooks: authenticated by signature, not by user token
 	"POST /v1/payments/payme/*": true,
 }

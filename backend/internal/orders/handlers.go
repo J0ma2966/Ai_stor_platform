@@ -20,6 +20,7 @@ import (
 	"github.com/boutique-market/backend/internal/auth"
 	"github.com/boutique-market/backend/internal/httpx"
 	"github.com/boutique-market/backend/internal/media"
+	"github.com/boutique-market/backend/internal/notify"
 	"github.com/boutique-market/backend/internal/platform/db"
 	"github.com/boutique-market/backend/internal/ratelimit"
 )
@@ -298,6 +299,10 @@ func (h *Handlers) createOrders(ctx context.Context, tx pgx.Tx, p auth.Principal
 		batch.Queue(`INSERT INTO order_status_history (order_id, from_status, to_status, actor_id, actor_role)
 			VALUES ($1, NULL, 'pending', $2, $3)`, o.ID, p.UserID, string(p.Role))
 		if err := tx.SendBatch(ctx, batch).Close(); err != nil {
+			return nil, err
+		}
+		if err := notify.SendToStore(ctx, tx, g.storeID, notify.OrderCreated,
+			map[string]any{"order_id": o.ID, "number": o.Number}); err != nil {
 			return nil, err
 		}
 		resp.Orders = append(resp.Orders, o)
@@ -614,7 +619,9 @@ func (h *Handlers) setStatus(w http.ResponseWriter, r *http.Request) {
 	err = db.Tx(r.Context(), h.DB, func(tx pgx.Tx) error {
 		where, scopeArg := scope(p)
 		var cur Status
-		err := tx.QueryRow(r.Context(), `SELECT o.status::text FROM orders o WHERE `+where+` AND o.id = $2 FOR UPDATE`, scopeArg, id).Scan(&cur)
+		var customerID uuid.UUID
+		var number int64
+		err := tx.QueryRow(r.Context(), `SELECT o.status::text, o.user_id, o.number FROM orders o WHERE `+where+` AND o.id = $2 FOR UPDATE`, scopeArg, id).Scan(&cur, &customerID, &number)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return httpx.ErrNotFound
 		}
@@ -651,6 +658,10 @@ func (h *Handlers) setStatus(w http.ResponseWriter, r *http.Request) {
 		}
 		if err := audit.Log(r.Context(), tx, "order.status", "order", id.String(),
 			map[string]any{"from": cur, "to": req.Status}); err != nil {
+			return err
+		}
+		if err := notify.Send(r.Context(), tx, customerID, notify.OrderStatus,
+			map[string]any{"order_id": id, "number": number, "status": req.Status}); err != nil {
 			return err
 		}
 		out, err = h.load(r.Context(), tx, p, id)

@@ -24,7 +24,8 @@ import (
 
 type Handlers struct {
 	DB         *pgxpool.Pool
-	PublicBase string // базовый URL CDN для публичных картинок
+	Media      media.Storage // удаление фото при удалении/замене; nil — файлы не удаляются
+	PublicBase string        // базовый URL CDN для публичных картинок
 	Views      *ViewCounter
 }
 
@@ -32,7 +33,11 @@ type Product struct {
 	ID          uuid.UUID         `json:"id"`
 	StoreID     uuid.UUID         `json:"store_id"`
 	StoreName   string            `json:"store_name"`
+	StoreSlug   string            `json:"store_slug,omitempty"`
 	CategoryID  uuid.UUID         `json:"category_id"`
+	Zone        string            `json:"zone,omitempty"`         // зона манекена (из категории)
+	Views       *int64            `json:"views,omitempty"`        // только кабинет магазина
+	FittingAdds *int64            `json:"fitting_adds,omitempty"` // только кабинет магазина
 	SKU         string            `json:"sku,omitempty"`
 	Title       string            `json:"title"`
 	Description string            `json:"description,omitempty"`
@@ -57,6 +62,12 @@ func (h *Handlers) StoreRoutes(r chi.Router) {
 	r.Get("/products", h.storeList)
 	r.Post("/products", h.storeCreate)
 	r.Patch("/products/{id}/status", h.storeSetStatus)
+	r.Get("/products/{id}", h.storeGet)
+	r.Patch("/products/{id}", h.storeUpdate)
+	r.Delete("/products/{id}", h.storeDelete)
+	r.Get("/products/import/template", h.importTemplate)
+	r.Post("/products/import", h.importExcel)
+	r.Post("/products/images/bulk", h.bulkImages)
 }
 
 func (h *Handlers) categories(w http.ResponseWriter, r *http.Request) {
@@ -157,9 +168,9 @@ func (h *Handlers) list(w http.ResponseWriter, r *http.Request) {
 	// все значения пользователя идут через args.
 	// nosemgrep: go.lang.security.injection.tainted-sql-string.tainted-sql-string
 	sql := fmt.Sprintf(`
-		SELECT p.id, p.store_id, s.name, p.category_id, p.title, p.brand, p.price, p.in_stock, p.created_at, (%s)::text,
+		SELECT p.id, p.store_id, s.name, s.slug, p.category_id, c.zone::text, p.title, p.brand, p.price, p.in_stock, p.created_at, (%s)::text,
 		       COALESCE((SELECT jsonb_object_agg(angle, key) FROM product_images pi WHERE pi.product_id = p.id), '{}')
-		FROM products p JOIN stores s ON s.id = p.store_id
+		FROM products p JOIN stores s ON s.id = p.store_id JOIN categories c ON c.id = p.category_id
 		WHERE %s ORDER BY %s %s, p.id %s LIMIT %d`,
 		srt.col, strings.Join(where, " AND "), srt.col, dir, dir, limit+1)
 	rows, err := h.DB.Query(r.Context(), sql, args...)
@@ -170,7 +181,7 @@ func (h *Handlers) list(w http.ResponseWriter, r *http.Request) {
 	var items []Product
 	for rows.Next() {
 		var p Product
-		if err := rows.Scan(&p.ID, &p.StoreID, &p.StoreName, &p.CategoryID, &p.Title, &p.Brand, &p.Price, &p.InStock, &p.CreatedAt, &p.sortVal, &p.imageKeys); err != nil {
+		if err := rows.Scan(&p.ID, &p.StoreID, &p.StoreName, &p.StoreSlug, &p.CategoryID, &p.Zone, &p.Title, &p.Brand, &p.Price, &p.InStock, &p.CreatedAt, &p.sortVal, &p.imageKeys); err != nil {
 			httpx.Fail(w, r, err)
 			return
 		}
@@ -203,11 +214,11 @@ func (h *Handlers) get(w http.ResponseWriter, r *http.Request) {
 	}
 	var p Product
 	err = h.DB.QueryRow(r.Context(), `
-		SELECT p.id, p.store_id, s.name, p.category_id, p.title, p.description, p.brand, p.price, p.in_stock, p.created_at,
+		SELECT p.id, p.store_id, s.name, s.slug, p.category_id, c.zone::text, p.title, p.description, p.brand, p.price, p.in_stock, p.created_at,
 		  COALESCE((SELECT jsonb_object_agg(angle, key) FROM product_images pi WHERE pi.product_id = p.id), '{}')
-		FROM products p JOIN stores s ON s.id = p.store_id
+		FROM products p JOIN stores s ON s.id = p.store_id JOIN categories c ON c.id = p.category_id
 		WHERE p.id = $1 AND p.status = 'published' AND s.status = 'active'`, id).
-		Scan(&p.ID, &p.StoreID, &p.StoreName, &p.CategoryID, &p.Title, &p.Description, &p.Brand, &p.Price, &p.InStock, &p.CreatedAt, &p.imageKeys)
+		Scan(&p.ID, &p.StoreID, &p.StoreName, &p.StoreSlug, &p.CategoryID, &p.Zone, &p.Title, &p.Description, &p.Brand, &p.Price, &p.InStock, &p.CreatedAt, &p.imageKeys)
 	if errors.Is(err, pgx.ErrNoRows) {
 		httpx.Fail(w, r, httpx.ErrNotFound)
 		return
@@ -238,8 +249,10 @@ func (h *Handlers) urls(keys map[string]string) map[string]string {
 func (h *Handlers) storeList(w http.ResponseWriter, r *http.Request) {
 	p := auth.MustFrom(r.Context())
 	rows, err := h.DB.Query(r.Context(), `
-		SELECT p.id, p.store_id, p.category_id, p.sku, p.title, p.brand, p.price, p.in_stock, p.status, p.moderation_reason, p.created_at
-		FROM products p WHERE p.store_id = $1 ORDER BY p.created_at DESC LIMIT 500`, p.StoreID)
+		SELECT p.id, p.store_id, p.category_id, p.sku, p.title, p.brand, p.price, p.in_stock, p.status, p.moderation_reason, p.created_at,
+		       p.views_count, p.fitting_adds,
+		       COALESCE((SELECT jsonb_object_agg(angle, key) FROM product_images pi WHERE pi.product_id = p.id), '{}')
+		FROM products p WHERE p.store_id = $1 ORDER BY p.created_at DESC LIMIT 2000`, p.StoreID)
 	if err != nil {
 		httpx.Fail(w, r, err)
 		return
@@ -247,10 +260,12 @@ func (h *Handlers) storeList(w http.ResponseWriter, r *http.Request) {
 	items := []Product{}
 	for rows.Next() {
 		var it Product
-		if err := rows.Scan(&it.ID, &it.StoreID, &it.CategoryID, &it.SKU, &it.Title, &it.Brand, &it.Price, &it.InStock, &it.Status, &it.Reason, &it.CreatedAt); err != nil {
+		if err := rows.Scan(&it.ID, &it.StoreID, &it.CategoryID, &it.SKU, &it.Title, &it.Brand, &it.Price, &it.InStock, &it.Status, &it.Reason, &it.CreatedAt,
+			&it.Views, &it.FittingAdds, &it.imageKeys); err != nil {
 			httpx.Fail(w, r, err)
 			return
 		}
+		it.Images = h.urls(it.imageKeys)
 		items = append(items, it)
 	}
 	if err := rows.Err(); err != nil {
@@ -331,6 +346,26 @@ func (h *Handlers) storeSetStatus(w http.ResponseWriter, r *http.Request) {
 	if err := httpx.Decode(w, r, &req); err != nil {
 		httpx.Fail(w, r, err)
 		return
+	}
+	if req.Status == "published" {
+		// публиковать можно только с тремя ракурсами (после импорта из Excel фото может не быть)
+		var n int
+		var status string
+		err := h.DB.QueryRow(r.Context(), `SELECT p.status::text, count(pi.angle) FROM products p LEFT JOIN product_images pi ON pi.product_id = p.id
+			WHERE p.id = $1 AND p.store_id = $2 GROUP BY p.id`, id, p.StoreID).Scan(&status, &n)
+		if errors.Is(err, pgx.ErrNoRows) || status == "blocked" || status == "unpublished" {
+			httpx.Fail(w, r, httpx.NewError(http.StatusNotFound, "not_found", "product not found or locked by moderation"))
+			return
+		}
+		if err != nil {
+			httpx.Fail(w, r, err)
+			return
+		}
+		if n < 3 {
+			httpx.Fail(w, r, &httpx.Error{Status: 422, Code: "images_required", Message: "front, side and back photos are required to publish",
+				Fields: map[string]string{"images": "required"}})
+			return
+		}
 	}
 	tag, err := h.DB.Exec(r.Context(), `
 		UPDATE products SET status = $3::product_status,
