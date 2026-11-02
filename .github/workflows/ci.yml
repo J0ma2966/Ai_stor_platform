@@ -1,0 +1,75 @@
+name: CI
+on:
+  push: {branches: [main]}
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults: {run: {working-directory: backend}}
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: {POSTGRES_PASSWORD: postgres}
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: {go-version-file: backend/go.mod, cache-dependency-path: backend/go.sum}
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - name: go vet
+        run: go vet ./...
+      - name: staticcheck
+        run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+      - name: tests (race, integration against PostgreSQL)
+        run: go test -race -count=1 -coverprofile=coverage.out ./...
+      - name: coverage
+        run: go tool cover -func=coverage.out | tail -1
+      - name: migrations down/up roundtrip
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
+          JWT_SECRET: ci-secret-ci-secret-ci-secret-ci-secret
+          OTP_PEPPER: ci-pepper-ci-pepper
+        run: |
+          go build -o /tmp/api ./cmd/api
+          /tmp/api migrate up && /tmp/api migrate down && /tmp/api migrate up
+      - name: backup and restore check
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+          ADMIN_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+          PGPASSWORD: postgres
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq age postgresql-client-16 || sudo apt-get install -y -qq age postgresql-client
+          ../deploy/backup/verify-restore.sh
+
+  gosec:
+    runs-on: ubuntu-latest
+    permissions: {contents: read, security-events: write}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: {go-version-file: backend/go.mod, cache-dependency-path: backend/go.sum}
+      - name: gosec
+        working-directory: backend
+        run: go run github.com/securego/gosec/v2/cmd/gosec@v2.30.0 -exclude-generated -severity medium ./...
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t boutique-api:ci backend
