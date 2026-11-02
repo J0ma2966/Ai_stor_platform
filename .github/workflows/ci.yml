@@ -1,0 +1,92 @@
+name: CI
+on:
+  push: {branches: [main]}
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults: {run: {working-directory: backend}}
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: {POSTGRES_PASSWORD: postgres}
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with: {go-version-file: backend/go.mod, cache-dependency-path: backend/go.sum}
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - name: go vet
+        run: go vet ./...
+      - name: staticcheck
+        run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+      - name: tests (race, integration against PostgreSQL)
+        run: go test -race -count=1 -coverprofile=coverage.out ./...
+      - name: coverage
+        run: go tool cover -func=coverage.out | tail -1
+      - name: migrations down/up roundtrip
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
+          JWT_SECRET: ci-secret-ci-secret-ci-secret-ci-secret
+          OTP_PEPPER: ci-pepper-ci-pepper
+        run: |
+          go build -o /tmp/api ./cmd/api
+          /tmp/api migrate up && /tmp/api migrate down && /tmp/api migrate up
+      - name: backup and restore check
+        # pg_dump/pg_restore той же major-версии, что и сервер (на раннере клиент новее и
+        # пишет в дамп параметры, которых PostgreSQL 16 не знает) — как в образе deploy/backup.
+        run: |
+          docker run --rm --network host -v "$GITHUB_WORKSPACE:/w" -w /w \
+            -e DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres \
+            -e ADMIN_DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres \
+            postgres:16-alpine sh -c 'apk add -q --no-cache age bash coreutils python3 && deploy/backup/verify-restore.sh'
+
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults: {run: {working-directory: web}}
+    env: {NEXT_TELEMETRY_DISABLED: "1"}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: {node-version: 22, cache: npm, cache-dependency-path: web/package-lock.json}
+      - run: npm ci --no-audit --no-fund
+      - name: typecheck
+        run: npm run lint
+      - name: unit tests
+        run: npm test
+      - name: build
+        run: npm run build
+
+  gosec:
+    runs-on: ubuntu-latest
+    permissions: {contents: read, security-events: write}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with: {go-version-file: backend/go.mod, cache-dependency-path: backend/go.sum}
+      - name: gosec
+        working-directory: backend
+        run: go run github.com/securego/gosec/v2/cmd/gosec@v2.30.0 -exclude-generated -severity medium ./...
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - run: docker build -t boutique-api:ci backend

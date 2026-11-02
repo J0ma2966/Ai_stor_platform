@@ -1,0 +1,10 @@
+.env
+*.local
+/bin/
+*.dump
+*.age
+key.txt
+coverage.out
+node_modules/
+.next/
+.DS_Store
