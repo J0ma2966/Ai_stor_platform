@@ -5,6 +5,10 @@
 #
 #   init-env.sh <out_dir> <домен> <acme_email> [staging]
 #
+# Схема (TOPOLOGY):
+#   single (по умолчанию) — один сервер в UZ: все роли на нём, адрес 10.77.0.10, без реплики.
+#   multi                 — app/db/replica в UZ + edge в Германии (адреса ниже).
+#
 # Windows (PowerShell, нужен Docker Desktop):
 #   docker run --rm -it -v ${PWD}:/w -w /w alpine:3.22 sh -c "apk add -q bash openssl age && bash deploy/prod/scripts/init-env.sh secrets-out shop.uz admin@shop.uz"
 #
@@ -14,7 +18,12 @@ set -euo pipefail
 out="${1:?usage: init-env.sh <out_dir> <domain> <acme_email> [staging]}"
 domain="${2:?domain}"; email="${3:?acme email}"; envname="${4:-production}"
 registry="${REGISTRY:-ghcr.io/j0ma2966/ai_stor_platform}"
-APP_IP="${APP_IP:-10.77.0.10}" DB_IP="${DB_IP:-10.77.0.20}" REPLICA_IP="${REPLICA_IP:-10.77.0.21}" EDGE_IP="${EDGE_IP:-10.77.0.30}"
+topology="${TOPOLOGY:-single}"
+case "$topology" in
+  single) APP_IP="${APP_IP:-10.77.0.10}"; DB_IP="$APP_IP"; EDGE_IP="$APP_IP"; REPLICA_IP="" ;;
+  multi)  APP_IP="${APP_IP:-10.77.0.10}" DB_IP="${DB_IP:-10.77.0.20}" REPLICA_IP="${REPLICA_IP:-10.77.0.21}" EDGE_IP="${EDGE_IP:-10.77.0.30}" ;;
+  *) echo "TOPOLOGY must be single or multi" >&2; exit 2 ;;
+esac
 [[ -e "$out" ]] && { echo "$out already exists — refusing to overwrite secrets" >&2; exit 1; }
 mkdir -p "$out"; umask 077
 
@@ -34,7 +43,7 @@ else
 fi
 
 cat > "$out/app.env" <<E
-# Сервер приложения (UZ). Секрет GitHub: ENV_APP
+# Роль app (UZ): API, Caddy, Redis, логи. Секрет GitHub: ENV_APP
 APP_ENV=$appenv
 REGISTRY=$registry
 PRIVATE_IP=$APP_IP
@@ -82,6 +91,13 @@ PAYME_ALLOWED_IPS=
 PAYME_IKPU=
 PAYME_PACKAGE_CODE=
 E
+if [[ "$topology" == single ]]; then
+  cat >> "$out/app.env" <<E
+# Один сервер: этот Caddy отдаёт и сайт (инстансы web1/web2 из edge/, порты 3001/3002)
+CADDY_SITES=single
+WEB_UPSTREAMS="$APP_IP:3001 $APP_IP:3002"
+E
+fi
 
 db_common() {
 cat <<E
@@ -109,15 +125,17 @@ AGE_RECIPIENT=$AGE_RECIPIENT
 BACKUP_HOUR_UTC=21
 E
 }
-{ echo "# Сервер БД, primary (UZ). Секрет GitHub: ENV_DB"
-  echo "COMPOSE_PROFILES=primary"; echo "PG_ROLE=primary"; echo "PRIVATE_IP=$DB_IP"
+{ echo "# Роль db, primary (UZ). Секрет GitHub: ENV_DB"
+  # один сервер: учебное восстановление дампа тоже здесь (реплики нет)
+  if [[ "$topology" == single ]]; then echo "COMPOSE_PROFILES=primary,drill"; echo "REPLICA_SLOT="; else echo "COMPOSE_PROFILES=primary"; fi
+  echo "PG_ROLE=primary"; echo "PRIVATE_IP=$DB_IP"
   db_common
   echo "MINIO_DATA_DIR=/srv/minio"
   echo "MINIO_ROOT_USER=root$(rnd 6)"; echo "MINIO_ROOT_PASSWORD=$MINIO_ROOT_PASSWORD"
   echo "MINIO_APP_ACCESS_KEY=$MINIO_APP_ACCESS_KEY"; echo "MINIO_APP_SECRET_KEY=$MINIO_APP_SECRET_KEY"
   echo "S3_BUCKET=boutique-media"
 } > "$out/db.env"
-{ echo "# Сервер реплики БД (UZ). Секрет GitHub: ENV_REPLICA"
+[[ "$topology" == multi ]] && { echo "# Сервер реплики БД (UZ). Секрет GitHub: ENV_REPLICA"
   echo "COMPOSE_PROFILES=replica,drill"; echo "PG_ROLE=replica"; echo "PRIVATE_IP=$REPLICA_IP"; echo "PRIMARY_HOST=$DB_IP"
   db_common
   # не используются на реплике, но обязательны для разбора compose.yml
@@ -125,7 +143,7 @@ E
 } > "$out/replica.env"
 
 cat > "$out/edge.env" <<E
-# Сервер сайта и мониторинга (Германия). Секрет GitHub: ENV_EDGE
+# Роль edge: сайт и мониторинг (один сервер: тот же сервер в UZ; иначе Германия). Секрет GitHub: ENV_EDGE
 DEPLOY_ENV=$envname
 REGISTRY=$registry
 ACME_EMAIL=$email
@@ -141,6 +159,7 @@ EDGE_PRIVATE_IP=$EDGE_IP
 # chat id группы/канала в Telegram (бот должен быть добавлен в группу). Заполнить!
 TELEGRAM_CHAT_ID=CHANGE-ME
 E
+[[ "$topology" == single ]] && echo "SINGLE_HOST=1" >> "$out/edge.env"
 
 cat > "$out/github-variables.txt" <<E
 # Переменные окружения GitHub (Settings → Environments → $envname → Variables)
@@ -153,6 +172,7 @@ DB_PRIVATE_IP=$DB_IP
 REPLICA_PRIVATE_IP=$REPLICA_IP
 EDGE_PRIVATE_IP=$EDGE_IP
 # публичные адреса SSH серверов (заполнить): APP_SSH_HOST, DB_SSH_HOST, REPLICA_SSH_HOST, EDGE_SSH_HOST
+# один сервер: APP_SSH_HOST = DB_SSH_HOST = EDGE_SSH_HOST = его адрес, REPLICA_* не задавать
 E
-echo "Готово: $out (app.env, db.env, replica.env, edge.env, age-identity.txt, github-variables.txt)"
+echo "Готово ($topology): $out (app.env, db.env, $([[ $topology == multi ]] && echo "replica.env, ")edge.env, age-identity.txt, github-variables.txt)"
 echo "Приватный ключ age (age-identity.txt) сохраните ещё и офлайн: без него зашифрованные дампы не прочитать."

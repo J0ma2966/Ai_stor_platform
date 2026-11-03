@@ -9,7 +9,7 @@
 | `backend/migrations` | SQL-миграции goose (встраиваются в бинарник и накатываются при старте) |
 | `web/` | сайт: Next.js 15, React 19, TypeScript, языки ru/uz ([подробнее](web/README.md)) |
 | `deploy/` | docker-compose для разработки, скрипты бэкапа и восстановления |
-| `deploy/prod/`, `ansible/` | продакшен: серверы в UZ и DE, TLS, мониторинг, бэкапы с PITR, выкатка ([как запустить](docs/DEPLOY.md), [runbook](docs/RUNBOOK.md)) |
+| `deploy/prod/`, `ansible/` | продакшен: один сервер в UZ (с путём роста до нескольких), TLS, мониторинг, бэкапы с PITR, выкатка ([как запустить](docs/DEPLOY.md), [runbook](docs/RUNBOOK.md)) |
 | `scripts/dev.ps1` | запуск всего на Windows без `make` |
 | `docs/` | [архитектура](docs/ARCHITECTURE.md), [соглашения API](docs/API.md), [бэкапы](docs/BACKUPS.md), [продакшен](docs/DEPLOY.md), [runbook](docs/RUNBOOK.md) |
 

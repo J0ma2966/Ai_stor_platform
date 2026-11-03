@@ -91,11 +91,17 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - run: docker build -t boutique-api:ci backend
 
-  # Весь прод-стек на одном раннере: Caddy/TLS, 3 API, Redis, PostgreSQL + WAL-G, реплика,
-  # MinIO, сайт, Prometheus/Alertmanager/Grafana/Loki; бэкапы, PITR, деплой без простоя.
+  # Весь прод-стек на одном раннере: Caddy/TLS, 3 API, Redis, PostgreSQL + WAL-G, MinIO,
+  # сайт, Prometheus/Alertmanager/Grafana/Loki; бэкапы, PITR, деплой без простоя.
+  # single — схема прода (один сервер), multi — несколько серверов с репликой и failover.
   deploy-smoke:
+    name: deploy-smoke (${{ matrix.mode }})
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [single, multi]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Static checks of deploy configs
@@ -117,4 +123,4 @@ jobs:
       - name: Smoke test
         run: |
           sudo apt-get install -y -qq age >/dev/null   # age-keygen для init-env.sh
-          sudo env "PATH=$PATH" REGISTRY=local/boutique TAG=smoke1 TAG2=smoke2 deploy/prod/tests/smoke.sh
+          sudo env "PATH=$PATH" SMOKE_MODE=${{ matrix.mode }} REGISTRY=local/boutique TAG=smoke1 TAG2=smoke2 deploy/prod/tests/smoke.sh

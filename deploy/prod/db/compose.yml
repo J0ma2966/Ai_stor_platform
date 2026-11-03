@@ -41,6 +41,10 @@ services:
       REPLICATOR_PASSWORD: ${REPLICATOR_PASSWORD:?}
       MONITOR_PASSWORD: ${MONITOR_PASSWORD:?}
       PRIMARY_HOST: ${PRIMARY_HOST:-}
+      # пусто = без реплики (схема «один сервер»)
+      REPLICA_SLOT: ${REPLICA_SLOT-replica1}
+      # сервер потерян: восстановить из архива WAL-G при пустом каталоге данных (RUNBOOK)
+      RESTORE_FROM_BACKUP: ${RESTORE_FROM_BACKUP:-}
     command:
       - postgres
       - -c
@@ -111,8 +115,8 @@ services:
       - ${METRICS_HOST_DIR:-/var/lib/boutique/metrics}:/metrics
 
   # Раз в неделю: свежий офсайт-дамп восстанавливается во временную базу и проверяется.
-  # Запускается на сервере реплики (COMPOSE_PROFILES=replica,drill): ему нужен приватный
-  # ключ age, а держать его на primary незачем.
+  # Один сервер: COMPOSE_PROFILES=primary,drill (ключ age лежит на нём же). Несколько: на
+  # реплике (replica,drill), чтобы приватный ключ age не держать на primary.
   restore-drill:
     image: ${REGISTRY:?}/backup:${BACKUP_IMAGE_TAG:?}
     profiles: [drill]

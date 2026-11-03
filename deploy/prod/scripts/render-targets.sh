@@ -10,6 +10,10 @@ out="$dir/edge/targets"; mkdir -p "$out"
 # host=имя:адрес для каждого сервера
 hosts=("app:$APP_PRIVATE_IP" "db-primary:$DB_PRIVATE_IP" "edge:$EDGE_PRIVATE_IP")
 [[ -n "${REPLICA_PRIVATE_IP:-}" ]] && hosts+=("db-replica:$REPLICA_PRIVATE_IP")
+# один сервер (все адреса совпадают): агенты хоста на нём одни, цель одна
+if [[ "$APP_PRIVATE_IP" == "$DB_PRIVATE_IP" && "$APP_PRIVATE_IP" == "$EDGE_PRIVATE_IP" && -z "${REPLICA_PRIVATE_IP:-}" ]]; then
+  hosts=("server:$APP_PRIVATE_IP")
+fi
 
 per_host() { # $1 порт -> список целей на всех серверах
   for h in "${hosts[@]}"; do

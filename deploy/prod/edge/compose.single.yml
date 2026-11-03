@@ -1,0 +1,10 @@
+# Схема «один сервер» (SINGLE_HOST=1 в edge/.env): сайт отдаёт Caddy из app/,
+# поэтому свой Caddy здесь не запускается (порты 80/443 заняты), а инстансы Next.js
+# публикуются только на приватном адресе для app-Caddy (WEB_UPSTREAMS в app/.env).
+services:
+  caddy:
+    profiles: [multi-server-only]
+  web1:
+    ports: ["${EDGE_PRIVATE_IP:?}:3001:3000"]
+  web2:
+    ports: ["${EDGE_PRIVATE_IP:?}:3002:3000"]

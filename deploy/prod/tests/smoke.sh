@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Сквозная проверка прод-стека на ОДНОЙ машине (CI и локально, нужен root и Docker).
-# Поднимает все роли (host, db primary, db replica, app, edge) из deploy/prod теми же
+# SMOKE_MODE=single (по умолчанию) — схема «один сервер», как в проде: все роли в одном
+# каталоге, сайт через app-Caddy, учебное восстановление на этом же сервере.
+# SMOKE_MODE=multi — схема из нескольких серверов: отдельный edge-Caddy, реплика, failover.
+# Поднимает роли (host, db primary, [db replica], app, edge) из deploy/prod теми же
 # скриптами, что и CD, с внутренним TLS Caddy и адресами «WireGuard» на dummy-интерфейсе,
 # затем проверяет: HTTPS через Caddy, загрузку фото и подписанные ссылки, публичные
 # картинки, сайт, метрики и алерты, логи в Loki, архив WAL и базовый бэкап WAL-G,
@@ -14,6 +17,8 @@
 set -euo pipefail
 REGISTRY="${REGISTRY:-local/boutique}"; TAG="${TAG:-smoke1}"; TAG2="${TAG2:-smoke2}"
 IP=10.77.0.1; IP2=10.77.0.2
+MODE="${SMOKE_MODE:-single}"; [[ "$MODE" == single || "$MODE" == multi ]] || { echo "SMOKE_MODE=single|multi" >&2; exit 2; }
+multi() { [[ "$MODE" == multi ]]; }
 D=boutique.test
 src="$(cd "$(dirname "$0")/.." && pwd)"; src="${SMOKE_SRC:-$src}"
 work="${SMOKE_WORK:-$(mktemp -d)}"
@@ -46,14 +51,17 @@ ip addr add "$IP2/32" dev $dev 2>/dev/null || true
 
 step "config: generate env with init-env.sh, switch to internal TLS and local offsite S3"
 mkdir -p "$work"
-cp -r "$src" "$work/main"; mkdir -p "$work/replica"; cp -r "$src" "$work/replica/prod"
+cp -r "$src" "$work/main"
 ln -sfn "$work/main/app" "$work/app"; ln -sfn "$work/main/edge" "$work/edge"; ln -sfn "$work/main/host" "$work/host"
-ln -sfn "$work/replica/prod/db" "$work/replica/db"
-APP_IP=$IP DB_IP=$IP REPLICA_IP=$IP2 EDGE_IP=$IP REGISTRY=$REGISTRY \
+if multi; then
+  mkdir -p "$work/replica"; cp -r "$src" "$work/replica/prod"; ln -sfn "$work/replica/prod/db" "$work/replica/db"
+fi
+TOPOLOGY=$MODE APP_IP=$IP DB_IP=$IP REPLICA_IP=$IP2 EDGE_IP=$IP REGISTRY=$REGISTRY \
   bash "$src/scripts/init-env.sh" "$work/env" "$D" ops@$D >/dev/null
 minio_user=$(sed -n 's/^MINIO_ROOT_USER=//p' "$work/env/db.env")
 minio_pass=$(sed -n 's/^MINIO_ROOT_PASSWORD=//p' "$work/env/db.env")
-for f in db replica; do
+dbenvs=(db); multi && dbenvs+=(replica)
+for f in "${dbenvs[@]}"; do
   sed -i -e "s#^BACKUP_S3_ENDPOINT_URL=.*#BACKUP_S3_ENDPOINT_URL=http://$IP:9000#" \
          -e "s#^BACKUP_S3_ACCESS_KEY=.*#BACKUP_S3_ACCESS_KEY=$minio_user#" \
          -e "s#^BACKUP_S3_SECRET_KEY=.*#BACKUP_S3_SECRET_KEY=$minio_pass#" \
@@ -62,19 +70,24 @@ for f in db replica; do
          "$work/env/$f.env"
   printf 'PG_IMAGE_TAG=smoke\nBACKUP_IMAGE_TAG=smoke\nMETRICS_HOST_DIR=%s/metrics-%s\n' "$work" "$f" >> "$work/env/$f.env"
 done
-echo "COMPOSE_PROJECT_NAME=boutique-db-replica" >> "$work/env/replica.env"
+multi && echo "COMPOSE_PROJECT_NAME=boutique-db-replica" >> "$work/env/replica.env"
 sed -i -e "s/^TLS_MODE=.*/TLS_MODE=internal/" -e "s/^APP_ENV=.*/APP_ENV=staging/" -e "s/^SMS_PROVIDER=.*/SMS_PROVIDER=log/" "$work/env/app.env"
 sed -i -e "s/^TLS_MODE=.*/TLS_MODE=internal/" -e "s/^TELEGRAM_CHAT_ID=.*/TELEGRAM_CHAT_ID=-1001/" "$work/env/edge.env"
-printf 'HTTP_PORT=8088\nHTTPS_PORT=8443\n' >> "$work/env/edge.env"
+multi && printf 'HTTP_PORT=8088\nHTTPS_PORT=8443\n' >> "$work/env/edge.env"
+SITE_PORT=443; multi && SITE_PORT=8443
 cp "$work/env/app.env" "$work/app/.env.new"
 cp "$work/env/db.env" "$work/main/db/.env.new"
-cp "$work/env/replica.env" "$work/replica/db/.env.new"
+multi && cp "$work/env/replica.env" "$work/replica/db/.env.new"
 cp "$work/env/edge.env" "$work/edge/.env.new"
 printf 'PRIVATE_IP=%s\nLOKI_PRIVATE_IP=%s\nHOST_NAME=smoke\nMETRICS_HOST_DIR=%s/metrics-db\n' "$IP" "$IP" "$work" > "$work/host/.env"
-mkdir -p "$work/replica/db/secrets" "$work/edge/secrets" "$work/main/db/secrets"
-cp "$work/env/age-identity.txt" "$work/replica/db/secrets/age-identity.txt"
+mkdir -p "$work/edge/secrets" "$work/main/db/secrets"
 cp "$work/env/age-identity.txt" "$work/main/db/secrets/age-identity.txt"
-chmod 644 "$work/replica/db/secrets/age-identity.txt" "$work/main/db/secrets/age-identity.txt"
+chmod 644 "$work/main/db/secrets/age-identity.txt"
+if multi; then
+  mkdir -p "$work/replica/db/secrets"
+  cp "$work/env/age-identity.txt" "$work/replica/db/secrets/age-identity.txt"
+  chmod 644 "$work/replica/db/secrets/age-identity.txt"
+fi
 echo "123:fake" > "$work/edge/secrets/telegram-bot-token"
 cp "$work/app/compose.staging.yml" "$work/app/compose.override.yml"
 # в контейнерных CI-песочницах / не всегда shared-mount
@@ -91,22 +104,24 @@ services:
 YML
 export REGISTRY SKIP_PULL=1
 
-step "deploy: host agents, db primary, app, edge, replica (same scripts as CD)"
+step "deploy ($MODE): host agents, db primary, app, edge$(multi && echo ", replica") (same scripts as CD)"
 "$work/main/scripts/deploy.sh" host
 "$work/main/scripts/deploy.sh" db
 "$work/main/scripts/deploy.sh" app "$TAG"
 "$work/main/scripts/deploy.sh" edge "$TAG"
-"$work/replica/prod/scripts/deploy.sh" db
+if multi; then "$work/replica/prod/scripts/deploy.sh" db; fi
 if [[ "${SKIP_BACKUP_IMAGE:-0}" == "1" ]]; then
-  (cd "$work/main/db" && docker compose stop pgdump >/dev/null 2>&1 || true)
-  (cd "$work/replica/db" && docker compose stop restore-drill >/dev/null 2>&1 || true)
+  (cd "$work/main/db" && docker compose stop pgdump restore-drill >/dev/null 2>&1 || true)
+  if multi; then (cd "$work/replica/db" && docker compose stop restore-drill >/dev/null 2>&1 || true); fi
 fi
+drill_db() { if multi; then echo "$work/replica/db"; else echo "$work/main/db"; fi; }
 
 app() { (cd "$work/app" && docker compose -f compose.yml -f compose.override.yml "$@"); }
 dbc() { (cd "$work/main/db" && docker compose "$@"); }
 rep() { (cd "$work/replica/db" && docker compose "$@"); }
-edge() { (cd "$work/edge" && docker compose -f compose.yml -f compose.override.yml "$@"); }
-CURL=(curl -sk --noproxy "*" --max-time 10 --resolve "api.$D:443:$IP" --resolve "s3.$D:443:$IP" --resolve "media.$D:443:$IP" --resolve "$D:8443:$IP")
+edge_files=(-f compose.yml); multi || edge_files+=(-f compose.single.yml); edge_files+=(-f compose.override.yml)
+edge() { (cd "$work/edge" && docker compose "${edge_files[@]}" "$@"); }
+CURL=(curl -sk --noproxy "*" --max-time 10 --resolve "api.$D:443:$IP" --resolve "s3.$D:443:$IP" --resolve "media.$D:443:$IP" --resolve "$D:$SITE_PORT:$IP" --resolve "www.$D:$SITE_PORT:$IP")
 API="https://api.$D"
 
 step "API through Caddy"
@@ -158,9 +173,14 @@ dbc exec -T minio sh -c "printf img > /tmp/x.jpg && mc alias set l http://127.0.
 check "pub/ image 200 with immutable cache" bash -c "$(printf '%q ' "${CURL[@]}") -sI https://media.$D/pub/smoke/x.jpg | grep -qi 'cache-control: public, max-age=31536000, immutable'"
 check "media domain does not expose private keys" bash -c "[[ \$($(printf '%q ' "${CURL[@]}") -o /dev/null -w '%{http_code}' https://media.$D/priv/x) == 404 ]]"
 
-step "site (Next.js) through edge Caddy"
-check "site /api/healthz 200" retry 15 bash -c "$(printf '%q ' "${CURL[@]}") -f -o /dev/null https://$D:8443/api/healthz"
-check "site /ru/login 200 with nonce CSP" bash -c "$(printf '%q ' "${CURL[@]}") -sI https://$D:8443/ru/login | grep -qi \"content-security-policy: .*nonce-\""
+step "site (Next.js) through $(multi && echo "edge" || echo "app") Caddy"
+check "site /api/healthz 200" retry 15 bash -c "$(printf '%q ' "${CURL[@]}") -f -o /dev/null https://$D:$SITE_PORT/api/healthz"
+check "site /ru/login 200 with nonce CSP" bash -c "$(printf '%q ' "${CURL[@]}") -sI https://$D:$SITE_PORT/ru/login | grep -qi \"content-security-policy: .*nonce-\""
+check "www redirects to the site" bash -c "$(printf '%q ' "${CURL[@]}") -sI https://www.$D:$SITE_PORT/ | grep -qi '^location: https://$D'"
+if ! multi; then
+  check "edge Caddy not running (single server: app Caddy serves the site)" bash -c "! docker ps --format '{{.Names}}' | grep -q '^boutique-edge-caddy'"
+  check "Next.js instances published only on the private address" bash -c "[[ \$(docker port boutique-edge-web1-1 3000) == $IP:3001 ]]"
+fi
 
 step "monitoring: scrape targets, alert rules, logs"
 prom() { edge exec -T prometheus wget -qO- "http://127.0.0.1:9090/api/v1/$1"; }
@@ -175,18 +195,19 @@ check "Grafana (UZ, WireGuard only) reaches Prometheus in DE" retry 20 bash -c "
 check "Grafana reaches Loki locally" retry 20 bash -c "$(declare -f gq); gpass=$gpass; IP=$IP; gq /api/datasources/uid/loki/health | grep -qi ok"
 check "Grafana not published by edge Caddy" bash -c "! grep -q 'reverse_proxy grafana' $work/edge/Caddyfile"
 
-step "backups: WAL archive, base backup, replica"
+step "backups: WAL archive, base backup$(multi && echo ", replica")"
 psqlp() { dbc exec -T -u postgres postgres psql -U postgres -d boutique -tAc "$1"; }
 psqlp "select pg_switch_wal()" >/dev/null
 check "WAL archived to offsite S3" retry 30 bash -c "$(declare -f psqlp dbc); work=$work; [[ \$(psqlp 'select archived_count from pg_stat_archiver') -gt 0 ]]"
 check "archive has no failures" bash -c "$(declare -f psqlp dbc); work=$work; [[ \$(psqlp 'select failed_count from pg_stat_archiver') == 0 ]]"
 check "first WAL-G base backup made automatically" retry 60 bash -c "$(declare -f dbc); work=$work; dbc exec -T walg wal-g backup-list 2>/dev/null | grep -q base_"
 check "base backup metric written" retry 10 grep -q 'boutique_walg_last_run_ok 1' "$work/metrics-db/walg.prom"
-check "replica streaming" retry 60 bash -c "$(declare -f psqlp dbc); work=$work; psqlp \"select state from pg_stat_replication where application_name='replica1'\" | grep -q streaming"
+multi && check "replica streaming" retry 60 bash -c "$(declare -f psqlp dbc); work=$work; psqlp \"select state from pg_stat_replication where application_name='replica1'\" | grep -q streaming"
 psqlp "create table if not exists smoke_marker(id int primary key, note text); insert into smoke_marker values (1, 'before') on conflict do nothing; alter table smoke_marker owner to boutique" >/dev/null
-check "replica sees new rows" retry 20 bash -c "$(declare -f rep); work=$work; rep exec -T -u postgres postgres psql -U postgres -d boutique -tAc 'select note from smoke_marker where id=1' | grep -q before"
+multi && check "replica sees new rows" retry 20 bash -c "$(declare -f rep); work=$work; rep exec -T -u postgres postgres psql -U postgres -d boutique -tAc 'select note from smoke_marker where id=1' | grep -q before"
 ro_check() { ! rep exec -T -u postgres postgres psql -d boutique -c "insert into smoke_marker values (2, 'x')" >/dev/null 2>&1; }
-check "replica is read-only" ro_check
+multi && check "replica is read-only" ro_check
+multi || check "no replication slot on a single server (WAL is not retained)" bash -c "$(declare -f psqlp dbc); work=$work; [[ \$(psqlp 'select count(*) from pg_replication_slots') == 0 ]]"
 
 step "PITR: restore to a moment before an accidental delete"
 sleep 2; t=$(date -u '+%Y-%m-%d %H:%M:%S+00'); sleep 2
@@ -201,7 +222,7 @@ docker rm -f boutique-pitr >/dev/null
 if [[ "${SKIP_BACKUP_IMAGE:-0}" != "1" ]]; then
   step "logical backup (pg_dump + age) and weekly restore drill"
   check "pg_dump uploaded to offsite" bash -c "$(declare -f dbc); work=$work; dbc exec -T pgdump backup.sh >/dev/null"
-  check "restore drill restores latest offsite dump and passes invariants" bash -c "$(declare -f rep); work=$work; rep exec -T restore-drill restore-drill.sh"
+  check "restore drill restores latest offsite dump and passes invariants" bash -c "cd $(drill_db) && docker compose exec -T restore-drill restore-drill.sh"
 fi
 
 step "zero-downtime rolling deploy of API ($TAG -> $TAG2) and automatic rollback"
@@ -218,9 +239,26 @@ docker tag busybox:1.37 "$REGISTRY/api:broken" 2>/dev/null || docker tag "$REGIS
 if ROLL_PAUSE=1 "$work/main/scripts/deploy.sh" app broken >/dev/null 2>&1; then bad "broken release must fail"; else pass "broken release refused"; fi
 check "rolled back to $TAG2 and serving" bash -c "$(declare -f app); work=$work; grep -q '^IMAGE_TAG=$TAG2' $work/app/.env && $(printf '%q ' "${CURL[@]}") -f -o /dev/null $API/readyz"
 
+if ! multi; then
+step "server lost: restore the database from the offsite WAL archive (RUNBOOK, single server)"
+psqlp "insert into smoke_marker values (4, 'latest')" >/dev/null
+seg=$(psqlp "select pg_walfile_name(pg_current_wal_lsn())"); psqlp "select pg_switch_wal()" >/dev/null
+check "latest WAL segment archived" retry 30 bash -c "$(declare -f psqlp dbc); work=$work; [[ \$(psqlp 'select last_archived_wal from pg_stat_archiver') > '$seg' || \$(psqlp 'select last_archived_wal from pg_stat_archiver') == '$seg' ]]"
+dbc stop postgres >/dev/null 2>&1
+# новый сервер = пустой каталог данных; RESTORE_FROM_BACKUP=LATEST вместо initdb берёт базу из S3
+dbc run --rm -T --no-deps --entrypoint sh postgres -c 'rm -rf /var/lib/postgresql/data/*' >/dev/null 2>&1
+if RESTORE_FROM_BACKUP=LATEST dbc up -d --wait --wait-timeout 300 postgres >/dev/null 2>&1; then
+  pass "postgres restored itself from the WAL-G archive into an empty data dir"
+else bad "restore from WAL-G (RESTORE_FROM_BACKUP=LATEST)"; dbc logs --tail 40 postgres; fi
+check "restored database has the last row and is primary" retry 30 bash -c "$(declare -f psqlp dbc); work=$work; [[ \$(psqlp 'select note from smoke_marker where id=4') == latest && \$(psqlp 'select pg_is_in_recovery()') == f ]]"
+check "API serves again after restore" retry 30 bash -c "$(printf '%q ' "${CURL[@]}") -f $API/readyz | grep -q '\"db\":\"ok\"'"
+fi
+
+if multi; then
 step "failover: promote replica"
 CONFIRM_FAILOVER=yes bash -c "cd $work/replica/db && $work/replica/prod/scripts/failover.sh" >/dev/null && pass "failover.sh" || bad "failover.sh"
 check "replica is primary now and writable" bash -c "$(declare -f rep); work=$work; rep exec -T -u postgres postgres psql -U postgres -d boutique -tAc 'insert into smoke_marker values (3, \$\$after\$\$) returning id' | grep -q 3"
+fi
 
 echo
 if (( fail )); then echo "SMOKE FAILED"; exit 1; fi

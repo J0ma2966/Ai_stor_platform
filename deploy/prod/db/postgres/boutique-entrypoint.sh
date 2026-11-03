@@ -3,6 +3,10 @@
 #   PG_ROLE=primary (по умолчанию) — обычный запуск, initdb при пустом каталоге.
 #   PG_ROLE=replica — если каталог пуст, клонирует primary через pg_basebackup
 #                     (слот replica1) и стартует как hot standby.
+#   RESTORE_FROM_BACKUP=LATEST (или имя бэкапа) — если каталог пуст, вместо initdb
+#                     восстанавливает базу из архива WAL-G и догоняет WAL до конца
+#                     архива (сервер потерян, RUNBOOK). С пустым каталогом без этой
+#                     переменной создаётся новая пустая база.
 set -euo pipefail
 role="${PG_ROLE:-primary}"
 export PGDATA="${PGDATA:-/var/lib/postgresql/data}"
@@ -23,6 +27,14 @@ if [[ "$role" == "replica" && ! -s "$PGDATA/PG_VERSION" ]]; then
   echo "primary_conninfo = 'host=${PRIMARY_HOST} port=${PRIMARY_PORT:-5432} user=replicator password=${REPLICATOR_PASSWORD} application_name=replica1'" \
     >> "$PGDATA/postgresql.auto.conf"
   echo "primary_slot_name = '${REPLICATION_SLOT:-replica1}'" >> "$PGDATA/postgresql.auto.conf"
+fi
+
+if [[ "$role" == "primary" && -n "${RESTORE_FROM_BACKUP:-}" && ! -s "$PGDATA/PG_VERSION" ]]; then
+  mkdir -p "$PGDATA" && chmod 700 "$PGDATA"
+  echo "restore: fetching base backup ${RESTORE_FROM_BACKUP} from the WAL-G archive"
+  wal-g backup-fetch "$PGDATA" "$RESTORE_FROM_BACKUP"
+  # restore_command из postgresql.conf догонит WAL до конца архива, затем база станет primary
+  touch "$PGDATA/recovery.signal"
 fi
 
 exec docker-entrypoint.sh "$@"
