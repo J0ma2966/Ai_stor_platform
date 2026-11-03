@@ -276,7 +276,8 @@
     "resultsFor": "«{q}» so‘rovi bo‘yicha natijalar",
     "error": "Katalogni yuklab bo‘lmadi.",
     "showFilters": "Filtrlar",
-    "hideFilters": "Filtrlarni yashirish"
+    "hideFilters": "Filtrlarni yashirish",
+    "all": "Hammasi"
   },
   "product": {
     "inStock": "Mavjud",
@@ -345,7 +346,8 @@
     "photos": "Suratlarim",
     "tokensLeft": "{n} token",
     "hello": "Assalomu alaykum!",
-    "phone": "Telefon"
+    "phone": "Telefon",
+    "favEmpty": "Saralanganlar hozircha bo‘sh."
   },
   "welcome": {
     "title": "Ro‘yxatdan o‘tishni yakunlang",
@@ -353,7 +355,7 @@
     "gender": "Jins",
     "female": "Ayol",
     "male": "Erkak",
-    "consent": "Shaxsiy ma’lumotlarim va suratlarim {privacy} bo‘yicha qayta ishlanishiga roziman va {terms}ni qabul qilaman.",
+    "consent": "Shaxsiy ma’lumotlarim va suratlarim <privacy>maxfiylik siyosati</privacy> bo‘yicha qayta ishlanishiga roziman va <terms>foydalanuvchi shartnomasi</terms>ni qabul qilaman.",
     "privacy": "maxfiylik siyosati",
     "terms": "foydalanuvchi shartnomasi",
     "submit": "Davom etish",
