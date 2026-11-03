@@ -96,8 +96,13 @@ switch ($Command) {
     if (-not (Get-Command npm -ErrorAction SilentlyContinue)) { throw 'Не найден npm. Установите Node.js 20 LTS или новее: https://nodejs.org/' }
     Push-Location (Join-Path $Root 'web')
     try {
-      # Пустая или недоустановленная node_modules (прерванный npm ci) тоже требует установки.
-      if (-not (Test-Path 'node_modules/.bin/next*')) { & npm ci; if ($LASTEXITCODE -ne 0) { throw 'npm ci завершился с ошибкой' } }
+      # Ставим пакеты, если node_modules пустая (прерванный npm ci) или package-lock.json новее
+      # установленных пакетов (после git pull с новыми зависимостями).
+      $installed = 'node_modules/.package-lock.json'
+      if (-not (Test-Path 'node_modules/.bin/next*') -or -not (Test-Path $installed) -or
+          (Get-Item 'package-lock.json').LastWriteTime -gt (Get-Item $installed).LastWriteTime) {
+        & npm ci; if ($LASTEXITCODE -ne 0) { throw 'npm ci завершился с ошибкой' }
+      }
       $env:NEXT_PUBLIC_API_URL = 'http://localhost:8080'
       $env:NEXT_PUBLIC_MEDIA_ORIGIN = 'http://localhost:9000'
       & npm run dev
