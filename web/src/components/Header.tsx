@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { Link, usePathname, useRouter } from "@/i18n/navigation";
 import { useSession } from "@/lib/session";
+import { TRYON_ENABLED } from "@/lib/fitting";
 
 function Badge({ n }: { n: number }) {
   if (n <= 0) return null;
@@ -46,7 +47,7 @@ export function Header() {
         <nav className="header-nav" aria-label={t("nav.menu")}>
           <Link href="/catalog">{t("nav.catalog")}</Link>
           <Link href="/stores">{t("nav.stores")}</Link>
-          <Link href="/fitting">{t("nav.fitting")}</Link>
+          {TRYON_ENABLED && <Link href="/fitting">{t("nav.fitting")}</Link>}
         </nav>
         <form role="search" className="header-search" action={`/${locale}/catalog`} method="get" onSubmit={search}>
           <label htmlFor="site-search" className="sr-only">{t("nav.search")}</label>

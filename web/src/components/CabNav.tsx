@@ -1,4 +1,5 @@
 "use client";
+import { TRYON_ENABLED } from "@/lib/fitting";
 import { useTranslations } from "next-intl";
 import { Link, usePathname } from "@/i18n/navigation";
 
@@ -22,8 +23,9 @@ export function useAccountNav(): NavItem[] {
     { href: "/account", label: t("title"), exact: true },
     { href: "/account/profile", label: t("profile") },
     { href: "/account/balance", label: t("balance") },
-    { href: "/account/tryons", label: t("tryons") },
-    { href: "/account/photos", label: t("photos") },
+    ...(TRYON_ENABLED
+      ? [{ href: "/account/tryons", label: t("tryons") }, { href: "/account/photos", label: t("photos") }]
+      : []),
     { href: "/account/favorites", label: t("favorites") },
     { href: "/cart", label: t("cart") },
     { href: "/account/orders", label: t("orders") },

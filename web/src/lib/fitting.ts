@@ -3,6 +3,10 @@
 export type Zone = "headwear" | "top" | "bottom" | "shoes";
 export type FittingItem = { id: string; title: string; brand: string; price: number; image_url: string; zone: Zone; store_name?: string };
 
+// Выключатель AI-примерки (prod запускается без неё): NEXT_PUBLIC_TRYON_ENABLED=false.
+// Совпадает с определением в модуле примерки.
+export const TRYON_ENABLED = process.env.NEXT_PUBLIC_TRYON_ENABLED !== "false";
+
 const KEY = "fitting_v1";
 
 export function getFitting(): Partial<Record<Zone, FittingItem>> {

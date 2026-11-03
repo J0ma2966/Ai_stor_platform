@@ -251,7 +251,9 @@
     "ctaTitle": "Kiyib ko‘rishga tayyormisiz?",
     "ctaText": "Telefon raqami orqali ro‘yxatdan o‘tish bir daqiqa oladi.",
     "ctaBtn": "Kiyib ko‘rishni boshlash",
-    "emptyCatalog": "Tez orada bu yerda mahsulotlar paydo bo‘ladi."
+    "emptyCatalog": "Tez orada bu yerda mahsulotlar paydo bo‘ladi.",
+    "heroTitleShop": "Toshkent butiklari bitta katalogda",
+    "heroTextShop": "Turli butiklardan kiyim, poyabzal va aksessuarlar: bitta qidiruv, bitta savat, do‘kondan yetkazib berish."
   },
   "catalog": {
     "title": "Katalog",

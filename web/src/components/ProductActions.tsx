@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Link, usePathname, useRouter } from "@/i18n/navigation";
 import { frontImage, type Product } from "@/lib/catalog";
-import { addToFitting, getFitting } from "@/lib/fitting";
+import { addToFitting, getFitting, TRYON_ENABLED } from "@/lib/fitting";
 import { useSession } from "@/lib/session";
 import { setCartQty } from "@/lib/shop";
 import { ErrorBox } from "./ErrorBox";
@@ -62,7 +62,7 @@ export function ProductActions({ product: p }: { product: Product }) {
         <button type="button" className="btn btn-primary btn-lg" disabled={busy || !p.in_stock} onClick={toCart}>
           {inCart ? t("inCart") : t("toCart")}
         </button>
-        {p.zone && (
+        {TRYON_ENABLED && p.zone && (
           inFitting ? (
             <Link href="/fitting" className="btn btn-lg btn-secondary">{t("inFitting")} →</Link>
           ) : (

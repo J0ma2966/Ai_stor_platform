@@ -1,3 +1,4 @@
+import { TRYON_ENABLED } from "@/lib/fitting";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
@@ -75,7 +76,7 @@ export default async function ProductPage({ params }: { params: P }) {
             <span className={`badge ${p.in_stock ? "badge-ok" : "badge-bad"}`}>{p.in_stock ? t("inStock") : t("outOfStock")}</span>
           </p>
           <ProductActions product={p} />
-          <p className="muted small">{t("fittingNote")}</p>
+          {TRYON_ENABLED && <p className="muted small">{t("fittingNote")}</p>}
           <dl className="kv">
             <div><dt>{t("brand")}</dt><dd>{p.brand}</dd></div>
             {cat && <div><dt>{t("category")}</dt><dd>{catName(cat, locale)}</dd></div>}

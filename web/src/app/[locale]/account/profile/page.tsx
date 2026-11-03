@@ -1,4 +1,5 @@
 "use client";
+import { TRYON_ENABLED } from "@/lib/fitting";
 import { useEffect, useState, type FormEvent } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Link, useRouter } from "@/i18n/navigation";
@@ -122,7 +123,7 @@ export default function Profile() {
         <h2>{t("privacy")}</h2>
         {me.pd_consent_at && <p>{t("consentGiven", { date: formatDateTime(me.pd_consent_at, locale) })}</p>}
         <p className="row wrap">
-          <Link href="/account/photos">{t("photosLink")}</Link>
+          {TRYON_ENABLED && <Link href="/account/photos">{t("photosLink")}</Link>}
           <Link href="/legal/privacy">{t("privacy")}</Link>
         </p>
       </section>
