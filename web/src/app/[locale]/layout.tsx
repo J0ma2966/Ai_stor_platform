@@ -41,7 +41,7 @@ export default async function LocaleLayout({ children, params }: { children: Rea
               <Header />
             </Suspense>
             <main id="main" className="container main">
-              <Suspense>{children}</Suspense>
+              {children}
             </main>
             <Footer />
           </SessionProvider>

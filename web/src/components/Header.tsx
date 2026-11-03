@@ -48,9 +48,9 @@ export function Header() {
           <Link href="/stores">{t("nav.stores")}</Link>
           <Link href="/fitting">{t("nav.fitting")}</Link>
         </nav>
-        <form role="search" className="header-search" onSubmit={search}>
+        <form role="search" className="header-search" action={`/${locale}/catalog`} method="get" onSubmit={search}>
           <label htmlFor="site-search" className="sr-only">{t("nav.search")}</label>
-          <input id="site-search" type="search" placeholder={t("nav.searchPh")} value={q} maxLength={100} onChange={(e) => setQ(e.target.value)} />
+          <input id="site-search" name="q" type="search" placeholder={t("nav.searchPh")} value={q} maxLength={100} onChange={(e) => setQ(e.target.value)} />
           <button className="btn btn-search" aria-label={t("nav.search")}>⌕</button>
         </form>
         <div className="header-actions">
