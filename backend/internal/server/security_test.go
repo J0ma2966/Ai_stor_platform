@@ -28,6 +28,7 @@ var publicRoutes = map[string]bool{
 	"GET /v1/categories":        true,
 	"GET /v1/products":          true,
 	"GET /v1/products/{id}":     true,
+	"POST /v1/fitting/adds":     true, // счётчик «В примерочную»: работает и без входа, лимит по IP + дедуп
 	"POST /v1/payments/click/*": true, // provider webhooks: authenticated by signature, not by user token
 	"POST /v1/payments/payme/*": true,
 }

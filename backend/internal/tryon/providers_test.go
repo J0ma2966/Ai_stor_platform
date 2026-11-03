@@ -248,4 +248,3 @@ func TestErrorCode(t *testing.T) {
 		t.Fatal()
 	}
 }
-

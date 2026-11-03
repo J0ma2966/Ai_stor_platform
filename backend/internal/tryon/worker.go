@@ -2,11 +2,12 @@ package tryon
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
-	"math/rand/v2"
 	"sync"
 	"time"
 
@@ -98,7 +99,7 @@ func (w *Worker) loop(ctx context.Context) {
 			continue
 		}
 		// джиттер, чтобы воркеры разных процессов не опрашивали БД синхронно
-		d := poll/2 + time.Duration(rand.Int64N(int64(poll)))
+		d := poll/2 + jitter(poll)
 		select {
 		case <-ctx.Done():
 		case <-time.After(d):
@@ -281,6 +282,15 @@ func (w *Worker) process(ctx context.Context, j *job) ([]byte, error) {
 // (иначе аренда истекла и задание взял другой воркер).
 const owned = `id = $1 AND status = 'running' AND attempts = $2`
 
+const (
+	sqlSucceed = `UPDATE generations SET status = 'succeeded', result_key = $3, finished_at = now(),
+			lease_until = NULL, error = NULL, error_code = NULL WHERE ` + owned
+	sqlRetry = `UPDATE generations SET status = 'queued', lease_until = NULL,
+		next_run_at = now() + make_interval(secs => $3), error = left($4, 1000) WHERE ` + owned
+	sqlFail = `UPDATE generations SET status = 'failed', finished_at = now(), lease_until = NULL,
+			error = left($3, 1000), error_code = $4 WHERE ` + owned
+)
+
 func (w *Worker) succeed(ctx context.Context, j *job, img []byte) error {
 	key := media.NewKey(j.userID, media.PurposeTryOnResult)
 	if err := w.Store.Put(ctx, key, img, "image/jpeg"); err != nil {
@@ -288,8 +298,7 @@ func (w *Worker) succeed(ctx context.Context, j *job, img []byte) error {
 	}
 	var applied bool
 	err := db.Tx(ctx, w.DB, func(tx pgx.Tx) error {
-		tag, err := tx.Exec(ctx, `UPDATE generations SET status = 'succeeded', result_key = $3, finished_at = now(),
-			lease_until = NULL, error = NULL, error_code = NULL WHERE `+owned, j.id, j.attempts, key)
+		tag, err := tx.Exec(ctx, sqlSucceed, j.id, j.attempts, key)
 		if err != nil || tag.RowsAffected() == 0 {
 			return err
 		}
@@ -307,12 +316,11 @@ func (w *Worker) succeed(ctx context.Context, j *job, img []byte) error {
 
 func backoff(attempt int) time.Duration {
 	d := time.Duration(1<<min(attempt, 6)) * 5 * time.Second // 10s, 20s, 40s ...
-	return d + time.Duration(rand.Int64N(int64(d/2)+1))
+	return d + jitter(d/2)
 }
 
 func (w *Worker) retry(ctx context.Context, j *job, cause error) error {
-	_, err := w.DB.Exec(ctx, `UPDATE generations SET status = 'queued', lease_until = NULL,
-		next_run_at = now() + make_interval(secs => $3), error = left($4, 1000) WHERE `+owned,
+	_, err := w.DB.Exec(ctx, sqlRetry,
 		j.id, j.attempts, backoff(j.attempts).Seconds(), cause.Error())
 	mJobs.WithLabelValues("retry", w.Provider.Name()).Inc()
 	w.Log.Warn("tryon retry", slog.String("generation_id", j.id.String()), slog.Int("attempt", j.attempts), slog.String("err", cause.Error()))
@@ -323,8 +331,7 @@ func (w *Worker) retry(ctx context.Context, j *job, cause error) error {
 // возврат невозможен: уникальный индекс token_ledger_ref_once по (op, generation).
 func (w *Worker) fail(ctx context.Context, j *job, cause error) error {
 	err := db.Tx(ctx, w.DB, func(tx pgx.Tx) error {
-		tag, err := tx.Exec(ctx, `UPDATE generations SET status = 'failed', finished_at = now(), lease_until = NULL,
-			error = left($3, 1000), error_code = $4 WHERE `+owned, j.id, j.attempts, cause.Error(), ErrorCode(cause))
+		tag, err := tx.Exec(ctx, sqlFail, j.id, j.attempts, cause.Error(), ErrorCode(cause))
 		if err != nil || tag.RowsAffected() == 0 {
 			return err
 		}
@@ -362,4 +369,14 @@ func (w *Worker) notify(ctx context.Context, tx pgx.Tx, j *job, kind string) err
 		return nil
 	}
 	return w.Notify(ctx, tx, j.userID, kind, map[string]any{"generation_id": j.id})
+}
+
+// jitter — случайная пауза [0, max).
+func jitter(max time.Duration) time.Duration {
+	if max <= 0 {
+		return 0
+	}
+	var b [8]byte
+	_, _ = rand.Read(b[:])
+	return time.Duration(binary.LittleEndian.Uint64(b[:]) % uint64(max)) // #nosec G115 -- max > 0
 }

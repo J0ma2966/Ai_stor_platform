@@ -35,8 +35,10 @@ const referencedSQL = `
 
 // purgeGenerationPhotos удаляет исходные фото генерации, если они больше никому не нужны,
 // и отмечает photos_purged_at. recent — граница «недавно завершённых» для других генераций.
+const sqlUnreferenced = `SELECT k FROM unnest($1::text[]) AS k WHERE NOT (` + referencedSQL + `)`
+
 func purgeGenerationPhotos(ctx context.Context, q pgx.Tx, store media.Storage, genID uuid.UUID, keys []string, recent time.Time) error {
-	rows, err := q.Query(ctx, `SELECT k FROM unnest($1::text[]) AS k WHERE NOT (`+referencedSQL+`)`, keys, genID, recent)
+	rows, err := q.Query(ctx, sqlUnreferenced, keys, genID, recent)
 	if err != nil {
 		return err
 	}
@@ -146,7 +148,7 @@ func deleteUnreferenced(ctx context.Context, pool *pgxpool.Pool, store media.Sto
 	if len(keys) == 0 {
 		return 0, nil
 	}
-	rows, err := pool.Query(ctx, `SELECT k FROM unnest($1::text[]) AS k WHERE NOT (`+referencedSQL+`)`, keys, uuid.Nil, recent)
+	rows, err := pool.Query(ctx, sqlUnreferenced, keys, uuid.Nil, recent)
 	if err != nil {
 		return 0, err
 	}

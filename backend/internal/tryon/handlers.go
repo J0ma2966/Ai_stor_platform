@@ -528,6 +528,14 @@ type photoRef struct {
 const genCols = `id, status::text, cost, error_code, refunded, result_key, photo_keys, product_ids, body,
 	created_at, started_at, finished_at, saved_at, photos_purged_at IS NOT NULL`
 
+// SQL собирается из констант на этапе компиляции (без пользовательского ввода).
+const (
+	sqlGetGen  = `SELECT ` + genCols + ` FROM generations WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`
+	sqlListGen = `SELECT ` + genCols + ` FROM generations
+		WHERE user_id = $1 AND deleted_at IS NULL AND (created_at, id) < ($2, $3) AND (NOT $4 OR saved_at IS NOT NULL)
+		ORDER BY created_at DESC, id DESC LIMIT $5`
+)
+
 type rowScanner interface{ Scan(...any) error }
 
 func scanGen(s rowScanner) (*generationView, error) {
@@ -548,7 +556,7 @@ type queryer interface {
 }
 
 func (h *Handlers) load(ctx context.Context, q queryer, uid, id uuid.UUID) (*generationView, error) {
-	v, err := scanGen(q.QueryRow(ctx, `SELECT `+genCols+` FROM generations WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`, id, uid))
+	v, err := scanGen(q.QueryRow(ctx, sqlGetGen, id, uid))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, httpx.ErrNotFound
 	}
@@ -672,9 +680,7 @@ func (h *Handlers) list(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	savedOnly := r.URL.Query().Get("saved") == "true"
-	rows, err := h.DB.Query(r.Context(), `SELECT `+genCols+` FROM generations
-		WHERE user_id = $1 AND deleted_at IS NULL AND (created_at, id) < ($2, $3) AND (NOT $4 OR saved_at IS NOT NULL)
-		ORDER BY created_at DESC, id DESC LIMIT $5`, uid, ts, cid, savedOnly, limit+1)
+	rows, err := h.DB.Query(r.Context(), sqlListGen, uid, ts, cid, savedOnly, limit+1)
 	if err != nil {
 		httpx.Fail(w, r, err)
 		return
