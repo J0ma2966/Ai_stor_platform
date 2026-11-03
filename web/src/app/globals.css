@@ -280,3 +280,38 @@ table.tbl { width: 100%; border-collapse: collapse; background: var(--surface); 
 .radio-row label { display: flex; gap: 8px; align-items: center; border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; cursor: pointer; }
 .radio-row input { accent-color: var(--accent); }
 .danger-zone { border-color: var(--bad); }
+/* Баланс и покупка токенов */
+.balance-value { font-size: 1.6rem; font-weight: 700; margin: 0; }
+.tariff-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.tariff-hl { border-color: var(--accent); }
+.tariff-grid .row { flex-wrap: wrap; }
+.alert-ok { border-color: var(--ok); }
+.stack-tight { display: flex; flex-direction: column; gap: 2px; }
+
+/* ---------- Панель суперадмина ---------- */
+.wrap { flex-wrap: wrap; }
+.admin-shell { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 24px; align-items: start; }
+.admin-main { min-width: 0; }
+.admin-nav { position: sticky; top: 16px; }
+.admin-nav ul { display: flex; flex-direction: column; gap: 2px; }
+.admin-link { display: block; padding: 8px 12px; border-radius: 8px; color: var(--text); text-decoration: none; text-align: left; width: 100%; }
+.admin-link:hover { background: var(--border); }
+.admin-link-on, .admin-link-on:hover { background: var(--accent); color: var(--accent-text); }
+.admin-nav .btn-link { text-decoration: none; color: var(--muted); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+.tile { display: flex; flex-direction: column; gap: 4px; }
+.tile-value { font-size: 1.6rem; line-height: 1.2; overflow-wrap: anywhere; }
+.by-status li { padding: 6px 0; border-bottom: 1px solid var(--border); }
+.by-status li:last-child { border-bottom: 0; }
+.audit-list .audit-row { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.audit-list .audit-row:last-child { border-bottom: 0; }
+.confirm-box { border-color: var(--warn); }
+.admin-main input[type="search"], .admin-main select { font: inherit; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); min-height: 44px; }
+@media (max-width: 720px) {
+  .admin-shell { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .admin-shell > * { min-width: 0; }
+  .admin-nav { position: static; }
+  .admin-nav ul { flex-direction: row; overflow-x: auto; gap: 6px; padding-bottom: 4px; }
+  .admin-link { white-space: nowrap; border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px; width: auto; }
+}
+.container:has(.admin-shell) { max-width: 1200px; }

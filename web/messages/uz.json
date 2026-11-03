@@ -61,7 +61,10 @@
     "bad_file": "Faylni o‘qib bo‘lmadi. Uni .xlsx formatida saqlang.",
     "bad_filter": "Noto‘g‘ri filtr.",
     "payload_too_large": "So‘rov juda katta.",
-    "method_not_allowed": "Amal mavjud emas."
+    "method_not_allowed": "Amal mavjud emas.",
+    "provider_unavailable": "Bu to‘lov usuli hozir mavjud emas.",
+    "tariff_not_found": "Tarif endi mavjud emas. Sahifani yangilang.",
+    "checkout_unavailable": "To‘lov sahifasini ochib bo‘lmadi. Qayta urinib ko‘ring."
   },
   "fieldErrors": {
     "required": "Majburiy maydon",
@@ -598,5 +601,25 @@
   "errorPage": {
     "title": "Nimadir noto‘g‘ri ketdi",
     "text": "Sahifani yangilab ko‘ring. Xato takrorlansa, qo‘llab-quvvatlashga yozing."
+  },
+  "balance": {
+    "title": "Balans va token sotib olish",
+    "current": "Hozirgi balans",
+    "tokens": "{count} ta token",
+    "buy": "Token sotib olish",
+    "noTariffs": "Tariflar hali e’lon qilinmagan.",
+    "popular": "Ommabop",
+    "click": "Click",
+    "payme": "Payme",
+    "redirecting": "To‘lovga o‘tilmoqda…",
+    "history": "To‘lovlar tarixi",
+    "paidOk": "To‘lov o‘tdi, {count} ta token hisobga o‘tkazildi.",
+    "waiting": "To‘lov tasdig‘ini kutyapmiz…",
+    "stillPending": "To‘lov hali tasdiqlanmadi. Pul yechilgan bo‘lsa, tokenlar bir necha daqiqada keladi.",
+    "failed": "To‘lov o‘tmadi. Pul yechilmadi, qayta urinib ko‘ring.",
+    "status_pending": "To‘lov kutilmoqda",
+    "status_paid": "To‘langan",
+    "status_declined": "Rad etilgan",
+    "status_cancelled": "Bekor qilingan"
   }
 }

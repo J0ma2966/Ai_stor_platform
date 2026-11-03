@@ -25,10 +25,17 @@ type Handlers struct {
 }
 
 func (h *Handlers) Routes(r chi.Router) {
+	r.Get("/stats", h.stats)
+	r.Get("/stores", h.listStores)
 	r.Post("/stores", h.createStore)
+	r.Get("/stores/{id}", h.getStore)
 	r.Post("/stores/{id}/status", h.setStoreStatus)
+	r.Post("/stores/{id}/password", h.resetStorePassword)
+	r.Get("/users", h.listUsers)
+	r.Get("/users/{id}", h.getUser)
 	r.Post("/users/{id}/tokens", h.adjustTokens)
 	r.Post("/users/{id}/status", h.setUserStatus)
+	r.Get("/audit", h.listAudit)
 }
 
 type createStoreReq struct {
@@ -181,6 +188,52 @@ func (h *Handlers) setUserStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"id": uid, "status": req.Status})
+}
+
+type passwordReq struct {
+	Password string `json:"password" validate:"required,min=10,max=128"`
+}
+
+// resetStorePassword задаёт магазину новый пароль и завершает все его сессии.
+// Сам пароль в журнал не пишется.
+func (h *Handlers) resetStorePassword(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		httpx.Fail(w, r, httpx.ErrNotFound)
+		return
+	}
+	var req passwordReq
+	if err := httpx.Decode(w, r, &req); err != nil {
+		httpx.Fail(w, r, err)
+		return
+	}
+	hash, err := auth.HashPassword(req.Password)
+	if err != nil {
+		httpx.Fail(w, r, httpx.NewError(422, "weak_password", err.Error()))
+		return
+	}
+	err = db.Tx(r.Context(), h.DB, func(tx pgx.Tx) error {
+		var uid uuid.UUID
+		if err := tx.QueryRow(r.Context(), `UPDATE users SET password_hash = $2 WHERE store_id = $1 AND role = 'store' RETURNING id`, id, hash).Scan(&uid); err != nil {
+			return db.NotFound(err)
+		}
+		if _, err := tx.Exec(r.Context(), `UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL`, uid); err != nil {
+			return err
+		}
+		if err := h.Revoker.RevokeUser(r.Context(), uid); err != nil {
+			return err
+		}
+		return audit.Log(r.Context(), tx, "store.password_reset", "store", id.String(), nil)
+	})
+	if errors.Is(err, db.ErrNotFound) {
+		httpx.Fail(w, r, httpx.ErrNotFound)
+		return
+	}
+	if err != nil {
+		httpx.Fail(w, r, err)
+		return
+	}
+	httpx.NoContent(w)
 }
 
 type adjustReq struct {
