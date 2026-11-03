@@ -1,0 +1,225 @@
+# Сервер БД в Узбекистане: PostgreSQL 16 + WAL-G (PITR), MinIO (фото), бэкапы.
+#   primary: docker compose --profile primary up -d
+#   replica: docker compose --profile replica up -d   (PG_ROLE=replica в .env)
+# Все порты публикуются только на приватном адресе WireGuard (PRIVATE_IP).
+# Персональные и биометрические данные (база, фото клиентов, бэкапы) не покидают UZ.
+name: boutique-db
+
+x-logging: &logging
+  driver: json-file
+  options: {max-size: "50m", max-file: "5"}
+
+x-walg-env: &walg-env
+  WALG_S3_PREFIX: ${WALG_S3_PREFIX:?}
+  AWS_ACCESS_KEY_ID: ${BACKUP_S3_ACCESS_KEY:?}
+  AWS_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET_KEY:?}
+  AWS_ENDPOINT: ${BACKUP_S3_ENDPOINT_URL:?}
+  AWS_REGION: ${BACKUP_S3_REGION:-us-east-1}
+  AWS_S3_FORCE_PATH_STYLE: "true"
+  WALG_LIBSODIUM_KEY: ${WALG_LIBSODIUM_KEY:?}
+  WALG_LIBSODIUM_KEY_TRANSFORM: hex
+  WALG_COMPRESSION_METHOD: zstd
+  WALG_UPLOAD_CONCURRENCY: "4"
+  WALG_DELTA_MAX_STEPS: "0"
+  PGHOST: /var/run/postgresql
+
+services:
+  postgres:
+    image: ${REGISTRY:?}/postgres:${PG_IMAGE_TAG:?}
+    profiles: [primary, replica]
+    restart: unless-stopped
+    logging: *logging
+    shm_size: 1g
+    stop_grace_period: 2m
+    environment:
+      <<: *walg-env
+      PG_ROLE: ${PG_ROLE:-primary}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_INITDB_ARGS: --data-checksums --auth-host=scram-sha-256
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?}
+      REPLICATOR_PASSWORD: ${REPLICATOR_PASSWORD:?}
+      MONITOR_PASSWORD: ${MONITOR_PASSWORD:?}
+      PRIMARY_HOST: ${PRIMARY_HOST:-}
+    command:
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/postgresql.conf
+      - -c
+      - hba_file=/etc/postgresql/pg_hba.conf
+      - -c
+      - shared_buffers=${PG_SHARED_BUFFERS:-8GB}
+      - -c
+      - effective_cache_size=${PG_EFFECTIVE_CACHE_SIZE:-24GB}
+      - -c
+      - work_mem=${PG_WORK_MEM:-16MB}
+      - -c
+      - maintenance_work_mem=${PG_MAINTENANCE_WORK_MEM:-1GB}
+    ports: ["${PRIVATE_IP:?}:5432:5432"]
+    volumes:
+      - ${PG_DATA_DIR:-pgdata}:/var/lib/postgresql/data
+      - pgsocket:/var/run/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -h /var/run/postgresql"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 30s
+
+  # Базовые бэкапы WAL-G раз в сутки (WAL архивируется самим PostgreSQL постоянно).
+  walg:
+    image: ${REGISTRY:?}/postgres:${PG_IMAGE_TAG:?}
+    profiles: [primary, walg]
+    restart: unless-stopped
+    logging: *logging
+    depends_on: {postgres: {condition: service_healthy}}
+    user: postgres
+    entrypoint: ["walg-loop.sh"]
+    environment:
+      <<: *walg-env
+      PGUSER: postgres
+      PGDATA: /var/lib/postgresql/data
+      WALG_BACKUP_HOUR: ${BACKUP_HOUR_UTC:-21}
+      WALG_RETAIN_FULL: ${WALG_RETAIN_FULL:-7}
+      METRICS_DIR: /metrics
+    volumes:
+      - ${PG_DATA_DIR:-pgdata}:/var/lib/postgresql/data:ro
+      - pgsocket:/var/run/postgresql
+      - ${METRICS_HOST_DIR:-/var/lib/boutique/metrics}:/metrics
+
+  # Логический бэкап pg_dump + age раз в сутки -> офсайт S3 (в UZ, другой провайдер/ЦОД).
+  pgdump:
+    image: ${REGISTRY:?}/backup:${BACKUP_IMAGE_TAG:?}
+    profiles: [primary]
+    restart: unless-stopped
+    logging: *logging
+    depends_on: {postgres: {condition: service_healthy}}
+    command: ["schedule.sh", "pgdump", "backup.sh"]
+    environment:
+      HOUR: ${PGDUMP_HOUR_UTC:-22}
+      DATABASE_URL: postgresql://boutique:${APP_DB_PASSWORD}@postgres:5432/boutique
+      AGE_RECIPIENT: ${AGE_RECIPIENT:?AGE_RECIPIENT is required in prod (unencrypted dumps are not allowed)}
+      BACKUP_S3_URI: ${PGDUMP_S3_URI:?}
+      AWS_ACCESS_KEY_ID: ${BACKUP_S3_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET_KEY}
+      AWS_ENDPOINT_URL: ${BACKUP_S3_ENDPOINT_URL:?}
+      AWS_DEFAULT_REGION: ${BACKUP_S3_REGION:-us-east-1}
+      RETENTION_DAYS: "3"
+      METRICS_DIR: /metrics
+    volumes:
+      - backups:/backups
+      - ${METRICS_HOST_DIR:-/var/lib/boutique/metrics}:/metrics
+
+  # Раз в неделю: свежий офсайт-дамп восстанавливается во временную базу и проверяется.
+  # Запускается на сервере реплики (COMPOSE_PROFILES=replica,drill): ему нужен приватный
+  # ключ age, а держать его на primary незачем.
+  restore-drill:
+    image: ${REGISTRY:?}/backup:${BACKUP_IMAGE_TAG:?}
+    profiles: [drill]
+    restart: unless-stopped
+    logging: *logging
+    command: ["schedule.sh", "restore_drill", "restore-drill.sh"]
+    environment:
+      HOUR: ${DRILL_HOUR_UTC:-0}
+      WEEKDAY: ${DRILL_WEEKDAY:-7}
+      BACKUP_S3_URI: ${PGDUMP_S3_URI}
+      AGE_IDENTITY: /run/secrets/age_identity
+      AWS_ACCESS_KEY_ID: ${BACKUP_S3_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET_KEY}
+      AWS_ENDPOINT_URL: ${BACKUP_S3_ENDPOINT_URL}
+      AWS_DEFAULT_REGION: ${BACKUP_S3_REGION:-us-east-1}
+      METRICS_DIR: /metrics
+    secrets: [age_identity]
+    tmpfs: ["/tmp:size=8g,uid=70,gid=70"]
+    volumes:
+      - ${METRICS_HOST_DIR:-/var/lib/boutique/metrics}:/metrics
+
+  minio:
+    # pgsty/minio — community-сборка MinIO (официальные образы убраны с Docker Hub).
+    # RELEASE.2026-08-04T00-00-00Z, закреплён по digest.
+    image: pgsty/minio@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
+    profiles: [primary]
+    restart: unless-stopped
+    logging: *logging
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?}
+      MINIO_PROMETHEUS_AUTH_TYPE: public
+      MINIO_BROWSER: "off"
+    ports: ["${PRIVATE_IP:?}:9000:9000"]
+    volumes: ["${MINIO_DATA_DIR:-minio}:/data"]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      retries: 20
+
+  # Бакет, публичный префикс pub/ (фото товаров), пользователь приложения с
+  # минимальными правами, версионирование + очистка старых версий через 7 дней.
+  minio-init:
+    image: pgsty/mc@sha256:ce62c9053c69ce12a527a322345b5ad9f44b5f8a7b8189f82e516f2e3f30f1d8
+    profiles: [primary]
+    depends_on: {minio: {condition: service_healthy}}
+    restart: "no"
+    logging: *logging
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      S3_BUCKET: ${S3_BUCKET:-boutique-media}
+      MINIO_APP_ACCESS_KEY: ${MINIO_APP_ACCESS_KEY:?}
+      MINIO_APP_SECRET_KEY: ${MINIO_APP_SECRET_KEY:?}
+      MEDIA_MIRROR_URI: ${MEDIA_MIRROR_URI:?}
+      WALG_S3_PREFIX: ${WALG_S3_PREFIX}
+      PGDUMP_S3_URI: ${PGDUMP_S3_URI}
+      MEDIA_MIRROR_ENDPOINT: ${BACKUP_S3_ENDPOINT_URL}
+      BACKUP_S3_ACCESS_KEY: ${BACKUP_S3_ACCESS_KEY}
+      BACKUP_S3_SECRET_KEY: ${BACKUP_S3_SECRET_KEY}
+    entrypoint: ["/bin/sh", "/init/minio-init.sh"]
+    volumes: ["./minio-init.sh:/init/minio-init.sh:ro"]
+
+  # Непрерывное зеркало фото в офсайт-бакет (в UZ). --remove: удаления по сроку
+  # хранения (30 дней) доходят и до копии; защита от ошибок — версии в офсайт-бакете.
+  media-mirror:
+    image: pgsty/mc@sha256:ce62c9053c69ce12a527a322345b5ad9f44b5f8a7b8189f82e516f2e3f30f1d8
+    profiles: [primary]
+    depends_on:
+      minio: {condition: service_healthy}
+      minio-init: {condition: service_completed_successfully}
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      MC_HOST_local: http://${MINIO_ROOT_USER}:${MINIO_ROOT_PASSWORD}@minio:9000
+      MIRROR_ENDPOINT: ${BACKUP_S3_ENDPOINT_URL}
+      BACKUP_S3_ACCESS_KEY: ${BACKUP_S3_ACCESS_KEY}
+      BACKUP_S3_SECRET_KEY: ${BACKUP_S3_SECRET_KEY}
+      SRC: local/${S3_BUCKET:-boutique-media}
+      DST: ${MEDIA_MIRROR_URI}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        mc alias set offsite "$$MIRROR_ENDPOINT" "$$BACKUP_S3_ACCESS_KEY" "$$BACKUP_S3_SECRET_KEY" >/dev/null
+        exec mc mirror --watch --overwrite --remove --retry --json "$$SRC" "offsite/$$DST"
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.17.1
+    profiles: [primary, replica]
+    restart: unless-stopped
+    logging: *logging
+    depends_on: {postgres: {condition: service_healthy}}
+    environment:
+      DATA_SOURCE_URI: postgres:5432/boutique?sslmode=disable
+      DATA_SOURCE_USER: monitor
+      DATA_SOURCE_PASS: ${MONITOR_PASSWORD}
+    command: ["--collector.stat_statements", "--collector.long_running_transactions"]
+    ports: ["${PRIVATE_IP:?}:9187:9187"]
+
+secrets:
+  age_identity:
+    file: ${AGE_IDENTITY_FILE:-./secrets/age-identity.txt}
+
+volumes:
+  pgdata: {}
+  pgsocket: {}
+  minio: {}
+  backups: {}

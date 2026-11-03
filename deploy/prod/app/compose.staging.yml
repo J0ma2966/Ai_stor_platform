@@ -1,0 +1,11 @@
+# Staging / локальная проверка с TLS_MODE=internal: API доверяет внутреннему CA Caddy.
+# В prod НЕ используется (там Let's Encrypt, а ключи Caddy API видеть не должен).
+x-ca: &ca
+  environment:
+    SSL_CERT_DIR: /etc/ssl/certs:/caddy-data/caddy/pki/authorities/local
+  volumes: ["caddy_data:/caddy-data:ro"]
+services:
+  api1: *ca
+  api2: *ca
+  api3: *ca
+  migrate: *ca

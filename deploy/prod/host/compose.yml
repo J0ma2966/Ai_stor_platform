@@ -1,0 +1,54 @@
+# Агенты на КАЖДОМ сервере: метрики хоста и контейнеров + сбор логов в Loki (UZ).
+name: boutique-host
+
+x-logging: &logging
+  driver: json-file
+  options: {max-size: "20m", max-file: "3"}
+
+services:
+  node-exporter:
+    image: prom/node-exporter:v1.9.1
+    restart: unless-stopped
+    logging: *logging
+    pid: host
+    command:
+      - --path.rootfs=/host
+      - --collector.textfile.directory=/textfile
+      - --collector.systemd
+    ports: ["${PRIVATE_IP:?}:9100:9100"]
+    volumes:
+      - /:/host:ro,rslave
+      - ${METRICS_HOST_DIR:-/var/lib/boutique/metrics}:/textfile:ro
+      - /run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket:ro
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.52.1
+    restart: unless-stopped
+    logging: *logging
+    privileged: true
+    devices: [/dev/kmsg]
+    command: ["--docker_only=true", "--housekeeping_interval=15s", "--store_container_labels=false",
+              "--whitelisted_container_labels=com.docker.compose.service,com.docker.compose.project"]
+    ports: ["${PRIVATE_IP:?}:8081:8080"]
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+
+  alloy:
+    image: grafana/alloy:v1.10.1
+    restart: unless-stopped
+    logging: *logging
+    command: ["run", "--server.http.listen-addr=0.0.0.0:12345", "--storage.path=/var/lib/alloy", "/etc/alloy/config.alloy"]
+    environment:
+      LOKI_URL: http://${LOKI_PRIVATE_IP:?}:3100/loki/api/v1/push
+      HOST_NAME: ${HOST_NAME:?}
+    volumes:
+      - ../monitoring/alloy.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy:/var/lib/alloy
+
+volumes:
+  alloy: {}
