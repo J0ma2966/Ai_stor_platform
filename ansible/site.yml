@@ -129,7 +129,7 @@
     - name: Data directories on the DB servers (put them on the NVMe data disk)
       ansible.builtin.file: {path: "{{ item.p }}", state: directory, owner: "{{ item.o }}", group: "{{ item.o }}", mode: "0700"}
       loop: [{p: /srv/pgdata, o: "999"}, {p: /srv/minio, o: "0"}]
-      when: inventory_hostname in ['db', 'replica']
+      when: inventory_hostname in ['db', 'replica', 'server']
   handlers:
     - name: Restart docker
       ansible.builtin.service: {name: docker, state: restarted}

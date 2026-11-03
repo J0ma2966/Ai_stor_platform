@@ -6,6 +6,9 @@
 #   deploy.sh app  <IMAGE_TAG>     миграции + API по одному инстансу (без простоя)
 #   deploy.sh edge <IMAGE_TAG>     сайт по одному инстансу + мониторинг
 #
+# Один сервер: все роли в одном каталоге /opt/boutique/prod на одной машине, в edge/.env
+# SINGLE_HOST=1 (подключается edge/compose.single.yml: без своего Caddy, сайт отдаёт app-Caddy).
+#
 # При неудаче нового инстанса возвращается предыдущий тег и скрипт завершается с ошибкой.
 set -euo pipefail
 role="${1:?usage: deploy.sh host|db|app|edge [IMAGE_TAG]}"
@@ -24,6 +27,7 @@ chmod 600 .env
 log() { printf '[deploy %s] %s\n' "$role" "$*"; }
 compose() { docker compose "${COMPOSE_FILES[@]}" "$@"; }
 COMPOSE_FILES=(-f compose.yml)
+[[ "$(sed -n 's/^SINGLE_HOST=//p' .env | tail -1)" == "1" && -f compose.single.yml ]] && COMPOSE_FILES+=(-f compose.single.yml)
 [[ -f compose.override.yml ]] && COMPOSE_FILES+=(-f compose.override.yml)
 
 # IMAGE_TAG записывается в .env, чтобы ручные `docker compose ps/logs` тоже работали
@@ -34,6 +38,7 @@ set_tag() {
 prev_tag() { sed -n 's/^IMAGE_TAG=//p' .env | tail -1; }
 
 # ждёт, пока $2 (URL внутри сети стека) не ответит 200, проверяя из контейнера $1
+# (via=self: из самого проверяемого контейнера, $2 — его локальный URL)
 wait_http() {
   local via="$1" url="$2" t="${3:-90}"
   for ((i = 0; i < t; i++)); do
@@ -51,12 +56,13 @@ metrics_dir() {
 
 pull() { [[ "${SKIP_PULL:-0}" == "1" ]] || compose pull -q --ignore-buildable; }
 
-rolling() { # rolling <сервис-проверяльщик> <путь> <сервисы...>
-  local via="$1" path="$2"; shift 2
+rolling() { # rolling <сервис-проверяльщик|self> <путь> <сервисы...>
+  local via="$1" path="$2" v u; shift 2
   for s in "$@"; do
     log "updating $s -> $IMAGE_TAG"
     compose up -d --no-deps --force-recreate "$s"
-    if ! wait_http "$via" "http://$s:${PORT}${path}" 120; then
+    if [[ "$via" == self ]]; then v="$s" u="http://127.0.0.1:${PORT}${path}"; else v="$via" u="http://$s:${PORT}${path}"; fi
+    if ! wait_http "$v" "$u" 120; then
       log "ERROR: $s is not ready, rolling back"
       return 1
     fi
@@ -130,8 +136,10 @@ case "$role" in
     restore_tag() { if [[ -n "$old" ]]; then set_tag "$old"; else sed -i '/^IMAGE_TAG=/d' .env; fi; }
     if ! pull; then log "ERROR: cannot pull $tag"; restore_tag; exit 1; fi
     mapfile -t others < <(compose config --services | grep -vxE 'web[0-9]+')
+    # один сервер: своего Caddy нет, инстансы проверяются изнутри
+    via=caddy; printf '%s\n' "${others[@]}" | grep -qx caddy || via=self
     compose up -d --no-recreate "${others[@]}"
-    if ! rolling caddy /api/healthz web1 web2; then
+    if ! rolling "$via" /api/healthz web1 web2; then
       if [[ -n "$old" ]]; then
         set_tag "$old"; log "rollback to $old"
         compose up -d --no-deps --force-recreate web1 web2
@@ -139,7 +147,7 @@ case "$role" in
       exit 1
     fi
     compose up -d --remove-orphans prometheus alertmanager blackbox
-    compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile --force >/dev/null
+    [[ "$via" == caddy ]] && compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile --force >/dev/null
     # правила/цели Prometheus перечитываются без перезапуска
     compose exec -T prometheus wget -q -O /dev/null --post-data= http://127.0.0.1:9090/-/reload || true
     log "done: $tag"

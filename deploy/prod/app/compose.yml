@@ -54,8 +54,13 @@ services:
       MEDIA_DOMAIN: ${MEDIA_DOMAIN:?}
       S3_BUCKET: ${S3_BUCKET:-boutique-media}
       MINIO_UPSTREAM: ${DB_PRIVATE_IP:?}:9000
+      # один сервер: этот Caddy отдаёт и сайт (sites/single.caddy)
+      CADDY_SITES: ${CADDY_SITES:-none}
+      SITE_DOMAIN: ${SITE_DOMAIN:-unused.invalid}
+      WEB_UPSTREAMS: ${WEB_UPSTREAMS:-127.0.0.1:1}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./sites:/etc/caddy/sites:ro
       - caddy_data:/data
       - caddy_config:/config
     networks:

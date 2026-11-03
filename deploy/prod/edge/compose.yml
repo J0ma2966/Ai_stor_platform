@@ -1,6 +1,7 @@
-# Сервер в Германии: сайт (Next.js) + сбор метрик и алерты (Prometheus, Alertmanager,
-# blackbox). Метрики серверов в UZ собираются по WireGuard. Логи (в них ПД) и Grafana —
-# в UZ; Grafana читает этот Prometheus по WireGuard.
+# Роль edge: сайт (Next.js) + сбор метрик и алерты (Prometheus, Alertmanager, blackbox).
+# Один сервер (прод): стоит рядом с остальными ролями, без своего Caddy (compose.single.yml).
+# Несколько серверов: отдельный сервер (может быть вне UZ, персональных данных здесь нет);
+# метрики собираются по WireGuard, логи (в них ПД) и Grafana остаются в UZ.
 name: boutique-edge
 
 x-logging: &logging

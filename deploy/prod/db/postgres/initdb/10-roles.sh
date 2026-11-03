@@ -17,8 +17,12 @@ GRANT CONNECT, TEMPORARY ON DATABASE boutique TO boutique_app;
 CREATE ROLE replicator LOGIN REPLICATION PASSWORD :'repl_pw';
 CREATE ROLE monitor LOGIN PASSWORD :'mon_pw' CONNECTION LIMIT 5;
 GRANT pg_monitor TO monitor;
-SELECT pg_create_physical_replication_slot('replica1');
 SQL
+# слот для реплики; один сервер (REPLICA_SLOT пустой): без слота, иначе он держал бы WAL на диске
+if [[ -n "${REPLICA_SLOT:-}" ]]; then
+  echo "SELECT pg_create_physical_replication_slot(:'slot');" |
+    psql -v ON_ERROR_STOP=1 --username postgres --dbname postgres -v slot="$REPLICA_SLOT"
+fi
 psql -v ON_ERROR_STOP=1 --username postgres --dbname boutique <<'SQL'
 CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 REVOKE ALL ON SCHEMA public FROM PUBLIC;

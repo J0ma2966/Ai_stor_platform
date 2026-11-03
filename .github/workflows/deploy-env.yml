@@ -2,6 +2,7 @@
 # Настройки окружения (Settings → Environments → <имя>):
 #   Variables: SITE_DOMAIN API_DOMAIN S3_DOMAIN MEDIA_DOMAIN
 #              APP_SSH_HOST DB_SSH_HOST EDGE_SSH_HOST [REPLICA_SSH_HOST]
+#              (один сервер: все три *_SSH_HOST и *_PRIVATE_IP одинаковые, REPLICA_* не задаются)
 #              APP_PRIVATE_IP DB_PRIVATE_IP EDGE_PRIVATE_IP [REPLICA_PRIVATE_IP]
 #   Secrets:   SSH_PRIVATE_KEY SSH_KNOWN_HOSTS ENV_APP ENV_DB ENV_EDGE [ENV_REPLICA]
 #              AGE_IDENTITY TELEGRAM_BOT_TOKEN
@@ -110,14 +111,24 @@ jobs:
             ssh "$1" "$dir/scripts/deploy.sh host"
           }
 
-          hosts=("$DB_HOST:$DB_IP:db-primary" "$APP_HOST:$APP_IP:app" "$EDGE_HOST:$EDGE_IP:edge")
-          [[ -n "$REPLICA_HOST" ]] && hosts+=("$REPLICA_HOST:$REPLICA_IP:db-replica")
+          single=false
+          if [[ "$APP_HOST" == "$DB_HOST" && "$APP_HOST" == "$EDGE_HOST" && -z "$REPLICA_HOST" ]]; then single=true; fi
+          if $single; then
+            hosts=("$APP_HOST:$APP_IP:server")
+          else
+            hosts=("$DB_HOST:$DB_IP:db-primary" "$APP_HOST:$APP_IP:app" "$EDGE_HOST:$EDGE_IP:edge")
+            [[ -n "$REPLICA_HOST" ]] && hosts+=("$REPLICA_HOST:$REPLICA_IP:db-replica")
+          fi
           for h in "${hosts[@]}"; do IFS=: read -r ssh_host ip name <<<"$h"; sync "$ssh_host"; login "$ssh_host"; done
           trap 'for h in "${hosts[@]}"; do logout "${h%%:*}"; done' EXIT
           for h in "${hosts[@]}"; do IFS=: read -r ssh_host ip name <<<"$h"; echo "::group::host agents $name"; host_agents "$ssh_host" "$ip" "$name"; echo "::endgroup::"; done
 
           echo "::group::db primary"
           envfile "$ENV_DB" | put "$DB_HOST" "$dir/db/.env.new"
+          if $single; then   # реплики нет: учебное восстановление дампа идёт на этом сервере
+            printf '%s\n' "$AGE_IDENTITY" | put "$DB_HOST" "$dir/db/secrets/age-identity.txt"
+            ssh "$DB_HOST" "chmod 644 $dir/db/secrets/age-identity.txt"
+          fi
           ssh "$DB_HOST" "$dir/scripts/deploy.sh db"
           echo "::endgroup::"
 

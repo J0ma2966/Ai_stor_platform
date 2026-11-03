@@ -1,0 +1,48 @@
+# Внешняя проверка доступности. На одном сервере Prometheus и Alertmanager живут там же,
+# что и сайт, и при падении сервера сами ничего не пришлют. Эта проверка идёт из GitHub
+# раз в 5 минут и пишет в Telegram, если сайт или API не отвечают.
+# Настройка (Settings → Secrets and variables → Actions, уровень репозитория):
+#   Variables: UPTIME_URLS (через пробел, например https://api.shop.uz/readyz https://shop.uz/api/healthz),
+#              UPTIME_TELEGRAM_CHAT_ID
+#   Secrets:   UPTIME_TELEGRAM_BOT_TOKEN (можно тот же бот, что и для алертов)
+# Без UPTIME_URLS проверка ничего не делает. GitHub может задерживать запуски по расписанию
+# на несколько минут; это запасной канал, основной — алерты Prometheus.
+name: uptime
+
+on:
+  schedule: [{cron: "*/5 * * * *"}]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency: {group: uptime, cancel-in-progress: false}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe site and API
+        env:
+          URLS: ${{ vars.UPTIME_URLS }}
+          CHAT: ${{ vars.UPTIME_TELEGRAM_CHAT_ID }}
+          TOKEN: ${{ secrets.UPTIME_TELEGRAM_BOT_TOKEN }}
+        run: |
+          [[ -n "$URLS" ]] || { echo "::notice::UPTIME_URLS is not set — skipping"; exit 0; }
+          down=()
+          for u in $URLS; do
+            # 3 попытки за ~40 с: короткий перезапуск при выкатке не считается падением
+            if curl -fsS -o /dev/null --max-time 10 --retry 2 --retry-delay 10 --retry-all-errors "$u"; then
+              echo "ok $u"
+            else
+              down+=("$u")
+            fi
+          done
+          (( ${#down[@]} == 0 )) && exit 0
+          msg="🔴 Недоступно снаружи: ${down[*]} (проверка GitHub, $(date -u '+%H:%M UTC')). RUNBOOK: «Сервер недоступен»."
+          if [[ -n "$TOKEN" && -n "$CHAT" ]]; then
+            curl -fsS -o /dev/null --max-time 10 "https://api.telegram.org/bot$TOKEN/sendMessage" \
+              --data-urlencode "chat_id=$CHAT" --data-urlencode "text=$msg" || echo "::warning::Telegram send failed"
+          fi
+          echo "::error::$msg"
+          exit 1

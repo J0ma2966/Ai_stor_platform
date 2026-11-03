@@ -93,3 +93,6 @@
 		respond 404
 	}
 }
+
+# --- Сайт: только в схеме «один сервер» (CADDY_SITES=single), иначе пустой файл ---
+import sites/{$CADDY_SITES:none}.caddy

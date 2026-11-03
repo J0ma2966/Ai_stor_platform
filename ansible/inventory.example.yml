@@ -1,4 +1,6 @@
 # Скопируйте в inventory.yml (в .gitignore) и впишите публичные адреса серверов.
+# Схема по умолчанию: ОДИН сервер в UZ с именем server (имя важно: каталоги БД и
+# доступ админов по WireGuard настраиваются для него). Схема из 4 серверов — ниже, в комментарии.
 # wg_ip — адрес в приватной сети WireGuard 10.77.0.0/24 (как в deploy/prod/scripts/init-env.sh).
 all:
   vars:
@@ -6,12 +8,16 @@ all:
     admin_ssh_keys:
       - "ssh-ed25519 AAAA... you@laptop"
     deploy_ssh_key: "ssh-ed25519 AAAA... github-actions-deploy"
-  children:
-    uz:
-      hosts:
-        app:     {ansible_host: 203.0.113.10, wg_ip: 10.77.0.10, public_web: true}
-        db:      {ansible_host: 203.0.113.20, wg_ip: 10.77.0.20, public_web: false}
-        replica: {ansible_host: 203.0.113.21, wg_ip: 10.77.0.21, public_web: false}
-    de:
-      hosts:
-        edge:    {ansible_host: 198.51.100.30, wg_ip: 10.77.0.30, public_web: true}
+  hosts:
+    server: {ansible_host: 203.0.113.10, wg_ip: 10.77.0.10, public_web: true}
+
+# Схема из нескольких серверов (TOPOLOGY=multi в init-env.sh): вместо hosts выше
+#  children:
+#    uz:
+#      hosts:
+#        app:     {ansible_host: 203.0.113.10, wg_ip: 10.77.0.10, public_web: true}
+#        db:      {ansible_host: 203.0.113.20, wg_ip: 10.77.0.20, public_web: false}
+#        replica: {ansible_host: 203.0.113.21, wg_ip: 10.77.0.21, public_web: false}
+#    de:
+#      hosts:
+#        edge:    {ansible_host: 198.51.100.30, wg_ip: 10.77.0.30, public_web: true}
