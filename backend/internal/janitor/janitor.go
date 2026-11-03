@@ -24,6 +24,10 @@ var Tasks = []Task{
 	// истёкшие/отозванные refresh-токены храним неделю для расследований
 	{"refresh_tokens", `DELETE FROM refresh_tokens WHERE expires_at < now() - interval '7 days'
 	                     OR revoked_at < now() - interval '7 days'`},
+	// уведомления старше 180 дней (notify.Retention)
+	{"notifications", `DELETE FROM notifications WHERE created_at < now() - interval '180 days'`},
+	// дневная статистика нужна для отчётов за период до года, храним два
+	{"product_stats_daily", `DELETE FROM product_stats_daily WHERE day < (now() - interval '2 years')::date`},
 }
 
 // Job — задача, которой мало одного SQL (например, нужно удалить файлы в хранилище).

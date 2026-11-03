@@ -27,13 +27,15 @@ AGE_RECIPIENT=$(age-keygen -y "$out/age-identity.txt")
 
 if [[ "$envname" == "staging" ]]; then
   site="staging.$domain"; api="api.staging.$domain"; s3="s3.staging.$domain"; media="media.staging.$domain"
+  appenv=staging; sms=log
 else
+  appenv=prod; sms=eskiz
   site="$domain"; api="api.$domain"; s3="s3.$domain"; media="media.$domain"
 fi
 
 cat > "$out/app.env" <<E
 # Сервер приложения (UZ). Секрет GitHub: ENV_APP
-APP_ENV=prod
+APP_ENV=$appenv
 REGISTRY=$registry
 PRIVATE_IP=$APP_IP
 DB_PRIVATE_IP=$DB_IP
@@ -62,7 +64,23 @@ UPLOAD_CONCURRENCY=4
 TRYON_PROVIDER=off
 API_CPUS=2
 API_MEMORY=2g
-# --- ключи SMS-провайдера и Click/Payme добавляются сюда (см. docs/DEPLOY.md) ---
+# SMS-коды входа через Eskiz: без логина и пароля API в prod не стартует (так и задумано)
+SMS_PROVIDER=$sms
+ESKIZ_EMAIL=
+ESKIZ_PASSWORD=
+ESKIZ_FROM=4546
+# Оплата: куда вернуть клиента после оплаты. Click/Payme включаются, когда заполнены их ключи;
+# тогда *_ALLOWED_IPS обязательны (адреса из договора с провайдером).
+PAYMENT_RETURN_URL=https://$site/ru/account/balance
+CLICK_SERVICE_ID=
+CLICK_MERCHANT_ID=
+CLICK_SECRET_KEY=
+CLICK_ALLOWED_IPS=
+PAYME_MERCHANT_ID=
+PAYME_KEY=
+PAYME_ALLOWED_IPS=
+PAYME_IKPU=
+PAYME_PACKAGE_CODE=
 E
 
 db_common() {

@@ -63,7 +63,7 @@ for f in db replica; do
   printf 'PG_IMAGE_TAG=smoke\nBACKUP_IMAGE_TAG=smoke\nMETRICS_HOST_DIR=%s/metrics-%s\n' "$work" "$f" >> "$work/env/$f.env"
 done
 echo "COMPOSE_PROJECT_NAME=boutique-db-replica" >> "$work/env/replica.env"
-sed -i -e "s/^TLS_MODE=.*/TLS_MODE=internal/" -e "s/^APP_ENV=.*/APP_ENV=staging/" "$work/env/app.env"
+sed -i -e "s/^TLS_MODE=.*/TLS_MODE=internal/" -e "s/^APP_ENV=.*/APP_ENV=staging/" -e "s/^SMS_PROVIDER=.*/SMS_PROVIDER=log/" "$work/env/app.env"
 sed -i -e "s/^TLS_MODE=.*/TLS_MODE=internal/" -e "s/^TELEGRAM_CHAT_ID=.*/TELEGRAM_CHAT_ID=-1001/" "$work/env/edge.env"
 printf 'HTTP_PORT=8088\nHTTPS_PORT=8443\n' >> "$work/env/edge.env"
 cp "$work/env/app.env" "$work/app/.env.new"

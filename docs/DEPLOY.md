@@ -49,7 +49,7 @@
 2. **Четыре сервера** с Ubuntu 24.04 LTS или Debian 12 (три в UZ, один в Германии) и root-доступ по SSH-ключу.
 3. **S3-хранилище в Узбекистане у другого провайдера** для бэкапов: endpoint, ключ доступа, секрет. Включите на бакетах versioning (защита от удаления).
 4. **Telegram-бот для алертов**: создайте бота у @BotFather, добавьте его в группу дежурных, узнайте chat id группы (например, через @getidsbot).
-5. Ключи SMS-провайдера и Click/Payme. Их добавляют в `ENV_APP`, как описано в README соответствующих модулей.
+5. Ключи SMS и оплаты. В `ENV_APP` уже есть пустые `ESKIZ_EMAIL`/`ESKIZ_PASSWORD`: без них API в prod не стартует. Click и Payme включаются, когда заполнены их ключи, и тогда обязательны `CLICK_ALLOWED_IPS`/`PAYME_ALLOWED_IPS` (адреса из договора с провайдером). Перед API не должно быть CDN, иначе проверка IP не сработает.
 6. AI-примерка в первом релизе выключена: в `ENV_APP` стоит `TRYON_PROVIDER=off`, сайт собирается с `NEXT_PUBLIC_TRYON_ENABLED=false`. Воркер примерки, ключи Gemini/FASHN и биометрическое хранилище в UZ не нужны. Чтобы включить, укажите провайдера, `TRYON_API_KEY` и `BIOMETRIC_S3_*` в `ENV_APP`, добавьте сервис воркера и поставьте переменную окружения GitHub `TRYON_ENABLED=true`.
 
 ## 4. Первый запуск по шагам
@@ -137,4 +137,4 @@ RPO ≤ 1 минута, RTO ≤ 1 часа. Каждое воскресенье 
 
 ## 8. Staging
 
-Те же файлы и та же схема, отдельное окружение `staging` в GitHub со своими серверами и доменами (`staging.shop.uz`, `api.staging.shop.uz`, …): `init-env.sh secrets-staging shop.uz admin@shop.uz staging`. Для экономии staging можно держать на двух небольших серверах (UZ: app+db, DE: edge). В staging разрешён `APP_ENV=staging`: коды SMS пишутся в лог, а реальные SMS не отправляются.
+Те же файлы и та же схема, отдельное окружение `staging` в GitHub со своими серверами и доменами (`staging.shop.uz`, `api.staging.shop.uz`, …): `init-env.sh secrets-staging shop.uz admin@shop.uz staging`. Для экономии staging можно держать на двух небольших серверах (UZ: app+db, DE: edge). `init-env.sh … staging` сам ставит `APP_ENV=staging` и `SMS_PROVIDER=log`: коды SMS пишутся в лог, а реальные SMS не отправляются.

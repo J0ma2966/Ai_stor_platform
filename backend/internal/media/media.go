@@ -29,7 +29,19 @@ const (
 	PurposeBodyPhoto     Purpose = "body"     // фото клиента для примерки (приватно)
 	PurposeDeliveryPhoto Purpose = "delivery" // фото места доставки
 	PurposeStoreBranding Purpose = "store"    // логотип/обложка
+	// PurposeTryOnResult — результат AI-примерки. Создаётся только воркером, загрузить нельзя.
+	PurposeTryOnResult Purpose = "tryon"
 )
+
+// Biometric: фото тела клиента и результаты примерки — биометрические персональные
+// данные. Они хранятся только в хранилище с локализацией в Узбекистане (см. Routed).
+func (p Purpose) Biometric() bool { return p == PurposeBodyPhoto || p == PurposeTryOnResult }
+
+// IsBiometricKey определяет по ключу (<vis>/u/<owner>/<purpose>/<rand>.jpg), что объект биометрический.
+func IsBiometricKey(key string) bool {
+	parts := strings.Split(key, "/")
+	return len(parts) == 5 && parts[1] == "u" && Purpose(parts[3]).Biometric()
+}
 
 // Public: фото товаров и оформление магазина публичны — отдаются по постоянному URL
 // через CDN (кэшируются). Фото клиента и места доставки — только по подписанной ссылке.
@@ -44,7 +56,7 @@ func visibility(p Purpose) string {
 
 func (p Purpose) Valid() bool {
 	switch p {
-	case PurposeProductImage, PurposeBodyPhoto, PurposeDeliveryPhoto, PurposeStoreBranding:
+	case PurposeProductImage, PurposeBodyPhoto, PurposeDeliveryPhoto, PurposeStoreBranding, PurposeTryOnResult:
 		return true
 	}
 	return false

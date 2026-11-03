@@ -3,6 +3,7 @@
 //	api                      запустить сервер (по умолчанию)
 //	api migrate up|down|status
 //	api create-admin <login> (пароль из ADMIN_PASSWORD)
+//	api worker               только воркер AI-примерки (prod: отдельный процесс/контейнер)
 package main
 
 import (
@@ -17,6 +18,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/boutique-market/backend/internal/admin"
@@ -24,11 +28,15 @@ import (
 	"github.com/boutique-market/backend/internal/config"
 	"github.com/boutique-market/backend/internal/janitor"
 	"github.com/boutique-market/backend/internal/media"
+	"github.com/boutique-market/backend/internal/notify"
 	"github.com/boutique-market/backend/internal/orders"
+	"github.com/boutique-market/backend/internal/payments"
 	"github.com/boutique-market/backend/internal/platform/cache"
 	"github.com/boutique-market/backend/internal/platform/db"
 	"github.com/boutique-market/backend/internal/products"
 	"github.com/boutique-market/backend/internal/server"
+	"github.com/boutique-market/backend/internal/sms"
+	"github.com/boutique-market/backend/internal/tryon"
 )
 
 func main() {
@@ -71,7 +79,7 @@ func run(log *slog.Logger, args []string) error {
 				fmt.Println("admin created:", id)
 			}
 			return err
-		case "serve":
+		case "serve", "worker":
 		default:
 			return fmt.Errorf("unknown command %q", args[0])
 		}
@@ -88,18 +96,56 @@ func run(log *slog.Logger, args []string) error {
 	}
 	defer rdb.Close()
 
-	store, err := media.NewS3(cfg.S3Endpoint, cfg.S3Region, cfg.S3Bucket, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3UseSSL)
+	store, err := newStorage(cfg)
 	if err != nil {
 		return err
 	}
-	var sms auth.SMSSender = auth.LogSender{Log: log}
-	if cfg.IsProd() {
-		// TODO: подключить SMS-провайдера (Eskiz / Playmobile) — без него prod не стартует.
-		return errors.New("SMS provider is not configured for prod")
+	provider, err := tryon.NewProvider(cfg.TryOn)
+	if err != nil {
+		return err
 	}
+	worker := &tryon.Worker{DB: pool, Store: store, Provider: provider, Log: log,
+		Concurrency: cfg.TryOn.Workers, Timeout: cfg.TryOn.Timeout, MaxAttempts: cfg.TryOn.MaxAttempts,
+		Notify: func(ctx context.Context, tx pgx.Tx, userID uuid.UUID, kind string, data map[string]any) error {
+			return notify.Send(ctx, tx, userID, kind, data)
+		}}
+	if provider == nil { // TRYON_PROVIDER=off
+		if len(args) > 0 && args[0] == "worker" {
+			return errors.New("AI try-on is turned off (TRYON_PROVIDER=off); worker is not needed")
+		}
+	} else if len(args) > 0 && args[0] == "worker" {
+		// отдельный процесс: только очередь генераций, метрики на внутреннем порту
+		internal := &http.Server{Addr: cfg.InternalAddr, Handler: internalMux(), ReadHeaderTimeout: 5 * time.Second}
+		go func() { _ = internal.ListenAndServe() }()
+		defer internal.Close()
+		log.Info("worker started", slog.String("cfg", cfg.String()))
+		worker.Run(ctx)
+		return nil
+	}
+	if cfg.TryOn.InProcess && provider != nil {
+		go worker.Run(ctx)
+	}
+	// config.Load уже запретил SMS_PROVIDER=log в prod.
+	var smsSender auth.SMSSender = auth.LogSender{Log: log}
+	if cfg.SMSProvider == "eskiz" {
+		smsSender = &sms.Eskiz{BaseURL: cfg.EskizURL, Email: cfg.EskizEmail, Password: cfg.EskizPassword,
+			From: cfg.EskizFrom, Template: cfg.SMSTemplate}
+	}
+	log.Info("providers", slog.String("sms", cfg.SMSProvider), slog.Bool("click", cfg.ClickEnabled()),
+		slog.Bool("payme", cfg.PaymeEnabled()), slog.Bool("payme_test", cfg.PaymeTest), slog.String("tryon", cfg.TryOn.Provider))
 
 	views := &products.ViewCounter{Redis: rdb, DB: pool, Log: log}
 	go views.Run(ctx, 30*time.Second)
+	fitting := &tryon.FittingCounter{Redis: rdb, DB: pool, Log: log,
+		// общий счётчик и дневная статистика магазина
+		Apply: func(ctx context.Context, ids []uuid.UUID, counts []int64) error {
+			return products.RecordFittingAdds(ctx, pool, ids, counts)
+		}}
+	go fitting.Run(ctx, 30*time.Second)
+	ret := server.RetentionFrom(cfg)
+	tryonJob := func(name string, fn func(context.Context, *pgxpool.Pool, media.Storage, tryon.Retention, time.Time) (int64, error)) janitor.Job {
+		return janitor.Job{Name: name, Run: func(ctx context.Context) (int64, error) { return fn(ctx, pool, store, ret, time.Now()) }}
+	}
 	go (&janitor.Janitor{DB: pool, Log: log, Jobs: []janitor.Job{{
 		Name: "delivery_photos",
 		Run: func(ctx context.Context) (int64, error) {
@@ -110,11 +156,19 @@ func run(log *slog.Logger, args []string) error {
 		Run: func(ctx context.Context) (int64, error) {
 			return orders.PurgeOrphanDeliveryPhotos(ctx, pool, store, time.Now())
 		},
-	}}}).Run(ctx, time.Hour)
+	}, {
+		// брошенные неоплаченные платежи (Payme сам отменяет свои транзакции через 12 ч)
+		Name: "expire_pending_payments",
+		Run: func(ctx context.Context) (int64, error) {
+			return payments.ExpirePending(ctx, pool, 24*time.Hour)
+		},
+	}, tryonJob("tryon_photos", tryon.PurgePhotos), tryonJob("tryon_results", tryon.PurgeResults),
+		tryonJob("tryon_saved_photos", tryon.PurgeSavedPhotos), tryonJob("tryon_orphans", tryon.PurgeOrphans),
+	}}).Run(ctx, time.Hour)
 
 	api := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           server.New(server.Deps{Cfg: cfg, Log: log, DB: pool, Redis: rdb, Storage: store, SMS: sms, Views: views}),
+		Handler:           server.New(server.Deps{Cfg: cfg, Log: log, DB: pool, Redis: rdb, Storage: store, SMS: smsSender, Views: views, Fitting: fitting}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       60 * time.Second,
 		WriteTimeout:      75 * time.Second,
@@ -152,4 +206,22 @@ func internalMux() http.Handler {
 	m.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 	m.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
 	return m
+}
+
+// newStorage: основное хранилище + хранилище биометрии в Узбекистане. Без
+// BIOMETRIC_S3_ENDPOINT (только dev/test) биометрия лежит в основном бакете.
+func newStorage(cfg config.Config) (media.Storage, error) {
+	main, err := media.NewS3(cfg.S3Endpoint, cfg.S3Region, cfg.S3Bucket, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3UseSSL)
+	if err != nil {
+		return nil, err
+	}
+	if cfg.BiometricS3Endpoint == "" {
+		return media.Routed{Default: main, Biometric: main}, nil
+	}
+	bio, err := media.NewS3(cfg.BiometricS3Endpoint, cfg.BiometricS3Region, cfg.BiometricS3Bucket,
+		cfg.BiometricS3AccessKey, cfg.BiometricS3SecretKey, cfg.BiometricS3UseSSL)
+	if err != nil {
+		return nil, err
+	}
+	return media.Routed{Default: main, Biometric: bio}, nil
 }

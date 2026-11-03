@@ -56,6 +56,9 @@ services:
       INTERNAL_ADDR: 0.0.0.0:9090
       AUTO_MIGRATE: "true"
       PUBLIC_MEDIA_URL: http://localhost:9000/boutique-media
+      # dev: воркер AI-примерки внутри API, демо-провайдер без ключей (docs/TRYON.md)
+      TRYON_PROVIDER: ${TRYON_PROVIDER:-mock}
+      TRYON_WORKER_INPROCESS: "true"
     ports: ["127.0.0.1:8080:8080", "127.0.0.1:9090:9090"]
 
   backup:
