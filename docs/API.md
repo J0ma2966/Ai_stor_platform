@@ -71,6 +71,11 @@
 | GET/POST | `/v1/store/products` | store |
 | PATCH | `/v1/store/products/{id}/status` | store |
 | POST | `/v1/admin/stores`, `/v1/admin/stores/{id}/status`, `/v1/admin/users/{id}/status`, `/v1/admin/users/{id}/tokens` | admin |
+| POST | `/v1/admin/stores/{id}/password` — новый пароль магазина, все его сессии завершаются → 204 | admin |
+| GET | `/v1/admin/stats` — сводка для панели (магазины, клиенты, заказы по статусам, токены за 30 дней) | admin |
+| GET | `/v1/admin/stores?status=&q=`, `/v1/admin/stores/{id}` (+ последние 20 записей журнала) | admin |
+| GET | `/v1/admin/users?role=client\|store\|admin&status=&q=`, `/v1/admin/users/{id}` (+ движение токенов и журнал) | admin |
+| GET | `/v1/admin/audit?action=&entity_type=&entity_id=&actor_id=` (`action=store.` — все действия с префиксом; курсор — id записи) | admin |
 | POST/GET | `/v1/orders`, `/v1/orders/{id}` | client |
 | GET/POST | `/v1/store/orders`, `/v1/store/orders/{id}`, `/v1/store/orders/{id}/status` | store |
 | GET/POST | `/v1/admin/orders`, `/v1/admin/orders/{id}`, `/v1/admin/orders/{id}/status` | admin |
@@ -80,6 +85,8 @@
 | POST | `/v1/payments/click/prepare`, `/v1/payments/click/complete`, `/v1/payments/payme` | Click / Payme |
 
 Заказы и окно доставки подробно: [ORDERS.md](ORDERS.md). Оплата токенов и SMS: [PAYMENTS.md](PAYMENTS.md).
+
+Веб-панель суперадмина: `/{ru|uz}/admin` (вход по логину и паролю администратора, созданного командой `api create-admin`). Тексты панели — `web/messages/admin.{ru,uz}.json`.
 
 Фильтры каталога: `q`, `category`, `store`, `brand`, `price_min`, `price_max`, `in_stock=true`, `sort=new|price_asc|price_desc|popular`.
 
