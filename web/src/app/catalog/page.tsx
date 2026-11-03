@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { getTranslations, setRequestLocale } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 import { catName, fetchCategories, fetchProducts, fetchStores, FILTER_KEYS, type CatalogFilters as F } from "@/lib/catalog";
 import { alternates } from "@/lib/site";
 import { ProductGrid } from "@/components/ProductGrid";
@@ -19,11 +19,11 @@ function readFilters(sp: Record<string, string | string[] | undefined>): F {
   return f;
 }
 
-export async function generateMetadata({ params, searchParams }: { params: Promise<{ locale: string }>; searchParams: SP }): Promise<Metadata> {
-  const { locale } = await params;
+export async function generateMetadata({ searchParams }: { searchParams: SP }): Promise<Metadata> {
+  const locale = await getLocale();
   const f = readFilters(await searchParams);
-  const t = await getTranslations({ locale, namespace: "seo" });
-  const tc = await getTranslations({ locale, namespace: "catalog" });
+  const t = await getTranslations("seo");
+  const tc = await getTranslations("catalog");
   let title = t("catalogTitle");
   if (f.q) title = tc("resultsFor", { q: f.q });
   else if (f.category) {
@@ -40,9 +40,8 @@ export async function generateMetadata({ params, searchParams }: { params: Promi
   };
 }
 
-export default async function CatalogPage({ params, searchParams }: { params: Promise<{ locale: string }>; searchParams: SP }) {
-  const { locale } = await params;
-  setRequestLocale(locale);
+export default async function CatalogPage({ searchParams }: { searchParams: SP }) {
+  const locale = await getLocale();
   const f = readFilters(await searchParams);
   const t = await getTranslations("catalog");
   const [cats, stores] = await Promise.all([fetchCategories().catch(() => []), fetchStores().catch(() => [])]);

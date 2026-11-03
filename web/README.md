@@ -1,6 +1,14 @@
 # web — фронтенд маркетплейса
 
-Next.js 15 (App Router) + TypeScript, языки ru/uz через next-intl (`messages/*.json`, локаль в URL: `/ru/...`, `/uz/...`).
+Next.js 15 (App Router) + TypeScript, языки ru/uz через next-intl (`messages/*.json`).
+
+**Языки и адреса.** Русский — без префикса (`/catalog`), узбекский — под `/uz` (`/uz/catalog`); старые `/ru/...`
+перенаправляются на адрес без префикса. Сегмента `[locale]` в `src/app` нет: `src/middleware.ts` переписывает
+`/uz/...` в `/...` и передаёт язык заголовком `x-locale`. Переключатель в шапке меняет язык на месте, без новой
+страницы: введённые данные, прокрутка и вход сохраняются (подробно — `src/i18n/switch.tsx`). Выбор запоминается
+в cookie `NEXT_LOCALE`. В коде ссылки пишутся без префикса через `Link`/`useRouter`/`usePathname` из
+`@/i18n/navigation`, префикс добавляется сам. Тексты — только в `messages/*.json`, ключи в ru и uz должны совпадать
+(проверяет `src/__tests__/i18n.test.ts`).
 
 ```bash
 npm ci

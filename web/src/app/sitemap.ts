@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 import { apiBase, type Category, type Product, type Store } from "@/lib/catalog";
-import { siteUrl } from "@/lib/site";
+import { localeUrl } from "@/lib/site";
 
 export const revalidate = 3600;
 const MAX_PRODUCTS = 45000; // лимит одного sitemap — 50 000 адресов
@@ -15,10 +15,10 @@ async function get<T>(path: string): Promise<{ data: T; next_cursor?: string } |
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const base = siteUrl();
+  // каждая страница — на обоих языках: ru без префикса, uz под /uz
   const both = (path: string, extra: Partial<MetadataRoute.Sitemap[number]> = {}): MetadataRoute.Sitemap[number] => ({
-    url: `${base}/ru${path}`,
-    alternates: { languages: { ru: `${base}/ru${path}`, uz: `${base}/uz${path}` } },
+    url: localeUrl(path || "/", "ru"),
+    alternates: { languages: { ru: localeUrl(path || "/", "ru"), uz: localeUrl(path || "/", "uz") } },
     ...extra,
   });
   const out: MetadataRoute.Sitemap = [

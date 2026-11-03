@@ -1,8 +1,10 @@
 "use client";
 import { TRYON_ENABLED } from "@/lib/fitting";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Link, useRouter } from "@/i18n/navigation";
+import { useSwitchLocale } from "@/i18n/switch";
+import type { Locale } from "@/i18n/routing";
 import { api } from "@/lib/api";
 import { formatDateTime } from "@/lib/money";
 import { useSession, type Me } from "@/lib/session";
@@ -15,6 +17,7 @@ export default function Profile() {
   const ta = useTranslations("app");
   const locale = useLocale();
   const router = useRouter();
+  const switchLocale = useSwitchLocale();
   const { me, setMe, signOut } = useSession();
   const [gender, setGender] = useState(me?.gender ?? "");
   const [lang, setLang] = useState(me?.lang ?? locale);
@@ -26,14 +29,20 @@ export default function Profile() {
   const [error, setError] = useState<unknown>(null);
   const [confirmDel, setConfirmDel] = useState(false);
 
+  // Поля заполняем из профиля один раз (после загрузки), чтобы смена языка в шапке —
+  // она тоже обновляет профиль — не стирала то, что человек уже начал вводить.
+  const loadedFor = useRef<string | null>(null);
   useEffect(() => {
-    if (!me) return;
+    if (!me || loadedFor.current === me.id) return;
+    loadedFor.current = me.id;
     setGender(me.gender ?? "");
     setLang(me.lang);
     setHeight(me.height_cm?.toString() ?? "");
     setWeight(me.weight_kg?.toString() ?? "");
     setBody(Object.fromEntries(Object.entries(me.body_params ?? {}).map(([k, v]) => [k, String(v)])));
   }, [me]);
+  // язык интерфейса в форме всегда совпадает с текущим
+  useEffect(() => setLang(locale as Locale), [locale]);
 
   async function save(e: FormEvent) {
     e.preventDefault();
@@ -55,7 +64,7 @@ export default function Profile() {
       });
       setMe(m);
       setSaved(true);
-      if (lang !== locale) router.replace("/account/profile", { locale: lang });
+      if (lang !== locale) switchLocale(lang as Locale);
     } catch (err) {
       setError(err);
     } finally {

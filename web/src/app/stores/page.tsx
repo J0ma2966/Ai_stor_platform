@@ -1,18 +1,17 @@
 import type { Metadata } from "next";
-import { getTranslations, setRequestLocale } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 import { fetchStores } from "@/lib/catalog";
 import { alternates } from "@/lib/site";
 import { StoreCard } from "@/components/StoreCard";
 
-export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
-  const { locale } = await params;
-  const t = await getTranslations({ locale, namespace: "seo" });
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getLocale();
+  const t = await getTranslations("seo");
   return { title: t("storesTitle"), description: t("storesDesc"), alternates: alternates(locale, "/stores") };
 }
 
-export default async function StoresPage({ params, searchParams }: { params: Promise<{ locale: string }>; searchParams: Promise<{ q?: string }> }) {
-  const { locale } = await params;
-  setRequestLocale(locale);
+export default async function StoresPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+  const locale = await getLocale();
   const { q = "" } = await searchParams;
   const t = await getTranslations("stores");
   const stores = await fetchStores(q.slice(0, 100)).catch(() => null);

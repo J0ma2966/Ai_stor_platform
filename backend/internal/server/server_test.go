@@ -66,7 +66,7 @@ func setup(t *testing.T) *env {
 			OTPTTL: 5 * time.Minute, OTPCooldown: time.Minute, OTPMaxTries: 5, OTPPepper: []byte("pepper-pepper-pepper"),
 			MaxUploadMB: 5, CookieSecure: false, OTPAllowedPrefixes: []string{"+998"},
 			PublicMediaURL: "https://cdn.test", UploadConcurrency: 2,
-			PaymentReturnURL: "https://shop.test/ru/account/balance",
+			PaymentReturnURL: "https://shop.test/account/balance",
 			ClickServiceID:   "777", ClickMerchantID: "555", ClickSecretKey: testClickSecret,
 			PaymeMerchantID: "pm-merchant", PaymeKey: testPaymeKey, PaymeTest: true, PaymeAccountKey: "payment_id",
 		},
