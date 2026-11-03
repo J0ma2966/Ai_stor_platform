@@ -49,6 +49,13 @@ describe("middleware", () => {
     const r = middleware(req("/ru/catalog?q=1"));
     expect(r.status).toBe(308);
     expect(r.headers.get("location")).toBe("http://localhost:3000/catalog?q=1");
+    expect(r.cookies.get("NEXT_LOCALE")?.value).toBe("ru");
+  });
+
+  it("ссылка /ru/... побеждает сохранённый узбекский", () => {
+    const r = middleware(req("/ru/product/1", { cookie: "NEXT_LOCALE=uz" }));
+    expect(r.status).toBe(308);
+    expect(r.cookies.get("NEXT_LOCALE")?.value).toBe("ru");
   });
 
   it("/uz/... показывает ту же страницу на узбекском", () => {
