@@ -31,7 +31,9 @@ var (
 	// login (общий): ограничивает распределённый перебор одного аккаунта.
 	ruleLoginUserIP = ratelimit.Rule{Name: "login_user_ip", Limit: 10, Window: 15 * time.Minute}
 	ruleLoginUser   = ratelimit.Rule{Name: "login_user", Limit: 100, Window: 15 * time.Minute}
-	ruleRefreshIP   = ratelimit.Rule{Name: "refresh_ip", Limit: 120, Window: 15 * time.Minute}
+	// refresh идёт на каждую полную загрузку страницы, а за одним IP оператора/офиса
+	// сидит много людей; токен 256-битный, так что лимит защищает от нагрузки, не от подбора.
+	ruleRefreshIP = ratelimit.Rule{Name: "refresh_ip", Limit: 600, Window: 15 * time.Minute}
 )
 
 func (h *Handlers) Routes(r chi.Router) {
