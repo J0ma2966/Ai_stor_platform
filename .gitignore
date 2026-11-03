@@ -8,4 +8,5 @@ coverage.out
 node_modules/
 .next/
 .DS_Store
+ansible/inventory.yml
 *.rdb

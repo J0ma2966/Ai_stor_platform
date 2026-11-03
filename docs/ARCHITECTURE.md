@@ -70,7 +70,10 @@
 4. Медленные SQL (>500 мс) пишет сам PostgreSQL (`log_min_duration_statement`).
 5. Профиль CPU/памяти живого процесса: `curl localhost:9090/debug/pprof/profile?seconds=30` (порт не публикуется наружу).
 
-## Развёртывание (рекомендация для prod)
+## Развёртывание
+
+Готовая прод-конфигурация (серверы в UZ и DE, TLS, мониторинг, бэкапы, CD) и порядок запуска: [DEPLOY.md](DEPLOY.md); действия при авариях: [RUNBOOK.md](RUNBOOK.md). Общие принципы:
+
 
 - 2+ инстанса API за балансировщиком (TLS на балансировщике, `TRUSTED_PROXY=true`).
 - Управляемый PostgreSQL 16 с репликой или свой с Patroni; PgBouncer в transaction mode при >5 инстансах.

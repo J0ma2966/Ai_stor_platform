@@ -1,0 +1,50 @@
+# Prometheus (сервер в Германии). Адреса целей — в edge/targets/*.yml,
+# их генерирует deploy/prod/scripts/render-targets.sh из .env (WireGuard-адреса).
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files: [/etc/prometheus/rules/*.yml]
+
+alerting:
+  alertmanagers:
+    - static_configs: [{targets: ["alertmanager:9093"]}]
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs: [{targets: ["localhost:9090"]}]
+  - job_name: alertmanager
+    static_configs: [{targets: ["alertmanager:9093"]}]
+
+  - job_name: node
+    file_sd_configs: [{files: [/etc/prometheus/targets/node.yml]}]
+  - job_name: cadvisor
+    file_sd_configs: [{files: [/etc/prometheus/targets/cadvisor.yml]}]
+    metric_relabel_configs:
+      # только контейнеры compose, без лишних серий
+      - source_labels: [container_label_com_docker_compose_service]
+        regex: ""
+        action: drop
+  - job_name: api
+    file_sd_configs: [{files: [/etc/prometheus/targets/api.yml]}]
+  - job_name: postgres
+    file_sd_configs: [{files: [/etc/prometheus/targets/postgres.yml]}]
+  - job_name: redis
+    file_sd_configs: [{files: [/etc/prometheus/targets/redis.yml]}]
+  - job_name: minio
+    metrics_path: /minio/v2/metrics/cluster
+    file_sd_configs: [{files: [/etc/prometheus/targets/minio.yml]}]
+
+  # Внешние проверки: сайт, API, картинки, срок действия сертификатов.
+  - job_name: blackbox
+    metrics_path: /probe
+    file_sd_configs: [{files: [/etc/prometheus/targets/blackbox.yml]}]
+    relabel_configs:
+      - source_labels: [module]
+        target_label: __param_module
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115

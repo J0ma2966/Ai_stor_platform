@@ -1,0 +1,32 @@
+modules:
+  http_2xx:
+    prober: http
+    timeout: 10s
+    http:
+      preferred_ip_protocol: ip4
+      valid_status_codes: [200]
+      follow_redirects: true
+      fail_if_not_ssl: true
+  # домены, где корень отвечает 404 (картинки): проверяем доступность и сертификат
+  https_any:
+    prober: http
+    timeout: 10s
+    http:
+      preferred_ip_protocol: ip4
+      valid_status_codes: [200, 404]
+      fail_if_not_ssl: true
+  # только staging с внутренним CA Caddy (TLS_MODE=internal)
+  http_2xx_staging:
+    prober: http
+    timeout: 10s
+    http:
+      preferred_ip_protocol: ip4
+      valid_status_codes: [200]
+      tls_config: {insecure_skip_verify: true}
+  https_any_staging:
+    prober: http
+    timeout: 10s
+    http:
+      preferred_ip_protocol: ip4
+      valid_status_codes: [200, 404]
+      tls_config: {insecure_skip_verify: true}

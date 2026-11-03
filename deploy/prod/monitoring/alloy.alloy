@@ -1,0 +1,47 @@
+// Grafana Alloy: логи всех контейнеров этого сервера -> Loki (UZ).
+// JSON-логи API разбираются, уровень и request_id становятся метками/метаданными.
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "containers" {
+  targets = discovery.docker.containers.targets
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "stack"
+  }
+  rule {
+    target_label = "host"
+    replacement  = sys.env("HOST_NAME")
+  }
+}
+
+loki.source.docker "containers" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.docker.containers.targets
+  relabel_rules = discovery.relabel.containers.rules
+  forward_to    = [loki.process.json.receiver]
+}
+
+loki.process "json" {
+  stage.json {
+    expressions = { level = "level", request_id = "request_id" }
+  }
+  stage.labels {
+    values = { level = "" }
+  }
+  stage.structured_metadata {
+    values = { request_id = "" }
+  }
+  forward_to = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+  endpoint {
+    url = sys.env("LOKI_URL")
+  }
+}

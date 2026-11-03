@@ -1,0 +1,10 @@
+wg_port: 51820
+wg_network: 10.77.0.0/24
+boutique_dir: /opt/boutique
+timezone: Asia/Tashkent
+# Ноутбуки администраторов в сети WireGuard (доступ к Grafana http://10.77.0.10:3000).
+# Ключ ноутбука: wg genkey | tee laptop.key | wg pubkey. Подключаются только к серверу app.
+wg_admin_peers: []
+#  - {name: owner-laptop, public_key: "...", ip: 10.77.0.100}
+# порты, которые публикуются на приватном адресе и должны быть доступны ТОЛЬКО через wg0
+private_ports: [3000, 3100, 5432, 8081, 9000, 9090, 9100, 9101, 9102, 9103, 9121, 9187]

@@ -1,0 +1,16 @@
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: $PROMETHEUS_URL
+    isDefault: true
+    editable: false
+  # Loki рядом, на этом же сервере в UZ (логи содержат ПД и хранятся там)
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: $LOKI_URL
+    editable: false

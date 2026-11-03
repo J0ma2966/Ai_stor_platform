@@ -1,0 +1,24 @@
+# Управляется Ansible (ansible/site.yml). Приватная сеть {{ wg_network }} между серверами.
+[Interface]
+Address = {{ wg_ip }}/24
+ListenPort = {{ wg_port }}
+PostUp = wg set %i private-key /etc/wireguard/private.key
+
+{% for h in groups['all'] if h != inventory_hostname %}
+[Peer]
+# {{ h }}
+PublicKey = {{ hostvars[h].wg_public_key }}
+Endpoint = {{ hostvars[h].ansible_host }}:{{ wg_port }}
+AllowedIPs = {{ hostvars[h].wg_ip }}/32
+PersistentKeepalive = 25
+
+{% endfor %}
+{% if inventory_hostname == 'app' %}
+{% for p in wg_admin_peers %}
+[Peer]
+# admin: {{ p.name }}
+PublicKey = {{ p.public_key }}
+AllowedIPs = {{ p.ip }}/32
+
+{% endfor %}
+{% endif %}

@@ -8,10 +8,10 @@ set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 : "${DATABASE_URL:?}" "${ADMIN_DATABASE_URL:?}"
 
-export BACKUP_DIR="$(mktemp -d)"
+BACKUP_DIR="$(mktemp -d)"; export BACKUP_DIR
 key="$BACKUP_DIR/key.txt"
 age-keygen -o "$key" 2>/dev/null
-export AGE_RECIPIENT="$(age-keygen -y "$key")"
+AGE_RECIPIENT="$(age-keygen -y "$key")"; export AGE_RECIPIENT
 file="$("$here/backup.sh" | tail -1)"
 
 tmpdb="restore_check_$(date +%s)"

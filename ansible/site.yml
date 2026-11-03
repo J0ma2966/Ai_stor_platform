@@ -1,0 +1,206 @@
+# Подготовка серверов: обновления, SSH, Docker, WireGuard-сеть между UZ и DE, firewall.
+#   ansible-playbook -i inventory.yml site.yml
+# Идемпотентно: можно запускать повторно (например, при добавлении сервера).
+- name: Base system
+  hosts: all
+  become: true
+  tasks:
+    - name: Packages
+      ansible.builtin.apt:
+        name: [ca-certificates, curl, gnupg, wireguard, ufw, fail2ban, unattended-upgrades, chrony, rsync, jq]
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Timezone
+      community.general.timezone:
+        name: "{{ timezone }}"
+
+    - name: Automatic security updates (no automatic reboot — reboot in a maintenance window)
+      ansible.builtin.copy:
+        dest: /etc/apt/apt.conf.d/20auto-upgrades
+        content: |
+          APT::Periodic::Update-Package-Lists "1";
+          APT::Periodic::Unattended-Upgrade "1";
+        mode: "0644"
+
+    - name: Kernel settings (Redis, PostgreSQL, many connections)
+      ansible.posix.sysctl:
+        name: "{{ item.k }}"
+        value: "{{ item.v }}"
+        sysctl_file: /etc/sysctl.d/90-boutique.conf
+      loop:
+        - {k: vm.overcommit_memory, v: "1"}
+        - {k: vm.swappiness, v: "10"}
+        - {k: net.core.somaxconn, v: "4096"}
+        - {k: net.ipv4.ip_local_port_range, v: "10240 65535"}
+        - {k: fs.file-max, v: "1000000"}
+
+    - name: Deploy user (used by GitHub Actions over SSH; docker group is added below)
+      ansible.builtin.user:
+        name: deploy
+        shell: /bin/bash
+        create_home: true
+
+    - name: Admin SSH keys (root)
+      ansible.posix.authorized_key:
+        user: root
+        key: "{{ item }}"
+      loop: "{{ admin_ssh_keys }}"
+
+    - name: Deploy SSH key
+      ansible.posix.authorized_key:
+        user: deploy
+        key: "{{ deploy_ssh_key }}"
+
+    - name: SSH hardening (keys only)
+      ansible.builtin.copy:
+        dest: /etc/ssh/sshd_config.d/10-boutique.conf
+        content: |
+          PasswordAuthentication no
+          KbdInteractiveAuthentication no
+          PermitRootLogin prohibit-password
+          MaxAuthTries 3
+          X11Forwarding no
+        mode: "0644"
+      notify: Restart ssh
+
+    - name: Fail2ban for sshd
+      ansible.builtin.copy:
+        dest: /etc/fail2ban/jail.d/sshd.local
+        content: |
+          [sshd]
+          enabled = true
+          maxretry = 5
+          bantime = 1h
+        mode: "0644"
+      notify: Restart fail2ban
+
+  handlers:
+    - name: Restart ssh
+      ansible.builtin.service: {name: ssh, state: restarted}
+    - name: Restart fail2ban
+      ansible.builtin.service: {name: fail2ban, state: restarted}
+
+- name: Docker
+  hosts: all
+  become: true
+  tasks:
+    - name: Docker apt key
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/{{ ansible_distribution | lower }}/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: "0644"
+    - name: Docker repo
+      ansible.builtin.apt_repository:
+        repo: >-
+          deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc]
+          https://download.docker.com/linux/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} stable
+        filename: docker
+    - name: Docker engine + compose
+      ansible.builtin.apt:
+        name: [docker-ce, docker-ce-cli, containerd.io, docker-compose-plugin, docker-buildx-plugin]
+        update_cache: true
+    - name: Docker daemon defaults (log rotation, live restore)
+      ansible.builtin.copy:
+        dest: /etc/docker/daemon.json
+        content: |
+          {
+            "log-driver": "json-file",
+            "log-opts": {"max-size": "50m", "max-file": "5"},
+            "live-restore": true,
+            "userland-proxy": false,
+            "default-address-pools": [{"base": "172.20.0.0/14", "size": 24}]
+          }
+        mode: "0644"
+      notify: Restart docker
+    - name: Deploy user in docker group
+      ansible.builtin.user: {name: deploy, groups: [docker], append: true}
+    - name: App directories
+      ansible.builtin.file:
+        path: "{{ item.p }}"
+        state: directory
+        owner: deploy
+        group: deploy
+        mode: "{{ item.m }}"
+      loop:
+        - {p: "{{ boutique_dir }}", m: "0750"}
+        - {p: /var/lib/boutique/metrics, m: "1777"}
+    # PostgreSQL в контейнере работает от uid 999 (не root), MinIO — от root
+    - name: Data directories on the DB servers (put them on the NVMe data disk)
+      ansible.builtin.file: {path: "{{ item.p }}", state: directory, owner: "{{ item.o }}", group: "{{ item.o }}", mode: "0700"}
+      loop: [{p: /srv/pgdata, o: "999"}, {p: /srv/minio, o: "0"}]
+      when: inventory_hostname in ['db', 'replica']
+  handlers:
+    - name: Restart docker
+      ansible.builtin.service: {name: docker, state: restarted}
+
+- name: WireGuard mesh (UZ <-> DE private network)
+  hosts: all
+  become: true
+  tasks:
+    - name: Private key
+      ansible.builtin.shell: |
+        umask 077
+        [ -f /etc/wireguard/private.key ] || wg genkey > /etc/wireguard/private.key
+        wg pubkey < /etc/wireguard/private.key
+      register: wg_pub
+      changed_when: false
+    - name: Remember public key
+      ansible.builtin.set_fact:
+        wg_public_key: "{{ wg_pub.stdout }}"
+    - name: WireGuard config wg0.conf
+      ansible.builtin.template:
+        src: wg0.conf.j2
+        dest: /etc/wireguard/wg0.conf
+        mode: "0600"
+      notify: Restart wireguard
+    - name: Enable wg0
+      ansible.builtin.service: {name: wg-quick@wg0, enabled: true, state: started}
+  handlers:
+    - name: Restart wireguard
+      ansible.builtin.service: {name: wg-quick@wg0, state: restarted}
+
+- name: Firewall
+  hosts: all
+  become: true
+  tasks:
+    - name: Deny incoming by default
+      community.general.ufw: {direction: incoming, default: deny}
+    - name: Allow outgoing by default
+      community.general.ufw: {direction: outgoing, default: allow}
+    - name: SSH
+      community.general.ufw: {rule: limit, port: "22", proto: tcp}
+    - name: WireGuard
+      community.general.ufw: {rule: allow, port: "{{ wg_port }}", proto: udp}
+    - name: Everything inside the private network
+      community.general.ufw: {rule: allow, interface: wg0, direction: in}
+    - name: HTTP/HTTPS on public web servers
+      community.general.ufw: {rule: allow, port: "{{ item.port }}", proto: "{{ item.proto }}"}
+      loop: [{port: "80", proto: tcp}, {port: "443", proto: tcp}, {port: "443", proto: udp}]
+      when: public_web | bool
+    # Docker публикует порты в обход ufw. Внутренние порты привязаны к адресу wg0,
+    # а это правило дополнительно режет любые попытки достучаться до них не через wg0.
+    - name: DOCKER-USER chain guard
+      ansible.builtin.template:
+        src: docker-user.sh.j2
+        dest: /usr/local/sbin/boutique-docker-user.sh
+        mode: "0755"
+    - name: DOCKER-USER guard service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/boutique-docker-user.service
+        content: |
+          [Unit]
+          Description=Restrict Docker-published private ports to wg0
+          After=docker.service
+          Requires=docker.service
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/local/sbin/boutique-docker-user.sh
+          RemainAfterExit=true
+          [Install]
+          WantedBy=multi-user.target
+        mode: "0644"
+    - name: Enable guard
+      ansible.builtin.systemd: {name: boutique-docker-user, enabled: true, state: restarted, daemon_reload: true}
+    - name: Enable ufw
+      community.general.ufw: {state: enabled}

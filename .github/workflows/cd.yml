@@ -1,0 +1,128 @@
+# CD: после зелёного CI на main собирает образы в GHCR, выкатывает staging,
+# затем production (окно подтверждения — правило "Required reviewers" окружения
+# production в Settings → Environments). Ручной запуск: Actions → CD → Run workflow.
+name: CD
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Куда выкатить
+        type: choice
+        options: [staging, production]
+        default: staging
+      ref:
+        description: Ветка, тег или коммит
+        default: main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cd
+  cancel-in-progress: false
+
+jobs:
+  images:
+    # workflow_run срабатывает только на push в main этого репозитория (не на PR из форков),
+    # поэтому собирается уже принятый в main код.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    permissions: {contents: read, packages: write}
+    outputs:
+      sha: ${{ steps.meta.outputs.sha }}
+      tag: ${{ steps.meta.outputs.tag }}
+      registry: ${{ steps.meta.outputs.registry }}
+      pg_tag: ${{ steps.meta.outputs.pg_tag }}
+      backup_tag: ${{ steps.meta.outputs.backup_tag }}
+    steps:
+      # nosemgrep: yaml.github-actions.security.workflow-run-target-code-checkout.workflow-run-target-code-checkout
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || inputs.ref }}
+      - id: meta
+        name: Tags
+        run: |
+          sha=$(git rev-parse HEAD)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "tag=${sha::12}" >> "$GITHUB_OUTPUT"
+          echo "registry=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          # тег образа БД зависит только от его файлов: деплой кода не перезапускает PostgreSQL
+          echo "pg_tag=pg-$(git ls-files -s deploy/prod/db/postgres | sha256sum | cut -c1-12)" >> "$GITHUB_OUTPUT"
+          echo "backup_tag=bk-$(git ls-files -s deploy/backup scripts/consistency-check.sql | sha256sum | cut -c1-12)" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        with: {registry: ghcr.io, username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}"}
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+      - name: Build API
+        run: docker buildx build --load -t "${{ steps.meta.outputs.registry }}/api:${{ steps.meta.outputs.tag }}" backend
+      - name: Trivy scan API image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.meta.outputs.registry }}/api:${{ steps.meta.outputs.tag }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Push API
+        run: docker push "${{ steps.meta.outputs.registry }}/api:${{ steps.meta.outputs.tag }}"
+      - name: Build PostgreSQL + WAL-G and backup images (only if changed)
+        env:
+          R: ${{ steps.meta.outputs.registry }}
+          PG: ${{ steps.meta.outputs.pg_tag }}
+          BK: ${{ steps.meta.outputs.backup_tag }}
+        run: |
+          docker manifest inspect "$R/postgres:$PG" >/dev/null 2>&1 \
+            || docker buildx build --push -t "$R/postgres:$PG" deploy/prod/db/postgres
+          docker manifest inspect "$R/backup:$BK" >/dev/null 2>&1 \
+            || docker buildx build --push -t "$R/backup:$BK" -f deploy/backup/Dockerfile .
+
+  staging:
+    needs: images
+    if: github.event_name == 'workflow_run' || inputs.environment == 'staging'
+    uses: ./.github/workflows/deploy-env.yml
+    with:
+      environment: staging
+      sha: ${{ needs.images.outputs.sha }}
+      tag: ${{ needs.images.outputs.tag }}
+      registry: ${{ needs.images.outputs.registry }}
+      pg_tag: ${{ needs.images.outputs.pg_tag }}
+      backup_tag: ${{ needs.images.outputs.backup_tag }}
+    secrets:
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+      ENV_APP: ${{ secrets.ENV_APP }}
+      ENV_DB: ${{ secrets.ENV_DB }}
+      ENV_REPLICA: ${{ secrets.ENV_REPLICA }}
+      ENV_EDGE: ${{ secrets.ENV_EDGE }}
+      AGE_IDENTITY: ${{ secrets.AGE_IDENTITY }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+    permissions: {contents: read, packages: write}
+
+  production:
+    needs: [images, staging]
+    # после staging (авто) или вручную; если staging не настроен, он завершается «пропущено»
+    if: always() && needs.images.result == 'success' && (needs.staging.result == 'success' || needs.staging.result == 'skipped') && (github.event_name == 'workflow_run' || inputs.environment == 'production')
+    uses: ./.github/workflows/deploy-env.yml
+    with:
+      environment: production
+      sha: ${{ needs.images.outputs.sha }}
+      tag: ${{ needs.images.outputs.tag }}
+      registry: ${{ needs.images.outputs.registry }}
+      pg_tag: ${{ needs.images.outputs.pg_tag }}
+      backup_tag: ${{ needs.images.outputs.backup_tag }}
+    secrets:
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+      ENV_APP: ${{ secrets.ENV_APP }}
+      ENV_DB: ${{ secrets.ENV_DB }}
+      ENV_REPLICA: ${{ secrets.ENV_REPLICA }}
+      ENV_EDGE: ${{ secrets.ENV_EDGE }}
+      AGE_IDENTITY: ${{ secrets.AGE_IDENTITY }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+    permissions: {contents: read, packages: write}

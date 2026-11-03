@@ -1,0 +1,169 @@
+# Правила алертов. severity: critical — сразу в Telegram и повтор раз в час;
+# warning — повтор раз в 4 часа. runbook — раздел docs/RUNBOOK.md.
+groups:
+  - name: meta
+    rules:
+      - alert: Watchdog
+        expr: vector(1)
+        labels: {severity: none}
+        annotations: {summary: "Пульс мониторинга (всегда активен)"}
+
+  - name: availability
+    rules:
+      - alert: HostDown
+        expr: up{job="node"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "Сервер {{ $labels.host }} не отвечает по WireGuard"
+          runbook: "RUNBOOK.md#сервер-недоступен"
+      - alert: TargetDown
+        expr: up{job=~"api|postgres|redis|minio|cadvisor"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "{{ $labels.job }} на {{ $labels.host }} ({{ $labels.instance }}) недоступен"
+          runbook: "RUNBOOK.md#сервис-недоступен"
+      - alert: ApiInstancesDegraded
+        expr: count(up{job="api"} == 1) < 2
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: "Работает меньше 2 инстансов API"}
+      - alert: EndpointDown
+        expr: probe_success == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "{{ $labels.instance }} недоступен снаружи"
+          runbook: "RUNBOOK.md#сайт-или-api-недоступны"
+      - alert: TlsCertExpiringSoon
+        expr: probe_ssl_earliest_cert_expiry - time() < 14 * 86400
+        for: 1h
+        labels: {severity: warning}
+        annotations: {summary: "Сертификат {{ $labels.instance }} истекает через {{ $value | humanizeDuration }}"}
+
+  - name: api
+    rules:
+      - alert: ApiHighErrorRate
+        expr: |
+          sum(rate(http_requests_total{job="api",status=~"5.."}[5m]))
+            / clamp_min(sum(rate(http_requests_total{job="api"}[5m])), 1) > 0.02
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "Ошибки 5xx API: {{ $value | humanizePercentage }} запросов"
+          runbook: "RUNBOOK.md#ошибки-5xx"
+      - alert: ApiHighLatency
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{job="api",route!~"/v1/uploads"}[5m]))) > 0.5
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "p95 задержки API {{ $value | humanizeDuration }} (цель < 300 мс)"
+          runbook: "RUNBOOK.md#медленно-работает"
+      - alert: ApiRateLimitedSpike
+        expr: sum(rate(http_requests_total{job="api",status="429"}[5m])) > 20
+        for: 10m
+        labels: {severity: warning}
+        annotations: {summary: "Много ответов 429 ({{ $value | humanize }}/с): возможна атака или перебор"}
+
+  - name: postgres
+    rules:
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: "PostgreSQL на {{ $labels.host }} недоступен"
+          runbook: "RUNBOOK.md#база-данных-недоступна"
+      - alert: PostgresTooManyConnections
+        expr: sum by (host) (pg_stat_activity_count) / on (host) max by (host) (pg_settings_max_connections) > 0.8
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: "Занято {{ $value | humanizePercentage }} соединений PostgreSQL"}
+      - alert: WalArchiveFailing
+        expr: increase(pg_stat_archiver_failed_count[15m]) > 0
+        labels: {severity: critical}
+        annotations:
+          summary: "WAL не архивируется в офсайт-S3 (PITR под угрозой, диск может переполниться)"
+          runbook: "RUNBOOK.md#бэкапы"
+      # при полном простое PostgreSQL не переключает WAL, поэтому порог с запасом;
+      # реальные сбои архивации ловит WalArchiveFailing
+      - alert: WalArchiveStale
+        expr: pg_stat_archiver_last_archive_age > 3 * 3600 and on (instance) pg_replication_is_replica == 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "Последний WAL отправлен в архив {{ $value | humanizeDuration }} назад"
+          runbook: "RUNBOOK.md#бэкапы"
+      - alert: ReplicationLagHigh
+        expr: pg_replication_lag_seconds > 60 and on (instance) pg_replication_is_replica == 1
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: "Реплика отстаёт на {{ $value | humanizeDuration }}"}
+      - alert: ReplicaNotStreaming
+        expr: pg_replication_slots_active{slot_name="replica1"} == 0
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: "Реплика не подключена к primary"}
+      - alert: PostgresDeadlocks
+        expr: increase(pg_stat_database_deadlocks{datname="boutique"}[10m]) > 5
+        labels: {severity: warning}
+        annotations: {summary: "Взаимоблокировки в PostgreSQL: {{ $value }} за 10 мин"}
+
+  - name: backups
+    rules:
+      - alert: BaseBackupTooOld
+        expr: time() - boutique_walg_last_success_timestamp_seconds > 26 * 3600
+        for: 10m
+        labels: {severity: critical}
+        annotations:
+          summary: "Базовому бэкапу WAL-G больше 26 часов"
+          runbook: "RUNBOOK.md#бэкапы"
+      - alert: BackupJobFailed
+        expr: boutique_job_last_run_ok == 0 or boutique_walg_last_run_ok == 0
+        labels: {severity: critical}
+        annotations:
+          summary: "Задача {{ $labels.job_name }} завершилась с ошибкой"
+          runbook: "RUNBOOK.md#бэкапы"
+      - alert: PgDumpTooOld
+        expr: time() - boutique_job_last_success_timestamp_seconds{job_name="pgdump"} > 26 * 3600
+        for: 10m
+        labels: {severity: critical}
+        annotations: {summary: "Логическому бэкапу (pg_dump) больше 26 часов"}
+      - alert: RestoreDrillTooOld
+        expr: time() - boutique_job_last_success_timestamp_seconds{job_name="restore_drill"} > 8 * 86400
+        for: 1h
+        labels: {severity: warning}
+        annotations: {summary: "Еженедельная проверка восстановления не проходила больше 8 дней"}
+
+  - name: resources
+    rules:
+      - alert: DiskWillFillSoon
+        expr: |
+          (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"} / node_filesystem_size_bytes < 0.15)
+          or predict_linear(node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"}[6h], 24 * 3600) < 0
+        for: 15m
+        labels: {severity: critical}
+        annotations:
+          summary: "Диск {{ $labels.mountpoint }} на {{ $labels.host }} заканчивается"
+          runbook: "RUNBOOK.md#заканчивается-диск"
+      - alert: HighMemory
+        expr: 1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes > 0.9
+        for: 10m
+        labels: {severity: warning}
+        annotations: {summary: "Память {{ $labels.host }} занята на {{ $value | humanizePercentage }}"}
+      - alert: HighCpu
+        expr: 1 - avg by (host) (rate(node_cpu_seconds_total{mode="idle"}[5m])) > 0.85
+        for: 15m
+        labels: {severity: warning}
+        annotations: {summary: "CPU {{ $labels.host }} загружен на {{ $value | humanizePercentage }}"}
+      - alert: RedisMemoryHigh
+        expr: redis_memory_used_bytes / clamp_min(redis_memory_max_bytes, 1) > 0.9
+        for: 10m
+        labels: {severity: warning}
+        annotations: {summary: "Redis занял {{ $value | humanizePercentage }} лимита памяти"}
+      - alert: ContainerOomKilled
+        expr: increase(container_oom_events_total{container_label_com_docker_compose_service!=""}[10m]) > 0
+        labels: {severity: warning}
+        annotations: {summary: "Контейнер {{ $labels.container_label_com_docker_compose_service }} на {{ $labels.host }} убит по памяти"}

@@ -1,0 +1,86 @@
+# Сервер в Германии: сайт (Next.js) + сбор метрик и алерты (Prometheus, Alertmanager,
+# blackbox). Метрики серверов в UZ собираются по WireGuard. Логи (в них ПД) и Grafana —
+# в UZ; Grafana читает этот Prometheus по WireGuard.
+name: boutique-edge
+
+x-logging: &logging
+  driver: json-file
+  options: {max-size: "50m", max-file: "5"}
+
+x-web: &web
+  image: ${REGISTRY:?}/web-${DEPLOY_ENV:-production}:${IMAGE_TAG:?}
+  restart: unless-stopped
+  logging: *logging
+  stop_grace_period: 20s
+  deploy:
+    resources:
+      limits: {cpus: "${WEB_CPUS:-1.5}", memory: "${WEB_MEMORY:-1g}"}
+
+services:
+  caddy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    logging: *logging
+    ports: ["${HTTP_PORT:-80}:80", "${HTTPS_PORT:-443}:443", "${HTTPS_PORT:-443}:443/udp"]
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:?}
+      TLS_MODE: ${TLS_MODE:-acme}
+      SITE_DOMAIN: ${SITE_DOMAIN:?}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  web1: *web
+  web2: *web
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    restart: unless-stopped
+    logging: *logging
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-30d}
+      - --web.enable-lifecycle
+    # только для Grafana в UZ, через WireGuard
+    ports: ["${EDGE_PRIVATE_IP:?}:9090:9090"]
+    volumes:
+      - ../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../monitoring/rules:/etc/prometheus/rules:ro
+      - ./targets:/etc/prometheus/targets:ro
+      - prometheus:/prometheus
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:?}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        sed "s/__TELEGRAM_CHAT_ID__/$$TELEGRAM_CHAT_ID/" /etc/alertmanager/alertmanager.yml.tmpl > /tmp/alertmanager.yml
+        exec /bin/alertmanager --config.file=/tmp/alertmanager.yml --storage.path=/alertmanager
+    secrets: [telegram_bot_token]
+    volumes:
+      - ../monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml.tmpl:ro
+      - alertmanager:/alertmanager
+
+  blackbox:
+    image: prom/blackbox-exporter:v0.27.0
+    restart: unless-stopped
+    logging: *logging
+    command: ["--config.file=/etc/blackbox/blackbox.yml"]
+    volumes: ["../monitoring/blackbox.yml:/etc/blackbox/blackbox.yml:ro"]
+
+secrets:
+  telegram_bot_token:
+    file: ${TELEGRAM_BOT_TOKEN_FILE:-./secrets/telegram-bot-token}
+
+volumes:
+  caddy_data: {}
+  caddy_config: {}
+  prometheus: {}
+  alertmanager: {}

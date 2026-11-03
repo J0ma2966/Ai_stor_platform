@@ -1,0 +1,34 @@
+# Alertmanager: всё в Telegram. __TELEGRAM_CHAT_ID__ подставляется при старте
+# контейнера из TELEGRAM_CHAT_ID; токен бота — docker secret (не в переменных).
+route:
+  receiver: telegram
+  group_by: [alertname, instance]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers: [severity="critical"]
+      receiver: telegram
+      repeat_interval: 1h
+    # «пульс»: всегда горит; если перестал приходить — мониторинг сломан (см. RUNBOOK)
+    - matchers: [alertname="Watchdog"]
+      receiver: "null"
+
+inhibit_rules:
+  # сервер недоступен — не засыпать сообщениями о каждом сервисе на нём
+  - source_matchers: [alertname="HostDown"]
+    target_matchers: [severity=~"warning|critical"]
+    equal: [host]
+
+receivers:
+  - name: "null"
+  - name: telegram
+    telegram_configs:
+      - bot_token_file: /run/secrets/telegram_bot_token
+        chat_id: __TELEGRAM_CHAT_ID__
+        parse_mode: HTML
+        send_resolved: true
+        message: |-
+          {{ if eq .Status "firing" }}🔴{{ else }}✅{{ end }} <b>{{ .CommonLabels.alertname }}</b> [{{ .CommonLabels.severity }}]
+          {{ range .Alerts }}• {{ .Annotations.summary }}{{ if .Annotations.runbook }} — {{ .Annotations.runbook }}{{ end }}
+          {{ end }}

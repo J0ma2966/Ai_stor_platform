@@ -1,0 +1,12 @@
+# Пример WireGuard-конфига для ноутбука администратора (WireGuard для Windows → Import).
+# Подставьте свой приватный ключ, публичный ключ сервера app (`wg show wg0 public-key` на app)
+# и его публичный IP. После подключения Grafana: http://10.77.0.10:3000
+[Interface]
+PrivateKey = <приватный ключ ноутбука>
+Address = 10.77.0.100/32
+
+[Peer]
+PublicKey = <публичный ключ сервера app>
+Endpoint = <публичный IP app>:51820
+AllowedIPs = 10.77.0.10/32
+PersistentKeepalive = 25
