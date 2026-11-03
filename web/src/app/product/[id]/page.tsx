@@ -1,7 +1,8 @@
 import { TRYON_ENABLED } from "@/lib/fitting";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getTranslations, setRequestLocale } from "next-intl/server";
+import { localizePath, type Locale } from "@/i18n/routing";
+import { getLocale, getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 import { catName, fetchCategories, fetchProduct, fetchProducts, frontImage } from "@/lib/catalog";
 import { formatSum } from "@/lib/money";
@@ -11,10 +12,11 @@ import { ProductActions } from "@/components/ProductActions";
 import { ProductGrid } from "@/components/ProductGrid";
 import { JsonLd } from "@/components/JsonLd";
 
-type P = Promise<{ locale: string; id: string }>;
+type P = Promise<{ id: string }>;
 
 export async function generateMetadata({ params }: { params: P }): Promise<Metadata> {
-  const { locale, id } = await params;
+  const { id } = await params;
+  const locale = await getLocale();
   const p = await fetchProduct(id).catch(() => null);
   if (!p) return { title: "404", robots: { index: false } };
   const desc = `${p.brand} · ${formatSum(p.price, locale)} · ${p.store_name}. ${(p.description ?? "").slice(0, 140)}`;
@@ -28,8 +30,8 @@ export async function generateMetadata({ params }: { params: P }): Promise<Metad
 }
 
 export default async function ProductPage({ params }: { params: P }) {
-  const { locale, id } = await params;
-  setRequestLocale(locale);
+  const { id } = await params;
+  const locale = await getLocale();
   const p = await fetchProduct(id);
   if (!p) notFound();
   const t = await getTranslations("product");
@@ -39,7 +41,7 @@ export default async function ProductPage({ params }: { params: P }) {
   ]);
   const cat = cats.find((c) => c.id === p.category_id);
   const others = more.items.filter((x) => x.id !== p.id).slice(0, 8);
-  const url = `${siteUrl()}/${locale}/product/${p.id}`;
+  const url = siteUrl() + localizePath(`/product/${p.id}`, locale as Locale);
   return (
     <div className="stack-lg">
       <JsonLd

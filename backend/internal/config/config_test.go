@@ -49,7 +49,7 @@ func TestPaymentConfig(t *testing.T) {
 	if !c.PaymeEnabled() || c.ClickEnabled() || !c.PaymeTest || c.PaymeAccountKey != "payment_id" {
 		t.Fatalf("defaults: %+v", c)
 	}
-	t.Setenv("PAYMENT_RETURN_URL", "https://shop.uz/ru/account/balance")
+	t.Setenv("PAYMENT_RETURN_URL", "https://shop.uz/account/balance")
 	t.Setenv("PAYME_ALLOWED_IPS", "185.234.113.0/24, nope")
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "nope") {
 		t.Fatalf("bad ip: %v", err)
@@ -66,7 +66,7 @@ func TestPaymentProdRules(t *testing.T) {
 	t.Setenv("SMS_PROVIDER", "eskiz")
 	t.Setenv("ESKIZ_EMAIL", "a@b.uz")
 	t.Setenv("ESKIZ_PASSWORD", "pw")
-	t.Setenv("PAYMENT_RETURN_URL", "https://shop.uz/ru/account/balance")
+	t.Setenv("PAYMENT_RETURN_URL", "https://shop.uz/account/balance")
 	t.Setenv("PAYME_MERCHANT_ID", "m")
 	t.Setenv("PAYME_KEY", "k")
 	t.Setenv("CLICK_SERVICE_ID", "1")

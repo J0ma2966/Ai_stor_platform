@@ -7,7 +7,7 @@
 | Отправка SMS-кода | `backend/internal/sms` (Eskiz), подключение в `cmd/api/main.go` |
 | Тарифы, платежи, вебхуки | `backend/internal/payments` |
 | Таблицы | `payments` (миграция 00001 + 00020), `payment_transactions` (00020), `token_ledger` |
-| Страница покупки | `web/src/app/[locale]/account/balance`, `web/src/components/BalancePage.tsx` |
+| Страница покупки | `web/src/app/account/balance`, `web/src/components/BalancePage.tsx` |
 
 ## Как проходит покупка
 

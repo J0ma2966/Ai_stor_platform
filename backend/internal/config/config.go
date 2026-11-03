@@ -57,7 +57,7 @@ type Config struct {
 	SMSTemplate   string // одобренный в кабинете Eskiz текст, %s — код
 
 	// Платежи. Провайдер включён, только если заданы его ключи.
-	PaymentReturnURL string // куда вернуть клиента после оплаты, напр. https://shop.uz/ru/account/balance
+	PaymentReturnURL string // куда вернуть клиента после оплаты, напр. https://shop.uz/account/balance
 	ClickServiceID   string
 	ClickMerchantID  string
 	ClickSecretKey   string

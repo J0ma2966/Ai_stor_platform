@@ -1,8 +1,11 @@
 "use client";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, type MouseEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { Link, usePathname, useRouter } from "@/i18n/navigation";
+import { localizePath, type Locale } from "@/i18n/routing";
+import { useLocalePending, useSwitchLocale } from "@/i18n/switch";
+import { api } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { TRYON_ENABLED } from "@/lib/fitting";
 
@@ -17,18 +20,31 @@ export function Header() {
   const pathname = usePathname();
   const router = useRouter();
   const sp = useSearchParams();
-  const { me, ready, cartQty, unread, signOut } = useSession();
+  const { me, ready, cartQty, unread, signOut, setMe } = useSession();
   const [q, setQ] = useState(sp.get("q") ?? "");
   const [open, setOpen] = useState(false);
-  const other = locale === "ru" ? "uz" : "ru";
+  const other: Locale = locale === "ru" ? "uz" : "ru";
+  const switching = useLocalePending();
+  const switchLocale = useSwitchLocale();
 
   useEffect(() => setOpen(false), [pathname]);
-  useEffect(() => setQ(sp.get("q") ?? ""), [sp]);
+  const spQ = sp.get("q") ?? "";
+  useEffect(() => setQ(spQ), [spQ]);
 
   function search(e: FormEvent) {
     e.preventDefault();
     const v = q.trim();
     router.push(v ? `/catalog?q=${encodeURIComponent(v)}` : "/catalog");
+  }
+
+  function changeLang(e: MouseEvent<HTMLAnchorElement>) {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return; // «открыть в новой вкладке»
+    e.preventDefault();
+    switchLocale(other);
+    // язык клиента нужен и серверу: на нём приходят SMS и уведомления
+    if (me?.role === "client" && me.lang !== other) {
+      api("/v1/me", { method: "PATCH", body: { lang: other } }).then(() => setMe({ ...me, lang: other }), () => {});
+    }
   }
 
   const role = me?.role;
@@ -49,15 +65,24 @@ export function Header() {
           <Link href="/stores">{t("nav.stores")}</Link>
           {TRYON_ENABLED && <Link href="/fitting">{t("nav.fitting")}</Link>}
         </nav>
-        <form role="search" className="header-search" action={`/${locale}/catalog`} method="get" onSubmit={search}>
+        <form role="search" className="header-search" action={localizePath("/catalog", locale as Locale)} method="get" onSubmit={search}>
           <label htmlFor="site-search" className="sr-only">{t("nav.search")}</label>
           <input id="site-search" name="q" type="search" placeholder={t("nav.searchPh")} value={q} maxLength={100} onChange={(e) => setQ(e.target.value)} />
           <button className="btn btn-search" aria-label={t("nav.search")}>⌕</button>
         </form>
         <div className="header-actions">
-          <Link href={{ pathname, query: query ? Object.fromEntries(sp.entries()) : undefined }} locale={other} className="hdr-btn lang" hrefLang={other}>
+          {/* обычная ссылка на ту же страницу на другом языке (для роботов и «открыть в новой вкладке»),
+              а по клику язык меняется на месте, без перехода */}
+          <a
+            href={localizePath(pathname + (query ? `?${query}` : ""), other)}
+            hrefLang={other}
+            lang={other}
+            className="hdr-btn lang"
+            aria-busy={switching || undefined}
+            onClick={changeLang}
+          >
             {t("app.lang")}
-          </Link>
+          </a>
           {role !== "store" && role !== "admin" && (
             <>
               <Link href="/account/favorites" className="hdr-btn" aria-label={t("nav.favorites")} title={t("nav.favorites")}>
