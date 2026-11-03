@@ -65,11 +65,12 @@ func run(log *slog.Logger, args []string) error {
 	if len(args) > 0 {
 		switch args[0] {
 		case "migrate":
-			cmd := "up"
+			// «api migrate» без аргументов = up; срез args[2:] при одном аргументе вызвал бы panic
+			cmd, rest := "up", []string(nil)
 			if len(args) > 1 {
-				cmd = args[1]
+				cmd, rest = args[1], args[2:]
 			}
-			return db.Migrate(ctx, pool, cmd, args[2:]...)
+			return db.Migrate(ctx, pool, cmd, rest...)
 		case "create-admin":
 			if len(args) < 2 || os.Getenv("ADMIN_PASSWORD") == "" {
 				return errors.New("usage: ADMIN_PASSWORD=... api create-admin <login>")

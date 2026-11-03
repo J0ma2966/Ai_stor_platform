@@ -22,7 +22,6 @@ export class ApiError extends Error {
 
 let accessToken: string | null = null;
 let role: Role | null = null;
-let refreshing: Promise<boolean> | null = null;
 let onAuthLost: (() => void) | null = null;
 
 export function setSession(token: string | null, r: Role | null = null) {
@@ -38,27 +37,41 @@ export function setOnAuthLost(fn: (() => void) | null) {
 
 type SessionResp = { access_token: string; user: { id: string; role: Role }; is_new_user?: boolean };
 
+// Результат refresh. Без error — сессии нет (cookie нет или она недействительна).
+// С error — временный сбой (429 по лимиту, 5xx, нет сети): cookie при этом остаётся
+// рабочей, поэтому выходить из аккаунта и отправлять на экран входа нельзя.
+export type RefreshResult = { ok: true } | { ok: false; error?: ApiError };
+
 // refresh: параллельные запросы делят один вызов /auth/refresh.
-export function refreshSession(): Promise<boolean> {
+let refreshing: Promise<RefreshResult> | null = null;
+
+export function refreshSessionResult(): Promise<RefreshResult> {
   if (!refreshing) {
-    refreshing = (async () => {
+    refreshing = (async (): Promise<RefreshResult> => {
       try {
         const res = await fetch(`${API_URL}/v1/auth/refresh`, { method: "POST", credentials: "include" });
         if (!res.ok) {
-          setSession(null);
-          return false;
+          if (res.status === 401 || res.status === 403) {
+            setSession(null);
+            return { ok: false };
+          }
+          return { ok: false, error: await parseError(res) };
         }
         const body = (await res.json()) as { data: SessionResp };
         setSession(body.data.access_token, body.data.user.role);
-        return true;
+        return { ok: true };
       } catch {
-        return false;
+        return { ok: false, error: new ApiError(0, "network", "network error") };
       } finally {
         refreshing = null;
       }
     })();
   }
   return refreshing;
+}
+
+export function refreshSession(): Promise<boolean> {
+  return refreshSessionResult().then((r) => r.ok);
 }
 
 export type RequestOpts = {
