@@ -82,6 +82,8 @@ func (c *Click) Prepare(w http.ResponseWriter, r *http.Request)  { c.handle(w, r
 func (c *Click) Complete(w http.ResponseWriter, r *http.Request) { c.handle(w, r, true) }
 
 func clickSign(parts ...string) string {
+	// Алгоритм подписи задан Click SHOP API и не выбирается нами; секрет участвует в хэше.
+	// nosemgrep: go.lang.security.audit.crypto.use_of_weak_crypto.use-of-md5
 	sum := md5.Sum([]byte(strings.Join(parts, ""))) // #nosec G401 -- протокол Click
 	return hex.EncodeToString(sum[:])
 }
