@@ -96,9 +96,7 @@ func (h *Handlers) list(w http.ResponseWriter, r *http.Request) {
 		q = string([]rune(q)[:100])
 	}
 	limit := httpx.Limit(r, 100, 200)
-	rows, err := h.DB.Query(r.Context(), `SELECT `+storeCols+` FROM stores s
-		WHERE s.status = 'active' AND ($1 = '' OR lower(s.name) LIKE '%' || $1 || '%')
-		ORDER BY s.name LIMIT $2`, escapeLike(q), limit)
+	rows, err := h.DB.Query(r.Context(), storesListSQL, escapeLike(q), limit)
 	if err != nil {
 		httpx.Fail(w, r, err)
 		return
@@ -130,7 +128,7 @@ func (s *Store) public() {
 func (h *Handlers) get(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
 	var s Store
-	err := h.scan(h.DB.QueryRow(r.Context(), `SELECT `+storeCols+` FROM stores s WHERE s.slug = $1 AND s.status = 'active'`, slug), &s)
+	err := h.scan(h.DB.QueryRow(r.Context(), storeBySlugSQL, slug), &s)
 	if errors.Is(err, pgx.ErrNoRows) {
 		httpx.Fail(w, r, httpx.ErrNotFound)
 		return
@@ -149,7 +147,7 @@ func (h *Handlers) get(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) profile(w http.ResponseWriter, r *http.Request) {
 	p := auth.MustFrom(r.Context())
 	var s Store
-	if err := h.scan(h.DB.QueryRow(r.Context(), `SELECT `+storeCols+` FROM stores s WHERE s.id = $1`, p.StoreID), &s); err != nil {
+	if err := h.scan(h.DB.QueryRow(r.Context(), storeByIDSQL, p.StoreID), &s); err != nil {
 		httpx.Fail(w, r, db.NotFound(err))
 		return
 	}
@@ -239,3 +237,12 @@ func (h *Handlers) updateProfile(w http.ResponseWriter, r *http.Request) {
 func escapeLike(s string) string {
 	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s)
 }
+
+// Запросы собираются из констант на этапе компиляции.
+const (
+	storesListSQL = `SELECT ` + storeCols + ` FROM stores s
+		WHERE s.status = 'active' AND ($1 = '' OR lower(s.name) LIKE '%' || $1 || '%')
+		ORDER BY s.name LIMIT $2`
+	storeBySlugSQL = `SELECT ` + storeCols + ` FROM stores s WHERE s.slug = $1 AND s.status = 'active'`
+	storeByIDSQL   = `SELECT ` + storeCols + ` FROM stores s WHERE s.id = $1`
+)

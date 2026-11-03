@@ -74,15 +74,7 @@ func (v *ViewCounter) Flush(ctx context.Context) error {
 		}
 	}
 	// Общий счётчик и дневная статистика (для отчёта магазина за период) — одним запросом.
-	_, err = v.DB.Exec(ctx, `
-		WITH u AS (
-			UPDATE products p SET views_count = p.views_count + x.n
-			FROM unnest($1::uuid[], $2::bigint[]) AS x(id, n)
-			WHERE p.id = x.id RETURNING p.id, x.n
-		)
-		INSERT INTO product_stats_daily (product_id, day, views)
-		SELECT id, `+StatsDay+`, n FROM u
-		ON CONFLICT (product_id, day) DO UPDATE SET views = product_stats_daily.views + EXCLUDED.views`, ids, counts)
+	_, err = v.DB.Exec(ctx, flushViewsSQL, ids, counts)
 	if err != nil {
 		pipe := v.Redis.TxPipeline()
 		for i, id := range ids {
@@ -102,10 +94,24 @@ const StatsDay = `(now() AT TIME ZONE 'Asia/Tashkent')::date`
 func RecordFittingAdd(ctx context.Context, q interface {
 	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
 }, productID uuid.UUID) error {
-	_, err := q.Exec(ctx, `
-		WITH u AS (UPDATE products SET fitting_adds = fitting_adds + 1 WHERE id = $1 RETURNING id)
-		INSERT INTO product_stats_daily (product_id, day, fitting_adds)
-		SELECT id, `+StatsDay+`, 1 FROM u
-		ON CONFLICT (product_id, day) DO UPDATE SET fitting_adds = product_stats_daily.fitting_adds + 1`, productID)
+	_, err := q.Exec(ctx, fittingAddSQL, productID)
 	return err
 }
+
+// Запросы собираются из констант на этапе компиляции.
+const (
+	flushViewsSQL = `
+		WITH u AS (
+			UPDATE products p SET views_count = p.views_count + x.n
+			FROM unnest($1::uuid[], $2::bigint[]) AS x(id, n)
+			WHERE p.id = x.id RETURNING p.id, x.n
+		)
+		INSERT INTO product_stats_daily (product_id, day, views)
+		SELECT id, ` + StatsDay + `, n FROM u
+		ON CONFLICT (product_id, day) DO UPDATE SET views = product_stats_daily.views + EXCLUDED.views`
+	fittingAddSQL = `
+		WITH u AS (UPDATE products SET fitting_adds = fitting_adds + 1 WHERE id = $1 RETURNING id)
+		INSERT INTO product_stats_daily (product_id, day, fitting_adds)
+		SELECT id, ` + StatsDay + `, 1 FROM u
+		ON CONFLICT (product_id, day) DO UPDATE SET fitting_adds = product_stats_daily.fitting_adds + 1`
+)

@@ -111,10 +111,7 @@ type CartView struct {
 }
 
 func (h *Handlers) loadCart(r *http.Request, uid uuid.UUID) (*CartView, error) {
-	rows, err := h.DB.Query(r.Context(), `SELECT `+cardCols+`, ci.qty, ci.added_at
-		FROM cart_items ci JOIN products p ON p.id = ci.product_id JOIN stores s ON s.id = p.store_id
-		JOIN categories c ON c.id = p.category_id
-		WHERE ci.user_id = $1 ORDER BY s.name, ci.added_at`, uid)
+	rows, err := h.DB.Query(r.Context(), cartSQL, uid)
 	if err != nil {
 		return nil, err
 	}
@@ -235,10 +232,7 @@ func (h *Handlers) cartClear(w http.ResponseWriter, r *http.Request) {
 // ---------- избранное ----------
 
 func (h *Handlers) favorites(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.DB.Query(r.Context(), `SELECT `+cardCols+`, f.created_at
-		FROM favorites f JOIN products p ON p.id = f.product_id JOIN stores s ON s.id = p.store_id
-		JOIN categories c ON c.id = p.category_id
-		WHERE f.user_id = $1 ORDER BY f.created_at DESC LIMIT $2`, auth.MustFrom(r.Context()).UserID, MaxFavorites)
+	rows, err := h.DB.Query(r.Context(), favoritesSQL, auth.MustFrom(r.Context()).UserID, MaxFavorites)
 	if err != nil {
 		httpx.Fail(w, r, err)
 		return
@@ -335,3 +329,15 @@ func (h *Handlers) favoriteDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	httpx.NoContent(w)
 }
+
+// Запросы собираются из констант на этапе компиляции.
+const (
+	cartSQL = `SELECT ` + cardCols + `, ci.qty, ci.added_at
+		FROM cart_items ci JOIN products p ON p.id = ci.product_id JOIN stores s ON s.id = p.store_id
+		JOIN categories c ON c.id = p.category_id
+		WHERE ci.user_id = $1 ORDER BY s.name, ci.added_at`
+	favoritesSQL = `SELECT ` + cardCols + `, f.created_at
+		FROM favorites f JOIN products p ON p.id = f.product_id JOIN stores s ON s.id = p.store_id
+		JOIN categories c ON c.id = p.category_id
+		WHERE f.user_id = $1 ORDER BY f.created_at DESC LIMIT $2`
+)
