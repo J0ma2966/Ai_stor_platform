@@ -19,16 +19,16 @@ APP_IP="${APP_IP:-10.77.0.10}" DB_IP="${DB_IP:-10.77.0.20}" REPLICA_IP="${REPLIC
 mkdir -p "$out"; umask 077
 
 rnd() { openssl rand -hex "${1:-24}"; }
-APP_DB_PASSWORD=$(rnd) POSTGRES_PASSWORD=$(rnd) REPLICATOR_PASSWORD=$(rnd) MONITOR_PASSWORD=$(rnd)
+APP_DB_PASSWORD=$(rnd) OWNER_DB_PASSWORD=$(rnd) POSTGRES_PASSWORD=$(rnd) REPLICATOR_PASSWORD=$(rnd) MONITOR_PASSWORD=$(rnd)
 REDIS_PASSWORD=$(rnd) MINIO_ROOT_PASSWORD=$(rnd) MINIO_APP_ACCESS_KEY="app$(rnd 8)" MINIO_APP_SECRET_KEY=$(rnd)
 JWT_SECRET=$(rnd 32) OTP_PEPPER=$(rnd 24) WALG_LIBSODIUM_KEY=$(rnd 32) GRAFANA_ADMIN_PASSWORD=$(rnd 16)
 age-keygen -o "$out/age-identity.txt" 2>/dev/null
 AGE_RECIPIENT=$(age-keygen -y "$out/age-identity.txt")
 
 if [[ "$envname" == "staging" ]]; then
-  site="staging.$domain"; api="api.staging.$domain"; s3="s3.staging.$domain"; media="media.staging.$domain"; graf="grafana.staging.$domain"
+  site="staging.$domain"; api="api.staging.$domain"; s3="s3.staging.$domain"; media="media.staging.$domain"
 else
-  site="$domain"; api="api.$domain"; s3="s3.$domain"; media="media.$domain"; graf="grafana.$domain"
+  site="$domain"; api="api.$domain"; s3="s3.$domain"; media="media.$domain"
 fi
 
 cat > "$out/app.env" <<E
@@ -37,6 +37,8 @@ APP_ENV=prod
 REGISTRY=$registry
 PRIVATE_IP=$APP_IP
 DB_PRIVATE_IP=$DB_IP
+EDGE_PRIVATE_IP=$EDGE_IP
+GRAFANA_ADMIN_PASSWORD=$GRAFANA_ADMIN_PASSWORD
 ACME_EMAIL=$email
 TLS_MODE=acme
 SITE_DOMAIN=$site
@@ -45,6 +47,7 @@ S3_DOMAIN=$s3
 MEDIA_DOMAIN=$media
 S3_BUCKET=boutique-media
 APP_DB_PASSWORD=$APP_DB_PASSWORD
+OWNER_DB_PASSWORD=$OWNER_DB_PASSWORD
 DB_MAX_CONNS=25
 REDIS_PASSWORD=$REDIS_PASSWORD
 REDIS_MAXMEMORY=1gb
@@ -63,6 +66,7 @@ db_common() {
 cat <<E
 REGISTRY=$registry
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+OWNER_DB_PASSWORD=$OWNER_DB_PASSWORD
 APP_DB_PASSWORD=$APP_DB_PASSWORD
 REPLICATOR_PASSWORD=$REPLICATOR_PASSWORD
 MONITOR_PASSWORD=$MONITOR_PASSWORD
@@ -106,7 +110,6 @@ REGISTRY=$registry
 ACME_EMAIL=$email
 TLS_MODE=acme
 SITE_DOMAIN=$site
-GRAFANA_DOMAIN=$graf
 API_DOMAIN=$api
 S3_DOMAIN=$s3
 MEDIA_DOMAIN=$media
@@ -114,7 +117,6 @@ APP_PRIVATE_IP=$APP_IP
 DB_PRIVATE_IP=$DB_IP
 REPLICA_PRIVATE_IP=$REPLICA_IP
 EDGE_PRIVATE_IP=$EDGE_IP
-GRAFANA_ADMIN_PASSWORD=$GRAFANA_ADMIN_PASSWORD
 # chat id группы/канала в Telegram (бот должен быть добавлен в группу). Заполнить!
 TELEGRAM_CHAT_ID=CHANGE-ME
 E

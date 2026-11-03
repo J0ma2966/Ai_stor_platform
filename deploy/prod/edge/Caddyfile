@@ -1,4 +1,5 @@
-# Caddy на сервере в Германии: сайт (Next.js, 2 инстанса) и Grafana.
+# Caddy на сервере в Германии: сайт (Next.js, 2 инстанса).
+# Grafana наружу не публикуется: она в UZ и доступна только через WireGuard.
 # Персональных данных здесь нет: сайт ходит в API (UZ) прямо из браузера.
 {
 	email {$ACME_EMAIL}
@@ -29,10 +30,4 @@ www.{$SITE_DOMAIN} {
 		health_uri /api/healthz
 		health_interval 5s
 	}
-}
-
-{$GRAFANA_DOMAIN} {
-	import tls_{$TLS_MODE}
-	header -Server
-	reverse_proxy grafana:3000
 }

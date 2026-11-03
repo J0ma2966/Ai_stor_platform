@@ -17,6 +17,15 @@ on:
       registry: {type: string, required: true}
       pg_tag: {type: string, required: true}
       backup_tag: {type: string, required: true}
+    secrets:
+      SSH_PRIVATE_KEY: {required: false}
+      SSH_KNOWN_HOSTS: {required: false}
+      ENV_APP: {required: false}
+      ENV_DB: {required: false}
+      ENV_REPLICA: {required: false}
+      ENV_EDGE: {required: false}
+      AGE_IDENTITY: {required: false}
+      TELEGRAM_BOT_TOKEN: {required: false}
 
 permissions:
   contents: read

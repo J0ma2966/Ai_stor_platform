@@ -3,7 +3,7 @@
 Алерты приходят в Telegram. Ссылка в алерте ведёт на раздел ниже. Общие правила:
 
 - Все команды выполняются на сервере из каталога роли: `cd /opt/boutique/prod/<app|db|edge>` (на app: `docker compose -f compose.yml …`).
-- Сначала посмотрите дашборд Grafana «Boutique — обзор», потом логи: Grafana → Explore → Loki, запрос `{service="api1"} |= "<request_id>"` или `{level="ERROR"}`.
+- Сначала посмотрите дашборд Grafana «Boutique — обзор» (`http://10.77.0.10:3000` через WireGuard), потом логи: Grafana → Explore → Loki, запрос `{service="api1"} |= "<request_id>"` или `{level="ERROR"}`.
 - Пользователь сообщает `request_id` из сообщения об ошибке. Поиск по нему в Loki показывает весь запрос.
 - Если вы что-то поменяли руками на сервере, повторите это в репозитории, иначе следующий деплой вернёт старое.
 
@@ -123,7 +123,7 @@ cd /opt/boutique/prod && scripts/deploy.sh app <тег предыдущего к
 Миграции обратно совместимы, поэтому старый код работает с новой схемой. Если миграция всё-таки сломала данные, используйте [PITR](#pitr-восстановление-на-момент-времени).
 
 ## Ротация секретов
-- Пароль приложения к БД: `ALTER ROLE boutique PASSWORD '…'` на primary, затем новое значение `APP_DB_PASSWORD` в `ENV_APP` и `ENV_DB`, затем CD.
+- Пароли к БД: `ALTER ROLE boutique_app PASSWORD '…'` (API, `APP_DB_PASSWORD`) или `ALTER ROLE boutique PASSWORD '…'` (миграции и дампы, `OWNER_DB_PASSWORD`) на primary, затем новое значение в `ENV_APP` и `ENV_DB`, затем CD.
 - `JWT_SECRET`: после смены все пользователи должны войти заново (access-токены живут 15 минут, refresh-токены отзываются).
 - Ключи MinIO и Redis: поменяйте значения в `ENV_*`, затем CD. `minio-init` обновит пользователя приложения.
 - Ключ age для дампов: создайте новый, обновите `AGE_RECIPIENT` и `AGE_IDENTITY`. Старый приватный ключ храните, пока живут старые дампы.

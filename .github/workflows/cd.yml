@@ -28,7 +28,12 @@ concurrency:
 
 jobs:
   images:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    # workflow_run срабатывает только на push в main этого репозитория (не на PR из форков),
+    # поэтому собирается уже принятый в main код.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     permissions: {contents: read, packages: write}
     outputs:
@@ -38,6 +43,7 @@ jobs:
       pg_tag: ${{ steps.meta.outputs.pg_tag }}
       backup_tag: ${{ steps.meta.outputs.backup_tag }}
     steps:
+      # nosemgrep: yaml.github-actions.security.workflow-run-target-code-checkout.workflow-run-target-code-checkout
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ github.event.workflow_run.head_sha || inputs.ref }}
@@ -87,7 +93,15 @@ jobs:
       registry: ${{ needs.images.outputs.registry }}
       pg_tag: ${{ needs.images.outputs.pg_tag }}
       backup_tag: ${{ needs.images.outputs.backup_tag }}
-    secrets: inherit
+    secrets:
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+      ENV_APP: ${{ secrets.ENV_APP }}
+      ENV_DB: ${{ secrets.ENV_DB }}
+      ENV_REPLICA: ${{ secrets.ENV_REPLICA }}
+      ENV_EDGE: ${{ secrets.ENV_EDGE }}
+      AGE_IDENTITY: ${{ secrets.AGE_IDENTITY }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
     permissions: {contents: read, packages: write}
 
   production:
@@ -102,5 +116,13 @@ jobs:
       registry: ${{ needs.images.outputs.registry }}
       pg_tag: ${{ needs.images.outputs.pg_tag }}
       backup_tag: ${{ needs.images.outputs.backup_tag }}
-    secrets: inherit
+    secrets:
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+      ENV_APP: ${{ secrets.ENV_APP }}
+      ENV_DB: ${{ secrets.ENV_DB }}
+      ENV_REPLICA: ${{ secrets.ENV_REPLICA }}
+      ENV_EDGE: ${{ secrets.ENV_EDGE }}
+      AGE_IDENTITY: ${{ secrets.AGE_IDENTITY }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
     permissions: {contents: read, packages: write}

@@ -115,4 +115,6 @@ jobs:
             --build-arg NEXT_PUBLIC_MEDIA_ORIGIN=https://media.boutique.test,https://s3.boutique.test \
             --build-arg NEXT_PUBLIC_SITE_URL=https://boutique.test web
       - name: Smoke test
-        run: sudo -E env "PATH=$PATH" REGISTRY=local/boutique TAG=smoke1 TAG2=smoke2 deploy/prod/tests/smoke.sh
+        run: |
+          sudo apt-get install -y -qq age >/dev/null   # age-keygen для init-env.sh
+          sudo env "PATH=$PATH" REGISTRY=local/boutique TAG=smoke1 TAG2=smoke2 deploy/prod/tests/smoke.sh

@@ -36,6 +36,7 @@ services:
       PG_ROLE: ${PG_ROLE:-primary}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
       POSTGRES_INITDB_ARGS: --data-checksums --auth-host=scram-sha-256
+      OWNER_DB_PASSWORD: ${OWNER_DB_PASSWORD:?}
       APP_DB_PASSWORD: ${APP_DB_PASSWORD:?}
       REPLICATOR_PASSWORD: ${REPLICATOR_PASSWORD:?}
       MONITOR_PASSWORD: ${MONITOR_PASSWORD:?}
@@ -96,7 +97,7 @@ services:
     command: ["schedule.sh", "pgdump", "backup.sh"]
     environment:
       HOUR: ${PGDUMP_HOUR_UTC:-22}
-      DATABASE_URL: postgresql://boutique:${APP_DB_PASSWORD}@postgres:5432/boutique
+      DATABASE_URL: postgresql://boutique:${OWNER_DB_PASSWORD}@postgres:5432/boutique
       AGE_RECIPIENT: ${AGE_RECIPIENT:?AGE_RECIPIENT is required in prod (unencrypted dumps are not allowed)}
       BACKUP_S3_URI: ${PGDUMP_S3_URI:?}
       AWS_ACCESS_KEY_ID: ${BACKUP_S3_ACCESS_KEY}

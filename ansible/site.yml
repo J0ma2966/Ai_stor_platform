@@ -125,9 +125,10 @@
       loop:
         - {p: "{{ boutique_dir }}", m: "0750"}
         - {p: /var/lib/boutique/metrics, m: "1777"}
+    # PostgreSQL в контейнере работает от uid 999 (не root), MinIO — от root
     - name: Data directories on the DB servers (put them on the NVMe data disk)
-      ansible.builtin.file: {path: "{{ item }}", state: directory, mode: "0700"}
-      loop: [/srv/pgdata, /srv/minio]
+      ansible.builtin.file: {path: "{{ item.p }}", state: directory, owner: "{{ item.o }}", group: "{{ item.o }}", mode: "0700"}
+      loop: [{p: /srv/pgdata, o: "999"}, {p: /srv/minio, o: "0"}]
       when: inventory_hostname in ['db', 'replica']
   handlers:
     - name: Restart docker

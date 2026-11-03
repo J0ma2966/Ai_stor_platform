@@ -13,3 +13,12 @@ AllowedIPs = {{ hostvars[h].wg_ip }}/32
 PersistentKeepalive = 25
 
 {% endfor %}
+{% if inventory_hostname == 'app' %}
+{% for p in wg_admin_peers %}
+[Peer]
+# admin: {{ p.name }}
+PublicKey = {{ p.public_key }}
+AllowedIPs = {{ p.ip }}/32
+
+{% endfor %}
+{% endif %}

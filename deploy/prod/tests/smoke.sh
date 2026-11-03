@@ -116,6 +116,15 @@ check "metrics/pprof not exposed publicly" bash -c "[[ \$($(printf '%q ' "${CURL
 check "HSTS/security headers from API" bash -c "$(printf '%q ' "${CURL[@]}") -sI $API/healthz | grep -qi 'x-content-type-options: nosniff'"
 check "MinIO admin API blocked" bash -c "[[ \$($(printf '%q ' "${CURL[@]}") -o /dev/null -w '%{http_code}' https://s3.$D/minio/admin/v3/info) == 404 ]]"
 
+step "database roles: API role cannot alter journals or schema"
+apppw=$(sed -n 's/^APP_DB_PASSWORD=//p' "$work/env/app.env")
+asapp() { docker run --rm --network host -e PGPASSWORD="$apppw" postgres:16.10-alpine psql -q -h "$IP" -U boutique_app -d boutique -v ON_ERROR_STOP=1 -c "$1" >/dev/null 2>&1; }
+check "boutique_app can read catalog" asapp "select count(*) from products"
+check "boutique_app cannot UPDATE token_ledger" bash -c "$(declare -f asapp); apppw=$apppw; IP=$IP; ! asapp 'update token_ledger set amount = amount'"
+check "boutique_app cannot DELETE audit_log" bash -c "$(declare -f asapp); apppw=$apppw; IP=$IP; ! asapp 'delete from audit_log'"
+check "boutique_app cannot disable triggers" bash -c "$(declare -f asapp); apppw=$apppw; IP=$IP; ! asapp 'alter table token_ledger disable trigger all'"
+check "boutique_app cannot create tables" bash -c "$(declare -f asapp); apppw=$apppw; IP=$IP; ! asapp 'create table x(i int)'"
+
 step "client: OTP login, private photo upload, presigned URL via s3 domain"
 phone="+998901112233"
 "${CURL[@]}" -f -o /dev/null -H 'Content-Type: application/json' -d "{\"phone\":\"$phone\"}" "$API/v1/auth/otp/request" || bad "otp request"
@@ -153,7 +162,11 @@ check "blackbox probes of API/S3 succeed" retry 20 bash -c "$(declare -f prom ed
 check "alert rules loaded (25)" bash -c "$(declare -f prom edge); work=$work; [[ \$(prom rules | grep -o '\"type\":\"alerting\"' | wc -l) -ge 25 ]]"
 check "Watchdog alert reaches Alertmanager" retry 30 bash -c "$(declare -f edge); work=$work; edge exec -T alertmanager wget -qO- http://127.0.0.1:9093/api/v2/alerts | grep -q Watchdog"
 check "api logs arrive in Loki" retry 30 bash -c "curl -sf --noproxy '*' -G http://$IP:3100/loki/api/v1/query_range --data-urlencode 'query={service=\"api1\"}' --data-urlencode limit=1 | grep -q request_id"
-check "Grafana healthy" bash -c "$(declare -f edge); work=$work; edge exec -T grafana wget -qO- http://127.0.0.1:3000/api/health | grep -q ok"
+gpass=$(sed -n 's/^GRAFANA_ADMIN_PASSWORD=//p' "$work/env/app.env")
+gq() { curl -sf --noproxy '*' -u "admin:$gpass" "http://$IP:3000$1"; }
+check "Grafana (UZ, WireGuard only) reaches Prometheus in DE" retry 20 bash -c "$(declare -f gq); gpass=$gpass; IP=$IP; gq /api/datasources/uid/prometheus/health | grep -q OK"
+check "Grafana reaches Loki locally" retry 20 bash -c "$(declare -f gq); gpass=$gpass; IP=$IP; gq /api/datasources/uid/loki/health | grep -qi ok"
+check "Grafana not published by edge Caddy" bash -c "! grep -q 'reverse_proxy grafana' $work/edge/Caddyfile"
 
 step "backups: WAL archive, base backup, replica"
 psqlp() { dbc exec -T -u postgres postgres psql -U postgres -d boutique -tAc "$1"; }

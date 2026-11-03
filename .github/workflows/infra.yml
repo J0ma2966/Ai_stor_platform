@@ -30,4 +30,9 @@ jobs:
           printf '%s\n' "$INV" > ansible/inventory.yml
       - name: ansible-playbook
         working-directory: ansible
-        run: ansible-playbook -i inventory.yml site.yml ${{ inputs.check_only && '--check --diff' || '' }}
+        env:
+          CHECK_ONLY: ${{ inputs.check_only }}
+        run: |
+          args=()
+          [[ "$CHECK_ONLY" == "true" ]] && args=(--check --diff)
+          ansible-playbook -i inventory.yml site.yml "${args[@]}"

@@ -12,5 +12,6 @@ RUN tar -xzf /tmp/walg.tgz -C /tmp && install -m 0755 /tmp/wal-g-pg-ubuntu-22.04
 COPY postgresql.conf pg_hba.conf /etc/postgresql/
 COPY initdb/ /docker-entrypoint-initdb.d/
 COPY boutique-entrypoint.sh walg-loop.sh /usr/local/bin/
+USER postgres
 ENTRYPOINT ["boutique-entrypoint.sh"]
 CMD ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf", "-c", "hba_file=/etc/postgresql/pg_hba.conf"]

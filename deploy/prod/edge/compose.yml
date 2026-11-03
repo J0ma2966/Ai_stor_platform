@@ -1,5 +1,6 @@
-# Сервер в Германии: сайт (Next.js) + мониторинг (Prometheus, Alertmanager, Grafana,
-# blackbox). Метрики серверов в UZ собираются по WireGuard; логи остаются в Loki (UZ).
+# Сервер в Германии: сайт (Next.js) + сбор метрик и алерты (Prometheus, Alertmanager,
+# blackbox). Метрики серверов в UZ собираются по WireGuard. Логи (в них ПД) и Grafana —
+# в UZ; Grafana читает этот Prometheus по WireGuard.
 name: boutique-edge
 
 x-logging: &logging
@@ -25,7 +26,6 @@ services:
       ACME_EMAIL: ${ACME_EMAIL:?}
       TLS_MODE: ${TLS_MODE:-acme}
       SITE_DOMAIN: ${SITE_DOMAIN:?}
-      GRAFANA_DOMAIN: ${GRAFANA_DOMAIN:?}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -43,6 +43,8 @@ services:
       - --storage.tsdb.path=/prometheus
       - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-30d}
       - --web.enable-lifecycle
+    # только для Grafana в UZ, через WireGuard
+    ports: ["${EDGE_PRIVATE_IP:?}:9090:9090"]
     volumes:
       - ../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ../monitoring/rules:/etc/prometheus/rules:ro
@@ -73,26 +75,6 @@ services:
     command: ["--config.file=/etc/blackbox/blackbox.yml"]
     volumes: ["../monitoring/blackbox.yml:/etc/blackbox/blackbox.yml:ro"]
 
-  grafana:
-    image: grafana/grafana:12.1.1
-    restart: unless-stopped
-    logging: *logging
-    environment:
-      GF_SERVER_ROOT_URL: https://${GRAFANA_DOMAIN}
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?}
-      GF_SECURITY_COOKIE_SECURE: "true"
-      GF_SECURITY_DISABLE_GRAVATAR: "true"
-      GF_USERS_ALLOW_SIGN_UP: "false"
-      GF_AUTH_ANONYMOUS_ENABLED: "false"
-      GF_ANALYTICS_REPORTING_ENABLED: "false"
-      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
-      LOKI_URL: http://${APP_PRIVATE_IP:?}:3100
-    volumes:
-      - ../monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ../monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
-      - grafana:/var/lib/grafana
-
 secrets:
   telegram_bot_token:
     file: ${TELEGRAM_BOT_TOKEN_FILE:-./secrets/telegram-bot-token}
@@ -102,4 +84,3 @@ volumes:
   caddy_config: {}
   prometheus: {}
   alertmanager: {}
-  grafana: {}

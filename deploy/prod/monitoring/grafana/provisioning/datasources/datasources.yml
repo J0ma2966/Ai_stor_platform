@@ -4,10 +4,10 @@ datasources:
     uid: prometheus
     type: prometheus
     access: proxy
-    url: http://prometheus:9090
+    url: $PROMETHEUS_URL
     isDefault: true
     editable: false
-  # Loki на сервере приложения в UZ (логи содержат ПД и хранятся там)
+  # Loki рядом, на этом же сервере в UZ (логи содержат ПД и хранятся там)
   - name: Loki
     uid: loki
     type: loki

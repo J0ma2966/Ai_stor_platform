@@ -102,6 +102,12 @@ case "$role" in
     if ! compose --profile tools run --rm -T migrate; then
       log "ERROR: migrations failed, nothing restarted"; restore_tag; exit 1
     fi
+    log "applying grants for boutique_app"
+    envv() { sed -n "s/^$1=//p" .env | tail -1; }
+    if ! docker run --rm -i --network host -e PGPASSWORD="$(envv OWNER_DB_PASSWORD)" postgres:16.10-alpine \
+        psql -q -h "$(envv DB_PRIVATE_IP)" -U boutique -d boutique -f - < grants.sql; then
+      log "ERROR: grants failed, nothing restarted"; restore_tag; exit 1
+    fi
     if ! rolling caddy /readyz api1 api2 api3; then
       if [[ -n "$old" ]]; then
         set_tag "$old"; log "rollback to $old"
@@ -132,7 +138,7 @@ case "$role" in
       fi
       exit 1
     fi
-    compose up -d --remove-orphans prometheus alertmanager blackbox grafana
+    compose up -d --remove-orphans prometheus alertmanager blackbox
     compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile --force >/dev/null
     # правила/цели Prometheus перечитываются без перезапуска
     compose exec -T prometheus wget -q -O /dev/null --post-data= http://127.0.0.1:9090/-/reload || true
