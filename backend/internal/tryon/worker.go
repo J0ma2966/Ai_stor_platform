@@ -38,7 +38,7 @@ var (
 
 // NotifyFunc — уведомление клиента о завершении генерации (kind: generation_succeeded,
 // generation_failed). Вызывается в транзакции смены статуса.
-// TODO(notify): подставить notify.Send из модуля уведомлений после его мержа.
+// main.go подставляет notify.Send.
 type NotifyFunc func(ctx context.Context, tx pgx.Tx, userID uuid.UUID, kind string, data map[string]any) error
 
 // Worker обрабатывает очередь генераций. Безопасно запускать в нескольких процессах:

@@ -19,7 +19,7 @@ type FittingCounter struct {
 	DB    *pgxpool.Pool
 	Log   *slog.Logger
 	// Apply пишет батч в БД. По умолчанию — products.fitting_adds.
-	// TODO(stats): после мержа PR #7 добавить запись в дневную статистику product_stats_daily.
+	// main.go подставляет products.RecordFittingAdds (плюс дневная статистика).
 	Apply func(ctx context.Context, ids []uuid.UUID, counts []int64) error
 }
 

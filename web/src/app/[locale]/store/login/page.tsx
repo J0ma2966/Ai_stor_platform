@@ -6,11 +6,13 @@ import { loginStaff } from "@/lib/api";
 import { safeNext } from "@/lib/safeNext";
 import { useRouter } from "@/i18n/navigation";
 import { ErrorBox } from "@/components/ErrorBox";
+import { useSession } from "@/lib/session";
 
 export default function StoreLogin() {
   const t = useTranslations("login");
   const router = useRouter();
-  const next = safeNext(useSearchParams().get("next"), "/store/orders");
+  const next = safeNext(useSearchParams().get("next"), "/store");
+  const { reload } = useSession();
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -21,8 +23,9 @@ export default function StoreLogin() {
     setBusy(true);
     setError(null);
     try {
-      await loginStaff(login.trim(), password);
-      router.replace(next);
+      const s = await loginStaff(login.trim(), password);
+      await reload();
+      router.replace(s.user.role === "admin" && next.startsWith("/store") ? "/admin" : next);
     } catch (err) {
       setError(err);
     } finally {

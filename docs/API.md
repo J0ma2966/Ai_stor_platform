@@ -84,9 +84,40 @@
 | GET/POST/PATCH | `/v1/admin/tariffs`, `/v1/admin/tariffs/{id}`; GET `/v1/admin/payments` | admin |
 | POST | `/v1/payments/click/prepare`, `/v1/payments/click/complete`, `/v1/payments/payme` | Click / Payme |
 
+| GET | `/v1/stores`, `/v1/stores/{slug}` | — (публичные бутики) |
+| GET | `/v1/platform` | — (стоимость генерации, контакты поддержки) |
+| DELETE | `/v1/me` `{"confirm":true}` | client (удаление аккаунта и ПД) |
+| GET/PUT/DELETE | `/v1/me/cart`, `/v1/me/cart/{product_id}` `{"qty"}` | client |
+| GET/PUT/DELETE | `/v1/me/favorites`, `/v1/me/favorites/ids`, `/v1/me/favorites/{product_id}` | client |
+| GET/POST | `/v1/me/notifications`, `/v1/me/notifications/unread-count`, `/v1/me/notifications/read` `{"ids":[..]}` или `{"all":true}` | любая |
+| GET/PATCH | `/v1/store/profile` | store |
+| GET | `/v1/store/stats?from=YYYY-MM-DD&to=YYYY-MM-DD` | store |
+| GET/PATCH/DELETE | `/v1/store/products/{id}` | store |
+| GET | `/v1/store/products/import/template` (xlsx) | store |
+| POST | `/v1/store/products/import` (тело — .xlsx, до 5 МБ, 2000 строк) | store |
+| POST | `/v1/store/products/images/bulk` `{"items":[{"filename":"SKU_front.jpg","key":"..."}]}` | store |
+| GET/POST | `/v1/admin/products`, `/v1/admin/products/{id}/status` `{"status":"unpublished|blocked|draft","reason"}` | admin |
+| GET/POST/PATCH | `/v1/admin/categories`, `/v1/admin/categories/{id}` | admin |
+| GET/PUT | `/v1/admin/settings` | admin |
+
+Заказы и окно доставки подробно: [ORDERS.md](ORDERS.md).
 Заказы и окно доставки подробно: [ORDERS.md](ORDERS.md). Оплата токенов и SMS: [PAYMENTS.md](PAYMENTS.md).
 
 Веб-панель суперадмина: `/{ru|uz}/admin` (вход по логину и паролю администратора, созданного командой `api create-admin`). Тексты панели — `web/messages/admin.{ru,uz}.json`.
+
+## Корзина, избранное, уведомления
+
+- Корзина серверная: добавить можно только опубликованный товар активного магазина в наличии. Если товар потом закончился или снят, позиция остаётся с `available=false` и `unavailable_reason` (`out_of_stock` / `unavailable`), а `can_checkout=false`. После оформления заказа оформленные позиции удаляются из корзины.
+- Уведомления: `kind` + `data` (без ПД), тексты переводит фронт. Модули создают их через `notify.Send` / `notify.SendToStore` в своей транзакции. Виды: `order_created` (магазину), `order_status` (клиенту), `product_moderated` (магазину), `payment_paid`, `payment_failed`, `generation_succeeded`, `generation_failed`, `system`. Хранятся 180 дней.
+
+## Товары магазина
+
+- Опубликовать можно только товар с тремя ракурсами фото (`422 images_required`).
+- Модерация: `unpublished` — снят администратором с причиной; магазин видит причину, после правки товар становится черновиком и его можно опубликовать снова. `blocked` — магазин не может ни редактировать, ни удалять, ни публиковать.
+- Удаление товара: в заказах остаётся снимок (название, цена, фото), файлы, на которые ссылаются заказы, не удаляются.
+- Импорт Excel: столбцы `sku, title, description, category, brand, price, in_stock`. `category` — slug или название ru/uz, `price` — в сумах, `in_stock` — да/нет. Новые товары создаются черновиками, существующие (по `sku`) обновляются. Ответ: `{total, created, updated, failed, errors:[{row, field, code}]}`.
+- Массовые фото: файлы загружаются через `/v1/uploads?purpose=product`, затем ключи привязываются по имени `АРТИКУЛ_ракурс.jpg` (ракурс: `front|side|back`, `1|2|3`, `спереди|сбоку|сзади`).
+- Статистика: просмотры и добавления в примерочную по дням (`product_stats_daily`), примерки — успешные генерации с товарами магазина, заказы и выручка (доставленные) за период; топ-10 товаров.
 
 Фильтры каталога: `q`, `category`, `store`, `brand`, `price_min`, `price_max`, `in_stock=true`, `sort=new|price_asc|price_desc|popular`.
 

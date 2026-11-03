@@ -33,6 +33,9 @@ var publicRoutes = map[string]bool{
 	"POST /v1/payments/click/prepare":  true, // provider webhooks: authenticated by signature, not by user token
 	"POST /v1/payments/click/complete": true,
 	"POST /v1/payments/payme":          true,
+	"GET /v1/stores":                   true,
+	"GET /v1/stores/{slug}":            true,
+	"GET /v1/platform":                 true,
 }
 
 // rolePrefixes — which roles may reach a route prefix. Every other authenticated role must get 403.

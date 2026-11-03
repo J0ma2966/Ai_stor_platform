@@ -8,18 +8,24 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/boutique-market/backend/internal/admin"
 	"github.com/boutique-market/backend/internal/auth"
+	"github.com/boutique-market/backend/internal/catalogadmin"
 	"github.com/boutique-market/backend/internal/config"
 	"github.com/boutique-market/backend/internal/httpx"
 	"github.com/boutique-market/backend/internal/media"
+	"github.com/boutique-market/backend/internal/notify"
 	"github.com/boutique-market/backend/internal/orders"
 	"github.com/boutique-market/backend/internal/payments"
 	"github.com/boutique-market/backend/internal/products"
 	"github.com/boutique-market/backend/internal/ratelimit"
+	"github.com/boutique-market/backend/internal/shop"
+	"github.com/boutique-market/backend/internal/stores"
 	"github.com/boutique-market/backend/internal/tryon"
 	"github.com/boutique-market/backend/internal/users"
 )
@@ -32,7 +38,9 @@ type Deps struct {
 	Storage media.Storage
 	SMS     auth.SMSSender
 	Views   *products.ViewCounter // nil — просмотры не считаются (тесты)
-	Fitting *tryon.FittingCounter // nil — счётчик «В примерочную» отключён
+	// UserPurge — очистка данных клиента в других модулях при удалении аккаунта.
+	UserPurge []users.PurgeFunc
+	Fitting   *tryon.FittingCounter // nil — счётчик «В примерочную» отключён
 }
 
 func New(d Deps) http.Handler {
@@ -45,8 +53,12 @@ func New(d Deps) http.Handler {
 	revoker := auth.NewRevoker(d.Redis, d.Cfg.AccessTTL)
 	authH := &auth.Handlers{Svc: authSvc, Limiter: limiter, AllowedPrefixes: d.Cfg.OTPAllowedPrefixes,
 		CookieDomain: d.Cfg.CookieDomain, CookieSecure: d.Cfg.CookieSecure}
-	usersH := &users.Handlers{DB: d.DB}
-	productsH := &products.Handlers{DB: d.DB, PublicBase: d.Cfg.PublicMediaURL, Views: d.Views}
+	usersH := &users.Handlers{DB: d.DB, Revoker: revoker, Purge: d.UserPurge}
+	productsH := &products.Handlers{DB: d.DB, PublicBase: d.Cfg.PublicMediaURL, Views: d.Views, Media: d.Storage}
+	shopH := &shop.Handlers{DB: d.DB, PublicBase: d.Cfg.PublicMediaURL}
+	storesH := &stores.Handlers{DB: d.DB, PublicBase: d.Cfg.PublicMediaURL}
+	notifyH := &notify.Handlers{DB: d.DB}
+	catalogH := &catalogadmin.Handlers{DB: d.DB, PublicBase: d.Cfg.PublicMediaURL}
 	mediaH := &media.Handlers{Store: d.Storage, Limiter: limiter, Redis: d.Redis, PublicBase: d.Cfg.PublicMediaURL,
 		MaxBytes: int64(d.Cfg.MaxUploadMB) << 20, Sem: media.NewSem(max(d.Cfg.UploadConcurrency, 1))}
 	if !d.Cfg.TryOnEnabled() {
@@ -56,6 +68,10 @@ func New(d Deps) http.Handler {
 	ordersH := &orders.Handlers{DB: d.DB, Media: d.Storage, Limiter: limiter, PublicBase: d.Cfg.PublicMediaURL}
 	tryonH := &tryon.Handlers{DB: d.DB, Store: d.Storage, Limiter: limiter, Redis: d.Redis, PublicBase: d.Cfg.PublicMediaURL,
 		Retention: RetentionFrom(d.Cfg), MaxActive: d.Cfg.TryOn.MaxActive, Provider: d.Cfg.TryOn.Provider, Fitting: d.Fitting}
+	// Удаление аккаунта стирает и биометрию (фото тела, результаты примерок).
+	usersH.Purge = append(usersH.Purge, func(ctx context.Context, tx pgx.Tx, userID uuid.UUID) error {
+		return tryon.PurgeUser(ctx, tx, tryonH.Store, userID)
+	})
 	paymentsH, err := payments.New(d.DB, d.Cfg, limiter)
 	if err != nil {
 		panic("payments config: " + err.Error()) // неверный CLICK_/PAYME_ALLOWED_IPS — ошибка конфигурации
@@ -91,6 +107,8 @@ func New(d Deps) http.Handler {
 
 				r.Route("/auth", authH.Routes)
 				productsH.PublicRoutes(r)
+				storesH.PublicRoutes(r)
+				catalogH.PublicRoutes(r)
 				paymentsH.PublicRoutes(r)
 				if d.Cfg.TryOnEnabled() {
 					tryonH.PublicRoutes(r)
@@ -100,7 +118,12 @@ func New(d Deps) http.Handler {
 
 				r.Group(func(r chi.Router) {
 					r.Use(auth.RequireRole(auth.RoleClient, auth.RoleStore, auth.RoleAdmin))
-					r.Route("/me", usersH.Routes)
+					r.Route("/me", func(r chi.Router) {
+						usersH.Routes(r)
+						r.Route("/notifications", notifyH.Routes)
+						r.With(auth.RequireRole(auth.RoleClient)).Route("/cart", shopH.CartRoutes)
+						r.With(auth.RequireRole(auth.RoleClient)).Route("/favorites", shopH.FavoriteRoutes)
+					})
 					// Заказы клиента: оформление, список, статусы.
 					r.With(auth.RequireRole(auth.RoleClient)).Route("/orders", ordersH.ClientRoutes)
 					// Покупка токенов: создание платежа и его статус.
@@ -116,6 +139,7 @@ func New(d Deps) http.Handler {
 				r.Route("/store", func(r chi.Router) {
 					r.Use(auth.RequireRole(auth.RoleStore))
 					productsH.StoreRoutes(r)
+					storesH.StoreRoutes(r)
 					// Окно доставки магазина: только заказы своего магазина.
 					r.Route("/orders", ordersH.StoreRoutes)
 				})
@@ -123,6 +147,7 @@ func New(d Deps) http.Handler {
 				r.Route("/admin", func(r chi.Router) {
 					r.Use(auth.RequireRole(auth.RoleAdmin))
 					adminH.Routes(r)
+					catalogH.AdminRoutes(r)
 					r.Route("/orders", ordersH.AdminRoutes)
 					paymentsH.AdminRoutes(r)
 					r.Route("/tryon", tryonH.AdminRoutes)

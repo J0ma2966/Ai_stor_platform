@@ -18,6 +18,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
@@ -26,6 +28,7 @@ import (
 	"github.com/boutique-market/backend/internal/config"
 	"github.com/boutique-market/backend/internal/janitor"
 	"github.com/boutique-market/backend/internal/media"
+	"github.com/boutique-market/backend/internal/notify"
 	"github.com/boutique-market/backend/internal/orders"
 	"github.com/boutique-market/backend/internal/payments"
 	"github.com/boutique-market/backend/internal/platform/cache"
@@ -102,7 +105,10 @@ func run(log *slog.Logger, args []string) error {
 		return err
 	}
 	worker := &tryon.Worker{DB: pool, Store: store, Provider: provider, Log: log,
-		Concurrency: cfg.TryOn.Workers, Timeout: cfg.TryOn.Timeout, MaxAttempts: cfg.TryOn.MaxAttempts}
+		Concurrency: cfg.TryOn.Workers, Timeout: cfg.TryOn.Timeout, MaxAttempts: cfg.TryOn.MaxAttempts,
+		Notify: func(ctx context.Context, tx pgx.Tx, userID uuid.UUID, kind string, data map[string]any) error {
+			return notify.Send(ctx, tx, userID, kind, data)
+		}}
 	if provider == nil { // TRYON_PROVIDER=off
 		if len(args) > 0 && args[0] == "worker" {
 			return errors.New("AI try-on is turned off (TRYON_PROVIDER=off); worker is not needed")
@@ -130,7 +136,11 @@ func run(log *slog.Logger, args []string) error {
 
 	views := &products.ViewCounter{Redis: rdb, DB: pool, Log: log}
 	go views.Run(ctx, 30*time.Second)
-	fitting := &tryon.FittingCounter{Redis: rdb, DB: pool, Log: log}
+	fitting := &tryon.FittingCounter{Redis: rdb, DB: pool, Log: log,
+		// общий счётчик и дневная статистика магазина
+		Apply: func(ctx context.Context, ids []uuid.UUID, counts []int64) error {
+			return products.RecordFittingAdds(ctx, pool, ids, counts)
+		}}
 	go fitting.Run(ctx, 30*time.Second)
 	ret := server.RetentionFrom(cfg)
 	tryonJob := func(name string, fn func(context.Context, *pgxpool.Pool, media.Storage, tryon.Retention, time.Time) (int64, error)) janitor.Job {
