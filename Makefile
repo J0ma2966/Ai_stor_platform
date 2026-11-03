@@ -1,11 +1,14 @@
 export TEST_DATABASE_URL ?= postgres://postgres@localhost:5432/postgres?sslmode=disable
 
+# Порты из .env (POSTGRES_HOST_PORT и т.д.) compose видит только через --env-file.
+COMPOSE := docker compose -f deploy/docker-compose.yml $(if $(wildcard .env),--env-file .env)
+
 .PHONY: up down test lint migrate backup verify-backup run
 
 up:            ## поднять всё окружение
-	docker compose -f deploy/docker-compose.yml up -d --build
+	$(COMPOSE) up -d --build
 down:
-	docker compose -f deploy/docker-compose.yml down
+	$(COMPOSE) down
 run:           ## запустить API локально (нужен .env)
 	cd backend && set -a && . ../.env && set +a && go run ./cmd/api
 test:          ## все тесты, включая интеграционные (нужна PostgreSQL)
@@ -15,6 +18,6 @@ lint:
 migrate:       ## накатить миграции
 	cd backend && go run ./cmd/api migrate up
 backup:        ## разовый бэкап локальной базы
-	docker compose -f deploy/docker-compose.yml exec backup backup.sh
+	$(COMPOSE) exec backup backup.sh
 verify-backup: ## бэкап + восстановление во временную базу + сверка
 	DATABASE_URL=$${DATABASE_URL} ADMIN_DATABASE_URL=$${ADMIN_DATABASE_URL} deploy/backup/verify-restore.sh
