@@ -5,8 +5,10 @@ import { NextIntlClientProvider } from "next-intl";
 import messages from "../../messages/ru.json";
 
 const replace = vi.fn();
+// как и настоящий роутер, объект стабилен между рендерами (он в зависимостях эффекта)
+const router = { replace };
 vi.mock("@/i18n/navigation", () => ({
-  useRouter: () => ({ replace }),
+  useRouter: () => router,
   usePathname: () => "/store/orders",
 }));
 
@@ -38,6 +40,7 @@ describe("AuthGate after a page reload", () => {
     wrap();
     expect(await screen.findByText(messages.errors.rate_limited)).toBeTruthy();
     expect(replace).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     await userEvent.click(screen.getByRole("button", { name: messages.app.retry }));
     expect(await screen.findByText("cabinet")).toBeTruthy();
     expect(replace).not.toHaveBeenCalled();
