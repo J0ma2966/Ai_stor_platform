@@ -79,8 +79,12 @@
 | POST/GET | `/v1/orders`, `/v1/orders/{id}` | client |
 | GET/POST | `/v1/store/orders`, `/v1/store/orders/{id}`, `/v1/store/orders/{id}/status` | store |
 | GET/POST | `/v1/admin/orders`, `/v1/admin/orders/{id}`, `/v1/admin/orders/{id}/status` | admin |
+| GET | `/v1/tariffs` | — |
+| GET/POST | `/v1/payments`, `/v1/payments/{id}` | client |
+| GET/POST/PATCH | `/v1/admin/tariffs`, `/v1/admin/tariffs/{id}`; GET `/v1/admin/payments` | admin |
+| POST | `/v1/payments/click/prepare`, `/v1/payments/click/complete`, `/v1/payments/payme` | Click / Payme |
 
-Заказы и окно доставки подробно: [ORDERS.md](ORDERS.md).
+Заказы и окно доставки подробно: [ORDERS.md](ORDERS.md). Оплата токенов и SMS: [PAYMENTS.md](PAYMENTS.md).
 
 Веб-панель суперадмина: `/{ru|uz}/admin` (вход по логину и паролю администратора, созданного командой `api create-admin`). Тексты панели — `web/messages/admin.{ru,uz}.json`.
 

@@ -1,6 +1,10 @@
 {
   "app": { "name": "Butiklar", "lang": "Русский", "logout": "Chiqish", "loading": "Yuklanmoqda…", "retry": "Qayta urinish", "back": "Orqaga", "myOrders": "Buyurtmalarim", "storeOrders": "Do‘kon buyurtmalari" },
   "errors": {
+    "provider_unavailable": "Bu to‘lov usuli hozir mavjud emas.",
+    "tariff_not_found": "Tarif endi mavjud emas. Sahifani yangilang.",
+    "idempotency_key_reused": "Sahifani yangilang va xaridni takrorlang.",
+    "checkout_unavailable": "To‘lov sahifasini ochib bo‘lmadi. Qayta urinib ko‘ring.",
     "requestId": "Qo‘llab-quvvatlash uchun kod: {id}",
     "network": "Server bilan aloqa yo‘q. Internetni tekshirib, qayta urinib ko‘ring.",
     "unauthorized": "Hisobingizga kiring.",
@@ -115,5 +119,6 @@
     "confirmAction": "Amalni tasdiqlash",
     "cancel": "Bekor qilish",
     "finished": "Buyurtma yakunlangan, holat endi o‘zgarmaydi."
-  }
+  },
+  "balance": {"title": "Balans va token sotib olish", "current": "Hozirgi balans", "tokens": "{count} ta token", "buy": "Token sotib olish", "noTariffs": "Tariflar hali e’lon qilinmagan.", "popular": "Ommabop", "click": "Click", "payme": "Payme", "redirecting": "To‘lovga o‘tilmoqda…", "history": "To‘lovlar tarixi", "paidOk": "To‘lov o‘tdi, {count} ta token hisobga o‘tkazildi.", "waiting": "To‘lov tasdig‘ini kutyapmiz…", "stillPending": "To‘lov hali tasdiqlanmadi. Pul yechilgan bo‘lsa, tokenlar bir necha daqiqada keladi.", "failed": "To‘lov o‘tmadi. Pul yechilmadi, qayta urinib ko‘ring.", "status_pending": "To‘lov kutilmoqda", "status_paid": "To‘langan", "status_declined": "Rad etilgan", "status_cancelled": "Bekor qilingan"}
 }

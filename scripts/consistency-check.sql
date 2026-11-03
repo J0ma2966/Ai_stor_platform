@@ -35,6 +35,14 @@ BEGIN
   WHERE p.status <> 'paid' AND EXISTS (SELECT 1 FROM token_ledger t
         WHERE t.reference_type = 'payment' AND t.reference_id = p.id AND t.amount > 0);
   IF n > 0 THEN problems := problems || format('%s unpaid payments credited', n); END IF;
+  -- 5b. a paid payment has exactly one performed provider transaction, an unpaid one has none
+  SELECT count(*) INTO n FROM payments p
+  WHERE (SELECT count(*) FROM payment_transactions t WHERE t.payment_id = p.id AND t.state = 2)
+        <> CASE WHEN p.status = 'paid' THEN 1 ELSE 0 END;
+  IF n > 0 THEN problems := problems || format('%s payments disagree with provider transactions', n); END IF;
+  -- 5c. provider transaction amount equals the payment amount
+  SELECT count(*) INTO n FROM payment_transactions t JOIN payments p ON p.id = t.payment_id WHERE t.amount <> p.amount;
+  IF n > 0 THEN problems := problems || format('%s provider transactions with a wrong amount', n); END IF;
 
   -- 6. failed generations refunded; successful ones not refunded
   SELECT count(*) INTO n FROM generations g

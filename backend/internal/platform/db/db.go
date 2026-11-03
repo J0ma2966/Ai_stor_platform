@@ -60,7 +60,9 @@ func migrate(ctx context.Context, sqlDB *sql.DB, command string, args ...string)
 	if err := goose.SetDialect("postgres"); err != nil {
 		return err
 	}
-	return goose.RunContext(ctx, command, sqlDB, ".", args...)
+	// Миграции разных модулей нумеруются диапазонами (00010–, 00020–, …) и могут
+	// вливаться не по порядку — пропущенную более раннюю goose применит, а не упадёт.
+	return goose.RunWithOptionsContext(ctx, command, sqlDB, ".", args, goose.WithAllowMissing())
 }
 
 // Tx выполняет fn в транзакции; при ошибке или панике — откат.

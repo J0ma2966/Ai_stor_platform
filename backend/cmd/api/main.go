@@ -25,10 +25,12 @@ import (
 	"github.com/boutique-market/backend/internal/janitor"
 	"github.com/boutique-market/backend/internal/media"
 	"github.com/boutique-market/backend/internal/orders"
+	"github.com/boutique-market/backend/internal/payments"
 	"github.com/boutique-market/backend/internal/platform/cache"
 	"github.com/boutique-market/backend/internal/platform/db"
 	"github.com/boutique-market/backend/internal/products"
 	"github.com/boutique-market/backend/internal/server"
+	"github.com/boutique-market/backend/internal/sms"
 )
 
 func main() {
@@ -92,11 +94,14 @@ func run(log *slog.Logger, args []string) error {
 	if err != nil {
 		return err
 	}
-	var sms auth.SMSSender = auth.LogSender{Log: log}
-	if cfg.IsProd() {
-		// TODO: подключить SMS-провайдера (Eskiz / Playmobile) — без него prod не стартует.
-		return errors.New("SMS provider is not configured for prod")
+	// config.Load уже запретил SMS_PROVIDER=log в prod.
+	var smsSender auth.SMSSender = auth.LogSender{Log: log}
+	if cfg.SMSProvider == "eskiz" {
+		smsSender = &sms.Eskiz{BaseURL: cfg.EskizURL, Email: cfg.EskizEmail, Password: cfg.EskizPassword,
+			From: cfg.EskizFrom, Template: cfg.SMSTemplate}
 	}
+	log.Info("providers", slog.String("sms", cfg.SMSProvider), slog.Bool("click", cfg.ClickEnabled()),
+		slog.Bool("payme", cfg.PaymeEnabled()), slog.Bool("payme_test", cfg.PaymeTest))
 
 	views := &products.ViewCounter{Redis: rdb, DB: pool, Log: log}
 	go views.Run(ctx, 30*time.Second)
@@ -110,11 +115,17 @@ func run(log *slog.Logger, args []string) error {
 		Run: func(ctx context.Context) (int64, error) {
 			return orders.PurgeOrphanDeliveryPhotos(ctx, pool, store, time.Now())
 		},
+	}, {
+		// брошенные неоплаченные платежи (Payme сам отменяет свои транзакции через 12 ч)
+		Name: "expire_pending_payments",
+		Run: func(ctx context.Context) (int64, error) {
+			return payments.ExpirePending(ctx, pool, 24*time.Hour)
+		},
 	}}}).Run(ctx, time.Hour)
 
 	api := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           server.New(server.Deps{Cfg: cfg, Log: log, DB: pool, Redis: rdb, Storage: store, SMS: sms, Views: views}),
+		Handler:           server.New(server.Deps{Cfg: cfg, Log: log, DB: pool, Redis: rdb, Storage: store, SMS: smsSender, Views: views}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       60 * time.Second,
 		WriteTimeout:      75 * time.Second,

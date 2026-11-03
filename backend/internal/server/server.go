@@ -17,6 +17,7 @@ import (
 	"github.com/boutique-market/backend/internal/httpx"
 	"github.com/boutique-market/backend/internal/media"
 	"github.com/boutique-market/backend/internal/orders"
+	"github.com/boutique-market/backend/internal/payments"
 	"github.com/boutique-market/backend/internal/products"
 	"github.com/boutique-market/backend/internal/ratelimit"
 	"github.com/boutique-market/backend/internal/users"
@@ -48,6 +49,10 @@ func New(d Deps) http.Handler {
 		MaxBytes: int64(d.Cfg.MaxUploadMB) << 20, Sem: media.NewSem(max(d.Cfg.UploadConcurrency, 1))}
 	adminH := &admin.Handlers{DB: d.DB, Revoker: revoker}
 	ordersH := &orders.Handlers{DB: d.DB, Media: d.Storage, Limiter: limiter, PublicBase: d.Cfg.PublicMediaURL}
+	paymentsH, err := payments.New(d.DB, d.Cfg, limiter)
+	if err != nil {
+		panic("payments config: " + err.Error()) // неверный CLICK_/PAYME_ALLOWED_IPS — ошибка конфигурации
+	}
 
 	r := chi.NewRouter()
 	r.Use(httpx.RequestContext(d.Log, d.Cfg.TrustedProxy))
@@ -60,37 +65,49 @@ func New(d Deps) http.Handler {
 	r.Get("/readyz", ready(d))
 
 	r.Route("/v1", func(r chi.Router) {
-		r.Use(limiter.ByIP(ratelimit.Rule{Name: "global_ip", Limit: 600, Window: time.Minute}))
-		r.Use(auth.Authenticate(signer, revoker))
-
-		// Загрузка файлов — отдельно: медленный мобильный интернет, свой таймаут 60 с.
-		r.With(timeout(60*time.Second), auth.RequireRole(auth.RoleClient, auth.RoleStore, auth.RoleAdmin)).
-			Post("/uploads", mediaH.Upload)
-
+		// Вебхуки Click/Payme: без пользовательского токена и общего лимита по IP
+		// (все запросы идут с нескольких IP провайдера); защищены подписью/ключом кассы.
 		r.Group(func(r chi.Router) {
 			r.Use(timeout(15 * time.Second))
+			paymentsH.WebhookRoutes(r)
+		})
+		r.Group(func(r chi.Router) {
+			r.Use(limiter.ByIP(ratelimit.Rule{Name: "global_ip", Limit: 600, Window: time.Minute}))
+			r.Use(auth.Authenticate(signer, revoker))
 
-			r.Route("/auth", authH.Routes)
-			productsH.PublicRoutes(r)
+			// Загрузка файлов — отдельно: медленный мобильный интернет, свой таймаут 60 с.
+			r.With(timeout(60*time.Second), auth.RequireRole(auth.RoleClient, auth.RoleStore, auth.RoleAdmin)).
+				Post("/uploads", mediaH.Upload)
 
 			r.Group(func(r chi.Router) {
-				r.Use(auth.RequireRole(auth.RoleClient, auth.RoleStore, auth.RoleAdmin))
-				r.Route("/me", usersH.Routes)
-				// Заказы клиента: оформление, список, статусы.
-				r.With(auth.RequireRole(auth.RoleClient)).Route("/orders", ordersH.ClientRoutes)
-			})
+				r.Use(timeout(15 * time.Second))
 
-			r.Route("/store", func(r chi.Router) {
-				r.Use(auth.RequireRole(auth.RoleStore))
-				productsH.StoreRoutes(r)
-				// Окно доставки магазина: только заказы своего магазина.
-				r.Route("/orders", ordersH.StoreRoutes)
-			})
+				r.Route("/auth", authH.Routes)
+				productsH.PublicRoutes(r)
+				paymentsH.PublicRoutes(r)
 
-			r.Route("/admin", func(r chi.Router) {
-				r.Use(auth.RequireRole(auth.RoleAdmin))
-				adminH.Routes(r)
-				r.Route("/orders", ordersH.AdminRoutes)
+				r.Group(func(r chi.Router) {
+					r.Use(auth.RequireRole(auth.RoleClient, auth.RoleStore, auth.RoleAdmin))
+					r.Route("/me", usersH.Routes)
+					// Заказы клиента: оформление, список, статусы.
+					r.With(auth.RequireRole(auth.RoleClient)).Route("/orders", ordersH.ClientRoutes)
+					// Покупка токенов: создание платежа и его статус.
+					r.With(auth.RequireRole(auth.RoleClient)).Group(paymentsH.ClientRoutes)
+				})
+
+				r.Route("/store", func(r chi.Router) {
+					r.Use(auth.RequireRole(auth.RoleStore))
+					productsH.StoreRoutes(r)
+					// Окно доставки магазина: только заказы своего магазина.
+					r.Route("/orders", ordersH.StoreRoutes)
+				})
+
+				r.Route("/admin", func(r chi.Router) {
+					r.Use(auth.RequireRole(auth.RoleAdmin))
+					adminH.Routes(r)
+					r.Route("/orders", ordersH.AdminRoutes)
+					paymentsH.AdminRoutes(r)
+				})
 			})
 		})
 	})
