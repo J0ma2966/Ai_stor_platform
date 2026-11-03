@@ -25,7 +25,7 @@ func (m memHas) Has(key string) bool {
 	return found
 }
 
-func list(r resp) []any { l, _ := r.Body["data"].([]any); return l }
+func listAny(r resp) []any { l, _ := r.Body["data"].([]any); return l }
 
 func uploadKeys(t *testing.T, c *client, purpose string, n int) []string {
 	t.Helper()
@@ -40,7 +40,7 @@ func TestPublicStoresAndStoreProfile(t *testing.T) {
 	f := newOrderFixture(t)
 	anon := f.e.client()
 
-	stores := list(anon.must(200, "GET", "/v1/stores", nil))
+	stores := listAny(anon.must(200, "GET", "/v1/stores", nil))
 	if len(stores) != 2 {
 		t.Fatalf("stores: %v", stores)
 	}
@@ -74,7 +74,7 @@ func TestPublicStoresAndStoreProfile(t *testing.T) {
 	if pub["name"] != "Альфа" || pub["product_count"].(float64) != 2 {
 		t.Fatalf("public store: %v", pub)
 	}
-	if list(anon.must(200, "GET", "/v1/stores?q=альф", nil)) == nil {
+	if listAny(anon.must(200, "GET", "/v1/stores?q=альф", nil)) == nil {
 		t.Fatal("search by name")
 	}
 	// каталог: магазин и зона в карточке
@@ -86,7 +86,7 @@ func TestPublicStoresAndStoreProfile(t *testing.T) {
 
 func TestStoreProductEditDeleteAndPublishRules(t *testing.T) {
 	f := newOrderFixture(t)
-	cats := list(f.storeA.must(200, "GET", "/v1/categories", nil))
+	cats := listAny(f.storeA.must(200, "GET", "/v1/categories", nil))
 	cat := cats[1].(map[string]any)["id"].(string)
 
 	// товар без фото нельзя опубликовать
@@ -172,17 +172,17 @@ func TestCartAndFavorites(t *testing.T) {
 	if len(ids) != 1 || ids[0] != f.prodA {
 		t.Fatalf("favorite ids: %v", ids)
 	}
-	favs := list(cl.must(200, "GET", "/v1/me/favorites", nil))
+	favs := listAny(cl.must(200, "GET", "/v1/me/favorites", nil))
 	if len(favs) != 1 || favs[0].(map[string]any)["available"] != true {
 		t.Fatalf("favorites: %v", favs)
 	}
 	other := f.e.client()
 	other.loginClient("+998901234501")
-	if n := len(list(other.must(200, "GET", "/v1/me/favorites", nil))); n != 0 {
+	if n := len(listAny(other.must(200, "GET", "/v1/me/favorites", nil))); n != 0 {
 		t.Fatal("favorites leak between users")
 	}
 	cl.must(204, "DELETE", "/v1/me/favorites/"+f.prodA, nil)
-	if n := len(list(cl.must(200, "GET", "/v1/me/favorites", nil))); n != 0 {
+	if n := len(listAny(cl.must(200, "GET", "/v1/me/favorites", nil))); n != 0 {
 		t.Fatal("favorite not removed")
 	}
 }
@@ -198,11 +198,11 @@ func TestNotificationsForOrdersAndModeration(t *testing.T) {
 	if n := f.storeA.must(200, "GET", "/v1/me/notifications/unread-count", nil).data()["unread"].(float64); n != 1 {
 		t.Fatalf("store unread=%v", n)
 	}
-	if n := len(list(f.storeB.must(200, "GET", "/v1/me/notifications", nil))); n != 0 {
+	if n := len(listAny(f.storeB.must(200, "GET", "/v1/me/notifications", nil))); n != 0 {
 		t.Fatal("other store notified")
 	}
 	f.storeA.must(200, "POST", "/v1/store/orders/"+oid+"/status", map[string]any{"status": "confirmed"})
-	items := list(cl.must(200, "GET", "/v1/me/notifications", nil))
+	items := listAny(cl.must(200, "GET", "/v1/me/notifications", nil))
 	if len(items) != 1 {
 		t.Fatalf("client notifications: %v", items)
 	}
@@ -234,7 +234,7 @@ func TestNotificationsForOrdersAndModeration(t *testing.T) {
 		t.Fatalf("store sees: %v", st)
 	}
 	var kinds []string
-	for _, it := range list(f.storeA.must(200, "GET", "/v1/me/notifications", nil)) {
+	for _, it := range listAny(f.storeA.must(200, "GET", "/v1/me/notifications", nil)) {
 		kinds = append(kinds, it.(map[string]any)["kind"].(string))
 	}
 	if strings.Join(kinds, ",") != "product_moderated,order_created" {
@@ -247,18 +247,18 @@ func TestNotificationsForOrdersAndModeration(t *testing.T) {
 	f.adm.must(200, "POST", "/v1/admin/products/"+f.prodA2+"/status", map[string]any{"status": "blocked", "reason": "Подделка"})
 	f.storeA.must(409, "PATCH", "/v1/store/products/"+f.prodA2, map[string]any{"title": "x"})
 	f.storeA.must(404, "DELETE", "/v1/store/products/"+f.prodA2, nil)
-	list1 := list(f.adm.must(200, "GET", "/v1/admin/products?status=blocked", nil))
+	list1 := listAny(f.adm.must(200, "GET", "/v1/admin/products?status=blocked", nil))
 	if len(list1) != 1 || list1[0].(map[string]any)["id"] != f.prodA2 {
 		t.Fatalf("admin filter: %v", list1)
 	}
 	f.adm.must(400, "GET", "/v1/admin/products?status=evil", nil)
 	// пагинация списка админа
 	page := f.adm.must(200, "GET", "/v1/admin/products?limit=2", nil)
-	if len(list(page)) != 2 || page.Body["next_cursor"] == nil {
+	if len(listAny(page)) != 2 || page.Body["next_cursor"] == nil {
 		t.Fatalf("admin page: %s", page.Raw)
 	}
 	page2 := f.adm.must(200, "GET", "/v1/admin/products?limit=2&cursor="+page.Body["next_cursor"].(string), nil)
-	if len(list(page2)) != 1 {
+	if len(listAny(page2)) != 1 {
 		t.Fatalf("admin page2: %s", page2.Raw)
 	}
 	f.storeA.must(403, "GET", "/v1/admin/products", nil)
@@ -271,16 +271,16 @@ func TestCategoriesAndSettingsAdmin(t *testing.T) {
 	f.adm.must(422, "POST", "/v1/admin/categories", map[string]any{"slug": "Bad Slug", "zone": "top", "name_ru": "x", "name_uz": "y"})
 	id := f.adm.must(201, "POST", "/v1/admin/categories", map[string]any{"slug": "dresses", "zone": "top", "name_ru": "Платья", "name_uz": "Ko'ylaklar", "sort": 25}).data()["id"].(string)
 	f.adm.must(409, "POST", "/v1/admin/categories", map[string]any{"slug": "dresses", "zone": "top", "name_ru": "x", "name_uz": "y"})
-	if n := len(list(anon.must(200, "GET", "/v1/categories", nil))); n != 5 {
+	if n := len(listAny(anon.must(200, "GET", "/v1/categories", nil))); n != 5 {
 		t.Fatalf("public categories: %d", n)
 	}
 	f.adm.must(200, "PATCH", "/v1/admin/categories/"+id, map[string]any{"is_active": false})
-	if n := len(list(anon.must(200, "GET", "/v1/categories", nil))); n != 4 {
+	if n := len(listAny(anon.must(200, "GET", "/v1/categories", nil))); n != 4 {
 		t.Fatalf("inactive category still public: %d", n)
 	}
 	f.adm.must(422, "PATCH", "/v1/admin/categories/"+id, map[string]any{"parent_id": id})
 	f.adm.must(404, "PATCH", "/v1/admin/categories/"+uuid.NewString(), map[string]any{"sort": 1})
-	if n := len(list(f.adm.must(200, "GET", "/v1/admin/categories", nil))); n != 5 {
+	if n := len(listAny(f.adm.must(200, "GET", "/v1/admin/categories", nil))); n != 5 {
 		t.Fatalf("admin categories: %d", n)
 	}
 
@@ -361,7 +361,7 @@ func TestExcelImportAndBulkPhotos(t *testing.T) {
 		t.Fatalf("missing columns: %s", r.Raw)
 	}
 	// товары другого магазина не задеты
-	if n := len(list(f.storeB.must(200, "GET", "/v1/store/products", nil))); n != 1 {
+	if n := len(listAny(f.storeB.must(200, "GET", "/v1/store/products", nil))); n != 1 {
 		t.Fatalf("store B products: %d", n)
 	}
 
@@ -402,6 +402,10 @@ func TestStoreStats(t *testing.T) {
 	if err := products.RecordFittingAdd(ctx, f.e.d.DB, uuid.MustParse(f.prodA)); err != nil {
 		t.Fatal(err)
 	}
+	// батч из счётчика примерочной (Redis → БД)
+	if err := products.RecordFittingAdds(ctx, f.e.d.DB, []uuid.UUID{uuid.MustParse(f.prodA)}, []int64{2}); err != nil {
+		t.Fatal(err)
+	}
 	cl := f.e.client()
 	r := cl.loginClient("+998901234520")
 	uid := r.data()["user"].(map[string]any)["id"].(string)
@@ -412,7 +416,7 @@ func TestStoreStats(t *testing.T) {
 	_ = o
 
 	st := f.storeA.must(200, "GET", "/v1/store/stats", nil).data()
-	want := map[string]float64{"products_total": 2, "products_published": 2, "views": 4, "fitting_adds": 1, "tryons": 1, "orders": 1, "revenue": 0}
+	want := map[string]float64{"products_total": 2, "products_published": 2, "views": 4, "fitting_adds": 3, "tryons": 1, "orders": 1, "revenue": 0}
 	for k, v := range want {
 		if st[k].(float64) != v {
 			t.Errorf("%s = %v, want %v", k, st[k], v)

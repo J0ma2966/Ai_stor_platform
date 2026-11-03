@@ -2,6 +2,7 @@ package products
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strconv"
 	"time"
@@ -114,4 +115,28 @@ const (
 		INSERT INTO product_stats_daily (product_id, day, fitting_adds)
 		SELECT id, ` + StatsDay + `, 1 FROM u
 		ON CONFLICT (product_id, day) DO UPDATE SET fitting_adds = product_stats_daily.fitting_adds + 1`
+	fittingAddsSQL = `
+		WITH u AS (
+			UPDATE products p SET fitting_adds = p.fitting_adds + x.n
+			FROM unnest($1::uuid[], $2::bigint[]) AS x(id, n)
+			WHERE p.id = x.id RETURNING p.id, x.n
+		)
+		INSERT INTO product_stats_daily (product_id, day, fitting_adds)
+		SELECT id, ` + StatsDay + `, n FROM u
+		ON CONFLICT (product_id, day) DO UPDATE SET fitting_adds = product_stats_daily.fitting_adds + EXCLUDED.fitting_adds`
 )
+
+// RecordFittingAdds — батчевая версия RecordFittingAdd: счётчик примерочной копится
+// в Redis и сбрасывается сюда пачкой (ids[i] получил counts[i] добавлений).
+func RecordFittingAdds(ctx context.Context, q interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+}, ids []uuid.UUID, counts []int64) error {
+	if len(ids) != len(counts) {
+		return errors.New("RecordFittingAdds: ids and counts length mismatch")
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	_, err := q.Exec(ctx, fittingAddsSQL, ids, counts)
+	return err
+}

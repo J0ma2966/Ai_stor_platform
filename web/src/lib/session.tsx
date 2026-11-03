@@ -118,8 +118,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
+const EMPTY_FAVORITES: Set<string> = new Set();
+
+// До монтирования компонента отдаём то же, что видел сервер (сессия ещё не загружена).
+// Иначе компонент, который гидрируется позже (внутри Suspense), получил бы уже
+// загруженную сессию и разошёлся бы с серверным HTML (React #418).
 export function useSession(): SessionState {
   const v = useContext(Ctx);
   if (!v) throw new Error("useSession outside SessionProvider");
-  return v;
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (mounted) return v;
+  return { ...v, ready: false, me: null, cartQty: 0, unread: 0, favorites: EMPTY_FAVORITES };
 }

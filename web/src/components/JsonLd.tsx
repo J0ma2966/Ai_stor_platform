@@ -9,5 +9,6 @@ export function ldJson(data: unknown): string {
 
 export async function JsonLd({ data }: { data: unknown }) {
   const nonce = (await headers()).get("x-nonce") ?? undefined;
-  return <script type="application/ld+json" nonce={nonce}>{ldJson(data)}</script>;
+  // Браузер скрывает nonce из DOM после загрузки — расхождение атрибута ожидаемо.
+  return <script type="application/ld+json" nonce={nonce} suppressHydrationWarning>{ldJson(data)}</script>;
 }
