@@ -146,7 +146,7 @@ export function BalancePage({ returnedPaymentId }: { returnedPaymentId?: string 
                   <strong>{t("tokens", { count: p.tokens })} · {formatSum(p.amount, locale)}</strong>
                   <span className="muted small">{formatDateTime(p.created_at, locale)} · {t(p.provider)}</span>
                 </span>
-                <span className={`badge ${badge[p.status]}`}>{t(`status.${p.status}`)}</span>
+                <span className={`badge ${badge[p.status]}`}>{t(`status_${p.status}`)}</span>
               </li>
             ))}
           </ul>
