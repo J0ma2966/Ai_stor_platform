@@ -40,7 +40,7 @@ describe("admin messages", () => {
   });
   it("merge keeps base keys and adds admin ones", () => {
     const m = mergeMessages(baseUz, adminUz) as Record<string, Record<string, string>>;
-    expect(m.errors!.network).toBe((baseUz as Record<string, Record<string, string>>).errors!.network);
+    expect(m.errors!.network).toBe((baseUz as unknown as Record<string, Record<string, string>>).errors!.network);
     expect(m.errors!.slug_taken).toBeTruthy();
     expect(m.admin).toBeTruthy();
   });

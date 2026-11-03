@@ -22,6 +22,9 @@ type Handlers struct {
 	PublicBase string
 	// Sem ограничивает одновременные декодирования на инстанс (память). Создаётся NewSem.
 	Sem chan struct{}
+	// Disabled — цели загрузки, выключенные конфигурацией (например, фото тела
+	// при выключенной AI-примерке: нет хранилища биометрии в Узбекистане).
+	Disabled map[Purpose]bool
 }
 
 func NewSem(n int) chan struct{} { return make(chan struct{}, n) }
@@ -43,7 +46,7 @@ var rolePurposes = map[auth.Role]map[Purpose]bool{
 func (h *Handlers) Upload(w http.ResponseWriter, r *http.Request) {
 	p := auth.MustFrom(r.Context())
 	purpose := Purpose(r.URL.Query().Get("purpose"))
-	if !purpose.Valid() || !rolePurposes[p.Role][purpose] {
+	if !purpose.Valid() || !rolePurposes[p.Role][purpose] || h.Disabled[purpose] {
 		httpx.Fail(w, r, httpx.NewError(http.StatusUnprocessableEntity, "invalid_purpose", "purpose not allowed"))
 		return
 	}

@@ -20,6 +20,7 @@ import (
 	"github.com/boutique-market/backend/internal/payments"
 	"github.com/boutique-market/backend/internal/products"
 	"github.com/boutique-market/backend/internal/ratelimit"
+	"github.com/boutique-market/backend/internal/tryon"
 	"github.com/boutique-market/backend/internal/users"
 )
 
@@ -31,6 +32,7 @@ type Deps struct {
 	Storage media.Storage
 	SMS     auth.SMSSender
 	Views   *products.ViewCounter // nil — просмотры не считаются (тесты)
+	Fitting *tryon.FittingCounter // nil — счётчик «В примерочную» отключён
 }
 
 func New(d Deps) http.Handler {
@@ -47,8 +49,13 @@ func New(d Deps) http.Handler {
 	productsH := &products.Handlers{DB: d.DB, PublicBase: d.Cfg.PublicMediaURL, Views: d.Views}
 	mediaH := &media.Handlers{Store: d.Storage, Limiter: limiter, Redis: d.Redis, PublicBase: d.Cfg.PublicMediaURL,
 		MaxBytes: int64(d.Cfg.MaxUploadMB) << 20, Sem: media.NewSem(max(d.Cfg.UploadConcurrency, 1))}
+	if !d.Cfg.TryOnEnabled() {
+		mediaH.Disabled = map[media.Purpose]bool{media.PurposeBodyPhoto: true}
+	}
 	adminH := &admin.Handlers{DB: d.DB, Revoker: revoker}
 	ordersH := &orders.Handlers{DB: d.DB, Media: d.Storage, Limiter: limiter, PublicBase: d.Cfg.PublicMediaURL}
+	tryonH := &tryon.Handlers{DB: d.DB, Store: d.Storage, Limiter: limiter, Redis: d.Redis, PublicBase: d.Cfg.PublicMediaURL,
+		Retention: RetentionFrom(d.Cfg), MaxActive: d.Cfg.TryOn.MaxActive, Provider: d.Cfg.TryOn.Provider, Fitting: d.Fitting}
 	paymentsH, err := payments.New(d.DB, d.Cfg, limiter)
 	if err != nil {
 		panic("payments config: " + err.Error()) // неверный CLICK_/PAYME_ALLOWED_IPS — ошибка конфигурации
@@ -85,6 +92,11 @@ func New(d Deps) http.Handler {
 				r.Route("/auth", authH.Routes)
 				productsH.PublicRoutes(r)
 				paymentsH.PublicRoutes(r)
+				if d.Cfg.TryOnEnabled() {
+					tryonH.PublicRoutes(r)
+				} else {
+					r.Post("/fitting/adds", tryon.Disabled)
+				}
 
 				r.Group(func(r chi.Router) {
 					r.Use(auth.RequireRole(auth.RoleClient, auth.RoleStore, auth.RoleAdmin))
@@ -93,6 +105,12 @@ func New(d Deps) http.Handler {
 					r.With(auth.RequireRole(auth.RoleClient)).Route("/orders", ordersH.ClientRoutes)
 					// Покупка токенов: создание платежа и его статус.
 					r.With(auth.RequireRole(auth.RoleClient)).Group(paymentsH.ClientRoutes)
+					// AI-примерка: фото, генерации, сохранённые образы.
+					if d.Cfg.TryOnEnabled() {
+						r.With(auth.RequireRole(auth.RoleClient)).Route("/tryon", tryonH.ClientRoutes)
+					} else {
+						r.With(auth.RequireRole(auth.RoleClient)).HandleFunc("/tryon/*", tryon.Disabled)
+					}
 				})
 
 				r.Route("/store", func(r chi.Router) {
@@ -107,6 +125,7 @@ func New(d Deps) http.Handler {
 					adminH.Routes(r)
 					r.Route("/orders", ordersH.AdminRoutes)
 					paymentsH.AdminRoutes(r)
+					r.Route("/tryon", tryonH.AdminRoutes)
 				})
 			})
 		})
@@ -143,4 +162,9 @@ func timeout(d time.Duration) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// RetentionFrom — сроки хранения биометрии из конфигурации.
+func RetentionFrom(c config.Config) tryon.Retention {
+	return tryon.Retention{Photo: c.TryOn.PhotoTTL, SavedPhoto: c.TryOn.SavedPhotoTTL, Result: c.TryOn.ResultTTL, SavedLook: c.TryOn.SavedLookTTL}
 }

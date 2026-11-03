@@ -60,8 +60,8 @@ func migrate(ctx context.Context, sqlDB *sql.DB, command string, args ...string)
 	if err := goose.SetDialect("postgres"); err != nil {
 		return err
 	}
-	// Миграции разных модулей нумеруются диапазонами (00010–, 00020–, …) и могут
-	// вливаться не по порядку — пропущенную более раннюю goose применит, а не упадёт.
+	// AllowMissing: ветки разрабатываются параллельно и берут разные диапазоны номеров
+	// (00010+, 00020+, 00030+), поэтому миграция с меньшим номером может прийти позже.
 	return goose.RunWithOptionsContext(ctx, command, sqlDB, ".", args, goose.WithAllowMissing())
 }
 
