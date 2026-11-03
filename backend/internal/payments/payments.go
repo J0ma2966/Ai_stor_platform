@@ -129,9 +129,18 @@ func markFailed(ctx context.Context, tx pgx.Tx, p *payment, status string) error
 
 // ExpirePending закрывает брошенные платежи (нет живой транзакции провайдера дольше maxAge).
 // Вызывается janitor-ом.
+// Брошенная подготовка Click (state 1) отменяется вместе с платежом: поздний Complete
+// получит -9, и Click вернёт деньги клиенту. Транзакции Payme отменяет сам Payme (12 ч).
 func ExpirePending(ctx context.Context, q interface {
 	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
 }, maxAge time.Duration) (int64, error) {
+	if _, err := q.Exec(ctx, `
+		UPDATE payment_transactions t SET state = -1, cancelled_at = now(), cancel_reason = 4
+		FROM payments p
+		WHERE p.id = t.payment_id AND p.status = 'pending' AND t.provider = 'click' AND t.state = 1
+		  AND t.created_at < now() - make_interval(secs => $1)`, maxAge.Seconds()); err != nil {
+		return 0, err
+	}
 	tag, err := q.Exec(ctx, `
 		UPDATE payments p SET status = 'cancelled', cancelled_at = now()
 		WHERE p.status = 'pending' AND p.created_at < now() - make_interval(secs => $1)

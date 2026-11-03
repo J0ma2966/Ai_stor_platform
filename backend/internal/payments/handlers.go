@@ -102,8 +102,7 @@ type Tariff struct {
 const tariffCols = `id, name_ru, name_uz, description, tokens::bigint, price, highlighted, is_published, created_at, updated_at`
 
 func (h *Handlers) listTariffs(w http.ResponseWriter, r *http.Request, onlyPublished bool) {
-	rows, err := h.DB.Query(r.Context(), `SELECT `+tariffCols+` FROM tariffs
-		WHERE is_published OR NOT $1 ORDER BY price, id`, onlyPublished)
+	rows, err := h.DB.Query(r.Context(), qTariffList, onlyPublished)
 	if err != nil {
 		httpx.Fail(w, r, err)
 		return
@@ -158,10 +157,7 @@ func (h *Handlers) createTariff(w http.ResponseWriter, r *http.Request) {
 	}
 	var t Tariff
 	err := db.Tx(r.Context(), h.DB, func(tx pgx.Tx) error {
-		row := tx.QueryRow(r.Context(), `
-			INSERT INTO tariffs (name_ru, name_uz, description, tokens, price, highlighted, is_published)
-			VALUES ($1, $2, COALESCE($3, ''), $4, $5, COALESCE($6, false), COALESCE($7, false))
-			RETURNING `+tariffCols, req.NameRU, req.NameUZ, req.Description, req.Tokens, req.Price, req.Highlighted, req.IsPublished)
+		row := tx.QueryRow(r.Context(), qTariffInsert, req.NameRU, req.NameUZ, req.Description, req.Tokens, req.Price, req.Highlighted, req.IsPublished)
 		if err := row.Scan(&t.ID, &t.NameRU, &t.NameUZ, &t.Description, &t.Tokens, &t.Price, &t.Highlighted, &t.IsPublished, &t.CreatedAt, &t.UpdatedAt); err != nil {
 			return err
 		}
@@ -188,13 +184,7 @@ func (h *Handlers) updateTariff(w http.ResponseWriter, r *http.Request) {
 	}
 	var t Tariff
 	err = db.Tx(r.Context(), h.DB, func(tx pgx.Tx) error {
-		row := tx.QueryRow(r.Context(), `
-			UPDATE tariffs SET
-			  name_ru = COALESCE($2, name_ru), name_uz = COALESCE($3, name_uz),
-			  description = COALESCE($4, description), tokens = COALESCE($5, tokens),
-			  price = COALESCE($6, price), highlighted = COALESCE($7, highlighted),
-			  is_published = COALESCE($8, is_published)
-			WHERE id = $1 RETURNING `+tariffCols,
+		row := tx.QueryRow(r.Context(), qTariffUpdate,
 			id, req.NameRU, req.NameUZ, req.Description, req.Tokens, req.Price, req.Highlighted, req.IsPublished)
 		if err := row.Scan(&t.ID, &t.NameRU, &t.NameUZ, &t.Description, &t.Tokens, &t.Price, &t.Highlighted, &t.IsPublished, &t.CreatedAt, &t.UpdatedAt); err != nil {
 			return db.NotFound(err)
@@ -330,11 +320,7 @@ func (h *Handlers) create(w http.ResponseWriter, r *http.Request) {
 	status := http.StatusCreated
 	err := db.Tx(r.Context(), h.DB, func(tx pgx.Tx) error {
 		var err error
-		p, err = scanPayment(tx.QueryRow(r.Context(), `
-			INSERT INTO payments AS p (user_id, tariff_id, provider, amount, tokens, idempotency_key)
-			SELECT $1::uuid, t.id, $3::payment_provider, t.price, t.tokens, NULLIF($4::text, '') FROM tariffs t WHERE t.id = $2 AND t.is_published
-			ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
-			RETURNING `+paymentCols, uid, req.TariffID, req.Provider, key))
+		p, err = scanPayment(tx.QueryRow(r.Context(), qPaymentInsert, uid, req.TariffID, req.Provider, key))
 		if !errors.Is(err, db.ErrNotFound) {
 			return err
 		}
@@ -342,8 +328,7 @@ func (h *Handlers) create(w http.ResponseWriter, r *http.Request) {
 			return httpx.NewError(http.StatusUnprocessableEntity, "tariff_not_found", "tariff not found or not published")
 		}
 		// повтор с тем же ключом (или тариф не найден)
-		p, err = scanPayment(tx.QueryRow(r.Context(), `SELECT `+paymentCols+` FROM payments p
-			WHERE p.user_id = $1 AND p.idempotency_key = $2`, uid, key))
+		p, err = scanPayment(tx.QueryRow(r.Context(), qPaymentByKey, uid, key))
 		if errors.Is(err, db.ErrNotFound) {
 			return httpx.NewError(http.StatusUnprocessableEntity, "tariff_not_found", "tariff not found or not published")
 		}
@@ -371,7 +356,7 @@ func (h *Handlers) getMine(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, r, httpx.ErrNotFound)
 		return
 	}
-	p, err := scanPayment(h.DB.QueryRow(r.Context(), `SELECT `+paymentCols+` FROM payments p WHERE p.id = $1 AND p.user_id = $2`, id, uid))
+	p, err := scanPayment(h.DB.QueryRow(r.Context(), qPaymentMine, id, uid))
 	if errors.Is(err, db.ErrNotFound) {
 		httpx.Fail(w, r, httpx.ErrNotFound)
 		return
@@ -419,13 +404,7 @@ func (h *Handlers) list(w http.ResponseWriter, r *http.Request, userID, status, 
 		}
 		before = v
 	}
-	rows, err := h.DB.Query(r.Context(), `SELECT `+paymentCols+`, CASE WHEN $6 THEN u.phone END
-		FROM payments p JOIN users u ON u.id = p.user_id
-		WHERE p.number < $1
-		  AND ($2::text = '' OR p.user_id = NULLIF($2::text, '')::uuid)
-		  AND ($3::text = '' OR p.status = NULLIF($3::text, '')::payment_status)
-		  AND ($4::text = '' OR p.provider = NULLIF($4::text, '')::payment_provider)
-		ORDER BY p.number DESC LIMIT $5`, before, userID, status, provider, limit+1, withPhone)
+	rows, err := h.DB.Query(r.Context(), qPaymentList, before, userID, status, provider, limit+1, withPhone)
 	if err != nil {
 		httpx.Fail(w, r, err)
 		return
@@ -451,3 +430,35 @@ func (h *Handlers) list(w http.ResponseWriter, r *http.Request, userID, status, 
 	}
 	httpx.List(w, items, next)
 }
+
+// SQL-запросы собраны из констант на этапе компиляции (пользовательский ввод — только плейсхолдеры).
+const (
+	qTariffList = `SELECT ` + tariffCols + ` FROM tariffs
+		WHERE is_published OR NOT $1 ORDER BY price, id`
+	qTariffInsert = `
+			INSERT INTO tariffs (name_ru, name_uz, description, tokens, price, highlighted, is_published)
+			VALUES ($1, $2, COALESCE($3, ''), $4, $5, COALESCE($6, false), COALESCE($7, false))
+			RETURNING ` + tariffCols
+	qTariffUpdate = `
+			UPDATE tariffs SET
+			  name_ru = COALESCE($2, name_ru), name_uz = COALESCE($3, name_uz),
+			  description = COALESCE($4, description), tokens = COALESCE($5, tokens),
+			  price = COALESCE($6, price), highlighted = COALESCE($7, highlighted),
+			  is_published = COALESCE($8, is_published)
+			WHERE id = $1 RETURNING ` + tariffCols
+	qPaymentInsert = `
+			INSERT INTO payments AS p (user_id, tariff_id, provider, amount, tokens, idempotency_key)
+			SELECT $1::uuid, t.id, $3::payment_provider, t.price, t.tokens, NULLIF($4::text, '') FROM tariffs t WHERE t.id = $2 AND t.is_published
+			ON CONFLICT (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
+			RETURNING ` + paymentCols
+	qPaymentByKey = `SELECT ` + paymentCols + ` FROM payments p
+			WHERE p.user_id = $1 AND p.idempotency_key = $2`
+	qPaymentMine = `SELECT ` + paymentCols + ` FROM payments p WHERE p.id = $1 AND p.user_id = $2`
+	qPaymentList = `SELECT ` + paymentCols + `, CASE WHEN $6 THEN u.phone END
+		FROM payments p JOIN users u ON u.id = p.user_id
+		WHERE p.number < $1
+		  AND ($2::text = '' OR p.user_id = NULLIF($2::text, '')::uuid)
+		  AND ($3::text = '' OR p.status = NULLIF($3::text, '')::payment_status)
+		  AND ($4::text = '' OR p.provider = NULLIF($4::text, '')::payment_provider)
+		ORDER BY p.number DESC LIMIT $5`
+)

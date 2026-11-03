@@ -299,8 +299,7 @@ func lockTxn(ctx context.Context, tx pgx.Tx, externalID string) (*payment, *txn,
 	if err != nil {
 		return nil, nil, err
 	}
-	t, err := scanTxn(tx.QueryRow(ctx, `SELECT `+txnCols+` FROM payment_transactions
-		WHERE provider = 'payme' AND external_id = $1 FOR UPDATE`, externalID))
+	t, err := scanTxn(tx.QueryRow(ctx, qPaymeTxnLock, externalID))
 	return pay, t, err
 }
 
@@ -329,8 +328,7 @@ func (p *Payme) create(ctx context.Context, tx pgx.Tx, prm *paymeParams) (any, *
 		if pay, rerr, err = p.orderFor(ctx, tx, prm); pay == nil {
 			return nil, rerr, err
 		}
-		t, err = scanTxn(tx.QueryRow(ctx, `SELECT `+txnCols+` FROM payment_transactions
-			WHERE provider = 'payme' AND external_id = $1 FOR UPDATE`, prm.ID))
+		t, err = scanTxn(tx.QueryRow(ctx, qPaymeTxnRecheck, prm.ID))
 		if errors.Is(err, db.ErrNotFound) {
 			var busy bool
 			if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM payment_transactions WHERE payment_id = $1 AND state IN (1, 2))`,
@@ -340,8 +338,7 @@ func (p *Payme) create(ctx context.Context, tx pgx.Tx, prm *paymeParams) (any, *
 			if busy {
 				return nil, rpcErr(paymeOrderBusy, p.AccountKey), nil
 			}
-			t, err = scanTxn(tx.QueryRow(ctx, `INSERT INTO payment_transactions (payment_id, provider, external_id, state, amount, provider_time, created_at)
-				VALUES ($1, 'payme', $2, 1, $3, $4, $5) RETURNING `+txnCols, pay.ID, prm.ID, prm.Amount, prm.Time, p.now()))
+			t, err = scanTxn(tx.QueryRow(ctx, qPaymeTxnInsert, pay.ID, prm.ID, prm.Amount, prm.Time, p.now()))
 			if err != nil {
 				return nil, nil, err
 			}
@@ -436,7 +433,7 @@ func txnView(t *txn) map[string]any {
 }
 
 func (p *Payme) check(ctx context.Context, tx pgx.Tx, id string) (any, *rpcError, error) {
-	t, err := scanTxn(tx.QueryRow(ctx, `SELECT `+txnCols+` FROM payment_transactions WHERE provider = 'payme' AND external_id = $1`, id))
+	t, err := scanTxn(tx.QueryRow(ctx, qPaymeTxnGet, id))
 	if errors.Is(err, db.ErrNotFound) {
 		return nil, rpcErr(paymeTxnMissing, nil), nil
 	}
@@ -450,8 +447,7 @@ func (p *Payme) statement(ctx context.Context, tx pgx.Tx, from, to int64) (any, 
 	if from <= 0 || to < from {
 		return nil, rpcErr(rpcInvalid, "from/to"), nil
 	}
-	rows, err := tx.Query(ctx, `SELECT `+txnCols+` FROM payment_transactions
-		WHERE provider = 'payme' AND provider_time BETWEEN $1 AND $2 ORDER BY provider_time LIMIT 10000`, from, to)
+	rows, err := tx.Query(ctx, qPaymeStatement, from, to)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -473,3 +469,16 @@ func (p *Payme) statement(ctx context.Context, tx pgx.Tx, from, to int64) (any, 
 	}
 	return map[string]any{"transactions": out}, nil, nil
 }
+
+// SQL-запросы собраны из констант на этапе компиляции (пользовательский ввод — только плейсхолдеры).
+const (
+	qPaymeTxnLock = `SELECT ` + txnCols + ` FROM payment_transactions
+		WHERE provider = 'payme' AND external_id = $1 FOR UPDATE`
+	qPaymeTxnRecheck = `SELECT ` + txnCols + ` FROM payment_transactions
+			WHERE provider = 'payme' AND external_id = $1 FOR UPDATE`
+	qPaymeTxnInsert = `INSERT INTO payment_transactions (payment_id, provider, external_id, state, amount, provider_time, created_at)
+				VALUES ($1, 'payme', $2, 1, $3, $4, $5) RETURNING ` + txnCols
+	qPaymeTxnGet    = `SELECT ` + txnCols + ` FROM payment_transactions WHERE provider = 'payme' AND external_id = $1`
+	qPaymeStatement = `SELECT ` + txnCols + ` FROM payment_transactions
+		WHERE provider = 'payme' AND provider_time BETWEEN $1 AND $2 ORDER BY provider_time LIMIT 10000`
+)

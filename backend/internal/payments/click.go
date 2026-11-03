@@ -152,7 +152,10 @@ func (c *Click) handle(w http.ResponseWriter, r *http.Request, complete bool) {
 				code = clickTxnNotFound
 				return nil
 			}
-			clickErr, _ := strconv.Atoi(f.Get("error"))
+			clickErr, perr := strconv.Atoi(f.Get("error"))
+			if perr != nil {
+				clickErr = -1 // нечитаемое поле error считаем отказом списания, а не успехом
+			}
 			code, err = c.complete(r.Context(), tx, pid, prepID, f.Get("click_trans_id"), amount, clickErr, &resp)
 		} else {
 			code, err = c.prepare(r.Context(), tx, pid, f.Get("click_trans_id"), amount, &resp)
@@ -179,8 +182,7 @@ func (c *Click) prepare(ctx context.Context, tx pgx.Tx, pid uuid.UUID, clickTxn 
 	if err != nil {
 		return 0, err
 	}
-	t, err := scanTxn(tx.QueryRow(ctx, `SELECT `+txnCols+` FROM payment_transactions
-		WHERE provider = 'click' AND external_id = $1 FOR UPDATE`, clickTxn))
+	t, err := scanTxn(tx.QueryRow(ctx, qClickTxnByExtLock, clickTxn))
 	switch {
 	case err == nil && t.PaymentID != p.ID:
 		return clickTxnNotFound, nil
@@ -229,8 +231,7 @@ func (c *Click) complete(ctx context.Context, tx pgx.Tx, pid uuid.UUID, prepID i
 	if err != nil {
 		return 0, err
 	}
-	t, err := scanTxn(tx.QueryRow(ctx, `SELECT `+txnCols+` FROM payment_transactions
-		WHERE id = $1 AND provider = 'click' FOR UPDATE`, prepID))
+	t, err := scanTxn(tx.QueryRow(ctx, qClickTxnByIDLock, prepID))
 	if errors.Is(err, db.ErrNotFound) || (err == nil && (t.PaymentID != p.ID || t.ExternalID != clickTxn)) {
 		return clickTxnNotFound, nil
 	}
@@ -321,3 +322,11 @@ func leftPad2(n int64) string {
 	}
 	return strconv.FormatInt(n, 10)
 }
+
+// SQL-запросы собраны из констант на этапе компиляции (пользовательский ввод — только плейсхолдеры).
+const (
+	qClickTxnByExtLock = `SELECT ` + txnCols + ` FROM payment_transactions
+		WHERE provider = 'click' AND external_id = $1 FOR UPDATE`
+	qClickTxnByIDLock = `SELECT ` + txnCols + ` FROM payment_transactions
+		WHERE id = $1 AND provider = 'click' FOR UPDATE`
+)

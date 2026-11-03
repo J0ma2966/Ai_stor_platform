@@ -123,12 +123,13 @@ func Load() (Config, error) {
 		ClickAllowedIPs:    splitList(os.Getenv("CLICK_ALLOWED_IPS")),
 		PaymeMerchantID:    os.Getenv("PAYME_MERCHANT_ID"),
 		PaymeKey:           os.Getenv("PAYME_KEY"),
-		PaymeTest:          getBool("PAYME_TEST", true),
-		PaymeAccountKey:    get("PAYME_ACCOUNT_KEY", "payment_id"),
-		PaymeAllowedIPs:    splitList(os.Getenv("PAYME_ALLOWED_IPS")),
-		PaymeIKPU:          os.Getenv("PAYME_IKPU"),
-		PaymePackageCode:   os.Getenv("PAYME_PACKAGE_CODE"),
-		PaymeVATPercent:    getInt("PAYME_VAT_PERCENT", 0),
+		// песочница по умолчанию только вне prod: забытая переменная не уведёт клиентов на test.paycom.uz
+		PaymeTest:        getBool("PAYME_TEST", get("APP_ENV", "dev") != "prod"),
+		PaymeAccountKey:  get("PAYME_ACCOUNT_KEY", "payment_id"),
+		PaymeAllowedIPs:  splitList(os.Getenv("PAYME_ALLOWED_IPS")),
+		PaymeIKPU:        os.Getenv("PAYME_IKPU"),
+		PaymePackageCode: os.Getenv("PAYME_PACKAGE_CODE"),
+		PaymeVATPercent:  getInt("PAYME_VAT_PERCENT", 0),
 	}
 	var errs []error
 	if c.DatabaseURL == "" {
@@ -164,6 +165,14 @@ func Load() (Config, error) {
 				errs = append(errs, fmt.Errorf("invalid IP or CIDR %q in CLICK_/PAYME_ALLOWED_IPS", ip))
 			}
 		}
+	}
+	// Поле error в Click Complete не подписано, а ключ Payme статичен: в prod вебхуки
+	// принимаются только с IP провайдеров.
+	if c.IsProd() && c.ClickEnabled() && len(c.ClickAllowedIPs) == 0 {
+		errs = append(errs, errors.New("CLICK_ALLOWED_IPS is required in prod when Click is enabled"))
+	}
+	if c.IsProd() && c.PaymeEnabled() && len(c.PaymeAllowedIPs) == 0 {
+		errs = append(errs, errors.New("PAYME_ALLOWED_IPS is required in prod when Payme is enabled"))
 	}
 	if (c.ClickEnabled() || c.PaymeEnabled()) && c.PaymentReturnURL == "" {
 		errs = append(errs, errors.New("PAYMENT_RETURN_URL is required when a payment provider is configured"))

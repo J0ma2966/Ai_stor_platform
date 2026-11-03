@@ -57,3 +57,30 @@ func TestPaymentConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestPaymentProdRules(t *testing.T) {
+	base(t)
+	t.Setenv("APP_ENV", "prod")
+	t.Setenv("SMS_PROVIDER", "eskiz")
+	t.Setenv("ESKIZ_EMAIL", "a@b.uz")
+	t.Setenv("ESKIZ_PASSWORD", "pw")
+	t.Setenv("PAYMENT_RETURN_URL", "https://shop.uz/ru/account/balance")
+	t.Setenv("PAYME_MERCHANT_ID", "m")
+	t.Setenv("PAYME_KEY", "k")
+	t.Setenv("CLICK_SERVICE_ID", "1")
+	t.Setenv("CLICK_MERCHANT_ID", "2")
+	t.Setenv("CLICK_SECRET_KEY", "s")
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "CLICK_ALLOWED_IPS") || !strings.Contains(err.Error(), "PAYME_ALLOWED_IPS") {
+		t.Fatalf("prod must require provider IP allow-lists: %v", err)
+	}
+	t.Setenv("CLICK_ALLOWED_IPS", "10.0.0.0/8")
+	t.Setenv("PAYME_ALLOWED_IPS", "10.0.0.0/8")
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.PaymeTest {
+		t.Fatal("PAYME_TEST must default to false in prod")
+	}
+}

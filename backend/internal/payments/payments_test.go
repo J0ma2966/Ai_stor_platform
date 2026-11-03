@@ -247,6 +247,19 @@ func TestClick_CompleteWithProviderErrorDeclines(t *testing.T) {
 	}
 }
 
+func TestClick_UnparsableErrorFieldIsFailure(t *testing.T) {
+	f := newFixture(t)
+	pid := f.payment(t, ProviderClick)
+	c := clickCall{h: &Click{DB: f.pool, ServiceID: "777", SecretKey: clickSecret}}
+	prep := c.do(t, false, clickForm(3501, pid, "15000", "0"))
+	v := clickForm(3501, pid, "15000", "1")
+	v.Set("merchant_prepare_id", strconv.FormatInt(*prep.MerchantPrepareID, 10))
+	v.Set("error", "")
+	if r := c.do(t, true, v); r.Error != clickTxnCancelled || f.balance(t) != 0 {
+		t.Fatalf("empty error field must not credit: %+v", r)
+	}
+}
+
 func TestClick_ConcurrentCompleteCreditsOnce(t *testing.T) {
 	f := newFixture(t)
 	pid := f.payment(t, ProviderClick)
@@ -521,8 +534,17 @@ func TestExpirePending(t *testing.T) {
 	if _, err := f.pool.Exec(ctx, `INSERT INTO payment_transactions (payment_id, provider, external_id, state, amount) VALUES ($1, 'payme', 'b-1', 1, 1500000)`, busy); err != nil {
 		t.Fatal(err)
 	}
+	// брошенная подготовка Click старше суток тоже закрывается
+	clickOld := f.payment(t, ProviderClick)
+	if _, err := f.pool.Exec(ctx, `UPDATE payments SET created_at = now() - interval '2 days' WHERE id = $1`, clickOld); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.pool.Exec(ctx, `INSERT INTO payment_transactions (payment_id, provider, external_id, state, amount, created_at)
+		VALUES ($1, 'click', '5001', 1, 1500000, now() - interval '2 days')`, clickOld); err != nil {
+		t.Fatal(err)
+	}
 	n, err := ExpirePending(ctx, f.pool, 24*time.Hour)
-	if err != nil || n != 1 {
+	if err != nil || n != 2 || f.status(t, clickOld) != "cancelled" {
 		t.Fatalf("expired %d, %v", n, err)
 	}
 	if f.status(t, old) != "cancelled" || f.status(t, fresh) != "pending" || f.status(t, busy) != "pending" {
