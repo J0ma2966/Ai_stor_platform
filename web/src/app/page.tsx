@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { getTranslations, setRequestLocale } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 import { catName, fetchCategories, fetchProducts, fetchStores, type Category, type Product, type Store } from "@/lib/catalog";
 import { alternates, siteUrl } from "@/lib/site";
@@ -8,8 +8,8 @@ import { StoreCard } from "@/components/StoreCard";
 import { JsonLd } from "@/components/JsonLd";
 import { TRYON_ENABLED } from "@/lib/fitting";
 
-export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
-  const { locale } = await params;
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getLocale();
   return { alternates: alternates(locale, "/") };
 }
 
@@ -23,9 +23,8 @@ async function safe<T>(p: Promise<T>, fallback: T): Promise<T> {
   }
 }
 
-export default async function Home({ params }: { params: Promise<{ locale: string }> }) {
-  const { locale } = await params;
-  setRequestLocale(locale);
+export default async function Home() {
+  const locale = await getLocale();
   const t = await getTranslations("home");
   const [cats, popular, fresh, stores] = await Promise.all([
     safe<Category[]>(fetchCategories(), []),

@@ -25,6 +25,7 @@ describe("safeNext", () => {
 describe("formatSum", () => {
   it("converts tiyin to sum", () => {
     expect(formatSum(150000000, "ru")).toBe("1 500 000 сум");
+    expect(formatSum(150000000, "uz")).toBe("1 500 000 so‘m");
   });
 });
 

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getTranslations, setRequestLocale } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 import { fetchCategories, fetchProducts, fetchStore, FILTER_KEYS, type CatalogFilters as F } from "@/lib/catalog";
 import { alternates } from "@/lib/site";
 import { ProductGrid } from "@/components/ProductGrid";
@@ -8,10 +8,11 @@ import { LoadMore } from "@/components/LoadMore";
 import { CatalogFilters } from "@/components/CatalogFilters";
 import { JsonLd } from "@/components/JsonLd";
 
-type P = Promise<{ locale: string; slug: string }>;
+type P = Promise<{ slug: string }>;
 
 export async function generateMetadata({ params }: { params: P }): Promise<Metadata> {
-  const { locale, slug } = await params;
+  const { slug } = await params;
+  const locale = await getLocale();
   const s = await fetchStore(slug).catch(() => null);
   if (!s) return { title: "404", robots: { index: false } };
   return {
@@ -33,8 +34,8 @@ function safeUrl(u?: string): string | null {
 }
 
 export default async function StorePage({ params, searchParams }: { params: P; searchParams: Promise<Record<string, string | undefined>> }) {
-  const { locale, slug } = await params;
-  setRequestLocale(locale);
+  const { slug } = await params;
+  const locale = await getLocale();
   const s = await fetchStore(slug);
   if (!s) notFound();
   const sp = await searchParams;
