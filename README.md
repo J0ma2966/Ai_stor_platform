@@ -67,7 +67,7 @@ npm -v
 | PostgreSQL 16 | `localhost:5432`, база/пользователь `boutique`, пароль `devpassword` | только с этого компьютера |
 | Redis 7 | `localhost:6379` | только с этого компьютера |
 
-Все порты открыты только на `127.0.0.1`, из локальной сети они недоступны.
+Все порты открыты только на `127.0.0.1`, из локальной сети они недоступны. Это порты по умолчанию: каждый можно поменять в `.env` (раздел 5), а `dev.ps1 up` сам заменит порт, который на Windows занят или зарезервирован, и напишет, какой взял.
 
 ## 3. Запуск на Windows (PowerShell)
 
@@ -202,15 +202,20 @@ docker compose -f deploy/docker-compose.yml down -v                     # ост
 | `UPLOAD_CONCURRENCY` | `4` | сколько картинок API обрабатывает одновременно |
 | `AGE_RECIPIENT` | пусто | публичный ключ age для шифрования бэкапов, локально не нужен |
 
-Переменные, которые читает сам docker-compose (задаются в окружении терминала перед `up`):
+Порты на вашем компьютере. Их читает docker compose (`dev.ps1` и `make` передают ему `--env-file .env`; если запускаете compose руками, добавьте этот флаг сами). Переменная в окружении терминала важнее значения из `.env`. Внутри Docker порты всегда стандартные.
 
-| Переменная | По умолчанию | Когда нужна |
+| Переменная | По умолчанию | Что это |
 |---|---|---|
-| `POSTGRES_HOST_PORT` | `5432` | если порт 5432 уже занят локальным PostgreSQL |
-| `REDIS_HOST_PORT` | `6379` | если порт 6379 уже занят |
+| `POSTGRES_HOST_PORT` | `5432` | PostgreSQL |
+| `REDIS_HOST_PORT` | `6379` | Redis |
+| `MINIO_HOST_PORT` | `9000` | MinIO (картинки), из него же строится `PUBLIC_MEDIA_URL` |
+| `MINIO_CONSOLE_HOST_PORT` | `9001` | консоль MinIO |
+| `API_HOST_PORT` | `8080` | API |
+| `METRICS_HOST_PORT` | `9090` | метрики API |
+| `WEB_PORT` | `3000` | сайт (`dev.ps1 web`); при смене адрес должен быть в `CORS_ORIGINS` |
 | `POSTGRES_PASSWORD` | `devpassword` | пароль базы в контейнере |
 
-Переменные сайта: `NEXT_PUBLIC_API_URL=http://localhost:8080` и `NEXT_PUBLIC_MEDIA_ORIGIN=http://localhost:9000`. Скрипт `dev.ps1 web` выставляет их сам.
+Переменные сайта `NEXT_PUBLIC_API_URL` и `NEXT_PUBLIC_MEDIA_ORIGIN` скрипт `dev.ps1 web` выставляет сам по портам из `.env`.
 
 ## 6. Администратор, магазин и вход на сайт
 
@@ -312,26 +317,21 @@ npm run lint     # проверка типов
 
 **`Docker не запущен` / `error during connect` / `Cannot connect to the Docker daemon`.** Откройте Docker Desktop и дождитесь статуса *Engine running*. На Linux: `sudo systemctl start docker`.
 
-**`Bind for 127.0.0.1:5432 failed: port is already allocated`.** Порт занят другим PostgreSQL (или Redis для 6379). Остановите его или пробросьте другой порт:
+**`ports are not available ... An attempt was made to access a socket in a way forbidden by its access permissions` или `Bind for 127.0.0.1:5432 failed: port is already allocated`.** Порт занят другой программой или зарезервирован Windows (Hyper-V, WSL и Docker Desktop забирают диапазоны портов, иногда в них попадают 5432, 8080 и другие). `.\scripts\dev.ps1 up` проверяет это до запуска, сам берёт свободный порт (например, 15432 вместо 5432), записывает его в `.env` и показывает адреса. Остальные команды скрипта (`web`, `health`, `test`) читают порты оттуда же.
 
-```powershell
-$env:POSTGRES_HOST_PORT = "15432"; $env:REDIS_HOST_PORT = "16379"
-.\scripts\dev.ps1 up
-```
+Посмотреть, что зарезервировано: `netsh interface ipv4 show excludedportrange protocol=tcp`. Часто резерв снимает перезапуск службы NAT в PowerShell от администратора: `net stop winnat`, затем `net start winnat`.
 
-```bash
-POSTGRES_HOST_PORT=15432 REDIS_HOST_PORT=16379 make up
-```
+Вручную порт меняется в `.env` (раздел 5), на Linux/macOS так же или через окружение: `POSTGRES_HOST_PORT=15432 make up`. Если в окружении терминала задана переменная `$env:POSTGRES_HOST_PORT` с плохим портом, скрипт не будет её менять и попросит её убрать.
 
-Внутри Docker API всё равно подключается к стандартным портам, меняется только порт на вашем компьютере. Для `dev.ps1 test` тогда задайте `TEST_DATABASE_URL=postgres://boutique:devpassword@localhost:15432/boutique?sslmode=disable`.
-
-**Порт 3000, 8080 или 9000 занят.** Найдите процесс: `Get-NetTCPConnection -LocalPort 3000` (Windows) или `lsof -i :3000` (Linux/macOS) и остановите его. Сайт можно запустить на другом порту: `npm run dev -- -p 3001`, но тогда добавьте `http://localhost:3001` в `CORS_ORIGINS` в `.env` и перезапустите API (`docker compose -f deploy/docker-compose.yml up -d api`).
+**Порт 3000 занят.** `dev.ps1 web` об этом скажет. Задайте `WEB_PORT` в `.env` и добавьте `http://localhost:<порт>` в `CORS_ORIGINS` (или просто выполните `.\scripts\dev.ps1 up`, если порт зарезервирован Windows: скрипт поправит оба значения), затем перезапустите API: `.\scripts\dev.ps1 up`.
 
 **`pull access denied` или `manifest unknown` для образов MinIO.** Официальные образы `minio/minio` и `minio/mc` убраны с Docker Hub, поэтому используется совместимый форк `pgsty/minio` и `pgsty/mc`. Если у вас старая версия `deploy/docker-compose.yml`, обновите репозиторий (`git pull`).
 
 **Сайт не открывается на http://localhost:3000.** Сайт не входит в docker compose, его нужно запустить отдельно (`.\scripts\dev.ps1 web` или `npm run dev` в папке `web`) и держать окно открытым. Дождитесь строки `Ready`. Если `npm ci` падает, проверьте версию Node.js (`node -v`, нужно 20+), удалите папку `web\node_modules` и запустите снова.
 
-**Сайт открывается, но выдаёт ошибки сети или CORS.** Проверьте, что API отвечает на http://localhost:8080/readyz, что сайт запущен с `NEXT_PUBLIC_API_URL=http://localhost:8080` и что адрес сайта есть в `CORS_ORIGINS`.
+**Сайт открывается, но выдаёт ошибки сети или CORS.** Проверьте, что API отвечает на `/readyz` (`.\scripts\dev.ps1 health`), что сайт запущен через `dev.ps1 web` (или с `NEXT_PUBLIC_API_URL`, указывающим на порт API) и что адрес сайта есть в `CORS_ORIGINS`.
+
+**`API не ответил за 2 минуты`, хотя в логах есть `api started`.** Старые версии `dev.ps1` проверяли `http://localhost:8080`, а Windows сначала пробует IPv6 (`::1`), где Docker не слушает, и проверка не успевала. Обновите репозиторий (`git pull`); сейчас скрипт проверяет `http://127.0.0.1:<порт>`. Сам API при этом работал.
 
 **`/readyz` не отвечает после `up`.** Посмотрите логи: `.\scripts\dev.ps1 logs` или `docker compose -f deploy/docker-compose.yml logs api`. Частые причины: база ещё стартует (подождите 30 секунд) или в `.env` ошибка.
 
