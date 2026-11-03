@@ -11,7 +11,7 @@ export function AuthGate({ role, children }: { role: Role; children: ReactNode }
   const router = useRouter();
   const pathname = usePathname();
   const [ok, setOk] = useState(currentRole() === role);
-  const loginPath = role === "client" ? "/login" : "/store/login";
+  const loginPath = role === "client" ? "/login" : role === "store" ? "/store/login" : "/admin/login";
 
   useEffect(() => {
     // возвращаемся на ту же страницу вместе с параметрами (например, ?items= на оформлении)
