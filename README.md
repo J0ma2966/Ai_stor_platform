@@ -218,11 +218,11 @@ docker compose -f deploy/docker-compose.yml down -v                     # ост
 
 | Роль | Как входит | Где работает |
 |---|---|---|
-| Клиент | по номеру телефона и SMS-коду на http://localhost:3000/ru/login | каталог, оформление заказа, «Мои заказы» |
-| Магазин | по логину и паролю на http://localhost:3000/ru/store/login | заказы магазина: `/ru/store/orders` |
-| Администратор | по логину и паролю на http://localhost:3000/ru/admin/login | панель `/ru/admin`: сводка, магазины, пользователи и токены, все заказы, тарифы, платежи, журнал действий |
+| Клиент | по номеру телефона и SMS-коду на http://localhost:3000/login | каталог, оформление заказа, «Мои заказы» |
+| Магазин | по логину и паролю на http://localhost:3000/store/login | заказы магазина: `/store/orders` |
+| Администратор | по логину и паролю на http://localhost:3000/admin/login | панель `/admin`: сводка, магазины, пользователи и токены, все заказы, тарифы, платежи, журнал действий |
 
-**Админ-панель:** откройте http://localhost:3000/ru/admin, войдите как `root`, в разделе «Магазины» нажмите «Новый магазин». Пароль магазина сгенерируется и покажется один раз, галочка «Сразу активировать» включена по умолчанию. Дальше можно войти под этим магазином на `/ru/store/login`.
+**Админ-панель:** откройте http://localhost:3000/admin, войдите как `root`, в разделе «Магазины» нажмите «Новый магазин». Пароль магазина сгенерируется и покажется один раз, галочка «Сразу активировать» включена по умолчанию. Дальше можно войти под этим магазином на `/store/login`.
 
 То же самое через API (например, для скриптов). Пример на Windows (PowerShell), после того как создан администратор `root`:
 
@@ -233,7 +233,7 @@ $login = Invoke-RestMethod -Method Post -Uri http://localhost:8080/v1/auth/login
   -ContentType 'application/json' -Body (@{ login = 'root'; password = $pass } | ConvertTo-Json)
 $h = @{ Authorization = "Bearer $($login.data.access_token)" }
 
-# 2. Создать магазин (логин и пароль для входа на /ru/store/login)
+# 2. Создать магазин (логин и пароль для входа на /store/login)
 $store = Invoke-RestMethod -Method Post -Uri http://localhost:8080/v1/admin/stores -Headers $h `
   -ContentType 'application/json' -Body (@{ slug = 'demo'; name = 'Демо бутик'; login = 'demo'; password = 'demo-password-1' } | ConvertTo-Json)
 
@@ -253,13 +253,13 @@ curl -s localhost:8080/v1/admin/stores/$STORE/status -H "Authorization: Bearer $
   -d '{"status":"active"}'
 ```
 
-После этого войдите на http://localhost:3000/ru/store/login с логином `demo` и паролем `demo-password-1`. Остальные эндпоинты описаны в [docs/API.md](docs/API.md).
+После этого войдите на http://localhost:3000/store/login с логином `demo` и паролем `demo-password-1`. Остальные эндпоинты описаны в [docs/API.md](docs/API.md).
 
 ## 7. SMS-код для входа в режиме разработки
 
 При `APP_ENV=dev` SMS никуда не отправляются, код пишется в лог API.
 
-1. Откройте http://localhost:3000/ru/login и введите номер в формате `+998901234567` (по умолчанию разрешены только номера `+998`, см. `OTP_ALLOWED_PREFIXES`).
+1. Откройте http://localhost:3000/login и введите номер в формате `+998901234567` (по умолчанию разрешены только номера `+998`, см. `OTP_ALLOWED_PREFIXES`).
 2. Посмотрите код:
 
    ```powershell
@@ -277,7 +277,7 @@ curl -s localhost:8080/v1/admin/stores/$STORE/status -H "Authorization: Bearer $
 
 Повторно запросить код можно не сразу: при слишком частых запросах API отвечает `otp_cooldown`, подождите минуту.
 
-**AI-примерка локально.** Откройте http://localhost:3000/ru/fitting, выберите вещи, загрузите три фото и запустите. По умолчанию работает демо-режим `TRYON_PROVIDER=mock`: AI не вызывается, ключи не нужны, результат — ваши фото с карточками товаров. Чтобы подключить настоящую модель, в `.env` укажите `TRYON_PROVIDER=gemini` (или `fashn`) и `TRYON_API_KEY=...`, затем пересоберите API. Чтобы выключить примерку совсем (так prod запускается сейчас), задайте `TRYON_PROVIDER=off` для API и `NEXT_PUBLIC_TRYON_ENABLED=false` при сборке фронтенда. Подробности, сроки хранения фото и требования закона о локализации — в [docs/TRYON.md](docs/TRYON.md).
+**AI-примерка локально.** Откройте http://localhost:3000/fitting, выберите вещи, загрузите три фото и запустите. По умолчанию работает демо-режим `TRYON_PROVIDER=mock`: AI не вызывается, ключи не нужны, результат — ваши фото с карточками товаров. Чтобы подключить настоящую модель, в `.env` укажите `TRYON_PROVIDER=gemini` (или `fashn`) и `TRYON_API_KEY=...`, затем пересоберите API. Чтобы выключить примерку совсем (так prod запускается сейчас), задайте `TRYON_PROVIDER=off` для API и `NEXT_PUBLIC_TRYON_ENABLED=false` при сборке фронтенда. Подробности, сроки хранения фото и требования закона о локализации — в [docs/TRYON.md](docs/TRYON.md).
 
 ## 8. Остановка, логи, сброс данных
 

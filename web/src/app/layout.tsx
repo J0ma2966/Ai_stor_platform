@@ -1,18 +1,17 @@
 import { Suspense, type ReactNode } from "react";
 import type { Metadata, Viewport } from "next";
-import { notFound } from "next/navigation";
-import { NextIntlClientProvider, hasLocale } from "next-intl";
-import { getTranslations, setRequestLocale } from "next-intl/server";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getTranslations } from "next-intl/server";
 import { headers } from "next/headers";
-import { routing } from "@/i18n/routing";
+import { LocaleSync } from "@/i18n/switch";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { SessionProvider } from "@/lib/session";
 import { alternates, siteUrl } from "@/lib/site";
-import "../globals.css";
+import "./globals.css";
 
-export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
-  const { locale } = await params;
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getLocale();
   const t = await getTranslations({ locale, namespace: "seo" });
   return {
     metadataBase: new URL(siteUrl()),
@@ -26,16 +25,17 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
 
 export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#5b2a86" };
 
-export default async function LocaleLayout({ children, params }: { children: ReactNode; params: Promise<{ locale: string }> }) {
-  const { locale } = await params;
-  if (!hasLocale(routing.locales, locale)) notFound();
-  setRequestLocale(locale);
+// Корневой layout общий для обоих языков: при смене языка он не пересоздаётся,
+// а только получает новые сообщения (см. src/i18n/switch.tsx).
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const locale = await getLocale();
   // страницы рендерятся на каждый запрос: иначе в статическом HTML не будет nonce для CSP
   await headers();
   return (
     <html lang={locale}>
       <body>
         <NextIntlClientProvider>
+          <LocaleSync />
           <SessionProvider>
             <Suspense fallback={<div className="site-header" />}>
               <Header />

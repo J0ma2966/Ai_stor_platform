@@ -1,0 +1,16 @@
+import type { Metadata } from "next";
+import { getLocale } from "next-intl/server";
+import { legalDoc } from "@/content/legal";
+import { alternates } from "@/lib/site";
+import { LegalPage } from "@/components/LegalPage";
+
+
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getLocale();
+  return { title: legalDoc(locale, "about").title, alternates: alternates(locale, "/about") };
+}
+
+export default async function Page() {
+  const locale = await getLocale();
+  return <LegalPage locale={locale} doc="about" />;
+}

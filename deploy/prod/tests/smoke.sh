@@ -175,7 +175,7 @@ check "media domain does not expose private keys" bash -c "[[ \$($(printf '%q ' 
 
 step "site (Next.js) through $(multi && echo "edge" || echo "app") Caddy"
 check "site /api/healthz 200" retry 15 bash -c "$(printf '%q ' "${CURL[@]}") -f -o /dev/null https://$D:$SITE_PORT/api/healthz"
-check "site /ru/login 200 with nonce CSP" bash -c "$(printf '%q ' "${CURL[@]}") -sI https://$D:$SITE_PORT/ru/login | grep -qi \"content-security-policy: .*nonce-\""
+check "site /login 200 with nonce CSP" bash -c "$(printf '%q ' "${CURL[@]}") -sI https://$D:$SITE_PORT/login | grep -qi \"content-security-policy: .*nonce-\""
 check "www redirects to the site" bash -c "$(printf '%q ' "${CURL[@]}") -sI https://www.$D:$SITE_PORT/ | grep -qi '^location: https://$D'"
 if ! multi; then
   check "edge Caddy not running (single server: app Caddy serves the site)" bash -c "! docker ps --format '{{.Names}}' | grep -q '^boutique-edge-caddy'"
