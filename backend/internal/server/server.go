@@ -48,6 +48,9 @@ func New(d Deps) http.Handler {
 	productsH := &products.Handlers{DB: d.DB, PublicBase: d.Cfg.PublicMediaURL, Views: d.Views}
 	mediaH := &media.Handlers{Store: d.Storage, Limiter: limiter, Redis: d.Redis, PublicBase: d.Cfg.PublicMediaURL,
 		MaxBytes: int64(d.Cfg.MaxUploadMB) << 20, Sem: media.NewSem(max(d.Cfg.UploadConcurrency, 1))}
+	if !d.Cfg.TryOnEnabled() {
+		mediaH.Disabled = map[media.Purpose]bool{media.PurposeBodyPhoto: true}
+	}
 	adminH := &admin.Handlers{DB: d.DB, Revoker: revoker}
 	ordersH := &orders.Handlers{DB: d.DB, Media: d.Storage, Limiter: limiter, PublicBase: d.Cfg.PublicMediaURL}
 	tryonH := &tryon.Handlers{DB: d.DB, Store: d.Storage, Limiter: limiter, Redis: d.Redis, PublicBase: d.Cfg.PublicMediaURL,
@@ -76,7 +79,11 @@ func New(d Deps) http.Handler {
 
 			r.Route("/auth", authH.Routes)
 			productsH.PublicRoutes(r)
-			tryonH.PublicRoutes(r)
+			if d.Cfg.TryOnEnabled() {
+				tryonH.PublicRoutes(r)
+			} else {
+				r.Post("/fitting/adds", tryon.Disabled)
+			}
 
 			r.Group(func(r chi.Router) {
 				r.Use(auth.RequireRole(auth.RoleClient, auth.RoleStore, auth.RoleAdmin))
@@ -84,7 +91,11 @@ func New(d Deps) http.Handler {
 				// Заказы клиента: оформление, список, статусы.
 				r.With(auth.RequireRole(auth.RoleClient)).Route("/orders", ordersH.ClientRoutes)
 				// AI-примерка: фото, генерации, сохранённые образы.
-				r.With(auth.RequireRole(auth.RoleClient)).Route("/tryon", tryonH.ClientRoutes)
+				if d.Cfg.TryOnEnabled() {
+					r.With(auth.RequireRole(auth.RoleClient)).Route("/tryon", tryonH.ClientRoutes)
+				} else {
+					r.With(auth.RequireRole(auth.RoleClient)).HandleFunc("/tryon/*", tryon.Disabled)
+				}
 			})
 
 			r.Route("/store", func(r chi.Router) {

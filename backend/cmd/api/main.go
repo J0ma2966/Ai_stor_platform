@@ -101,7 +101,11 @@ func run(log *slog.Logger, args []string) error {
 	}
 	worker := &tryon.Worker{DB: pool, Store: store, Provider: provider, Log: log,
 		Concurrency: cfg.TryOn.Workers, Timeout: cfg.TryOn.Timeout, MaxAttempts: cfg.TryOn.MaxAttempts}
-	if len(args) > 0 && args[0] == "worker" {
+	if provider == nil { // TRYON_PROVIDER=off
+		if len(args) > 0 && args[0] == "worker" {
+			return errors.New("AI try-on is turned off (TRYON_PROVIDER=off); worker is not needed")
+		}
+	} else if len(args) > 0 && args[0] == "worker" {
 		// отдельный процесс: только очередь генераций, метрики на внутреннем порту
 		internal := &http.Server{Addr: cfg.InternalAddr, Handler: internalMux(), ReadHeaderTimeout: 5 * time.Second}
 		go func() { _ = internal.ListenAndServe() }()
@@ -110,7 +114,7 @@ func run(log *slog.Logger, args []string) error {
 		worker.Run(ctx)
 		return nil
 	}
-	if cfg.TryOn.InProcess {
+	if cfg.TryOn.InProcess && provider != nil {
 		go worker.Run(ctx)
 	}
 	var sms auth.SMSSender = auth.LogSender{Log: log}

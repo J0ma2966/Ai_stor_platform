@@ -9,6 +9,8 @@ import (
 	"image/jpeg"
 	"io"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -400,4 +402,36 @@ func TestFittingAddCounter(t *testing.T) {
 	if n != 2 {
 		t.Fatalf("fitting_adds = %d, want 2 (one per visitor per day)", n)
 	}
+}
+
+// TRYON_PROVIDER=off: примерка выключена целиком (запуск prod без неё).
+func TestTryOn_Disabled(t *testing.T) {
+	e := setup(t)
+	e.d.Cfg.TryOn.Provider = "off"
+	srv := httptest.NewServer(New(e.d))
+	t.Cleanup(srv.Close)
+	e.srv = srv
+
+	c := e.client()
+	c.loginClient("+998901114455")
+	c.must(200, "POST", "/v1/me/complete-registration", map[string]any{"gender": "female", "pd_consent": true})
+	for _, p := range []struct{ m, path string }{
+		{"GET", "/v1/tryon/quote"},
+		{"GET", "/v1/tryon/generations"},
+		{"POST", "/v1/tryon/generations"},
+		{"GET", "/v1/tryon/photos"},
+	} {
+		r := c.do(p.m, p.path, map[string]any{})
+		if r.Status != http.StatusServiceUnavailable || r.errCode() != "tryon_disabled" {
+			t.Errorf("%s %s: want 503 tryon_disabled, got %d %q", p.m, p.path, r.Status, r.errCode())
+		}
+	}
+	if r := c.do("POST", "/v1/uploads?purpose=body", pngFile(t)); r.Status < 400 {
+		t.Fatalf("body photo upload must be refused when try-on is off, got %d", r.Status)
+	}
+	if r := e.client().do("POST", "/v1/fitting/adds", map[string]any{"product_id": uuid.NewString()}); r.Status != http.StatusServiceUnavailable {
+		t.Fatalf("fitting adds: want 503, got %d", r.Status)
+	}
+	// Остальной API работает.
+	c.must(200, "GET", "/v1/me", nil)
 }

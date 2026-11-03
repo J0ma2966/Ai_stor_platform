@@ -64,7 +64,7 @@ type Config struct {
 
 // TryOnConfig — AI-примерка: провайдер, воркер, сроки хранения.
 type TryOnConfig struct {
-	Provider      string // mock | fashn | gemini | http
+	Provider      string // off | mock | fashn | gemini | http
 	APIKey        string // TRYON_API_KEY (fashn, gemini, http — Bearer)
 	Endpoint      string // TRYON_ENDPOINT — для http (свой сервер) или переопределения URL провайдера
 	Model         string // TRYON_MODEL — модель провайдера (gemini: gemini-2.5-flash-image)
@@ -152,9 +152,16 @@ func Load() (Config, error) {
 	return c, errors.Join(errs...)
 }
 
+// TryOnEnabled: TRYON_PROVIDER=off полностью выключает AI-примерку (решение
+// владельца от 2026-11-03: запуск prod без примерки). Тогда не нужны ни ключи
+// провайдера, ни хранилище биометрии, а загрузка фото тела запрещена.
+func (c Config) TryOnEnabled() bool { return c.TryOn.Provider != "off" }
+
 func (c Config) validateTryOn() []error {
 	var errs []error
 	switch c.TryOn.Provider {
+	case "off":
+		return nil
 	case "mock":
 		if c.IsProd() {
 			errs = append(errs, errors.New("TRYON_PROVIDER=mock is not allowed in prod"))
@@ -168,7 +175,7 @@ func (c Config) validateTryOn() []error {
 			errs = append(errs, errors.New("TRYON_ENDPOINT is required for TRYON_PROVIDER=http"))
 		}
 	default:
-		errs = append(errs, fmt.Errorf("unknown TRYON_PROVIDER %q (mock|fashn|gemini|http)", c.TryOn.Provider))
+		errs = append(errs, fmt.Errorf("unknown TRYON_PROVIDER %q (off|mock|fashn|gemini|http)", c.TryOn.Provider))
 	}
 	if c.IsProd() {
 		if c.BiometricS3Endpoint == "" {

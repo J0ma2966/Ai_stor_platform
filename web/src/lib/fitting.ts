@@ -3,6 +3,11 @@
 // По одному товару на зону манекена; новый товар той же зоны заменяет старый.
 import { API_URL } from "@/lib/api";
 
+// Выключатель AI-примерки (prod запускается без неё): NEXT_PUBLIC_TRYON_ENABLED=false
+// при сборке скрывает примерочную, мастер и кнопки «В примерочную».
+// Бэкенд при этом запускают с TRYON_PROVIDER=off.
+export const TRYON_ENABLED = process.env.NEXT_PUBLIC_TRYON_ENABLED !== "false";
+
 export type Zone = "headwear" | "top" | "bottom" | "shoes";
 export const ZONES: Zone[] = ["headwear", "top", "bottom", "shoes"];
 
@@ -48,6 +53,7 @@ function write(f: Fitting) {
 }
 
 export function addToFitting(item: FittingItem): void {
+  if (!TRYON_ENABLED) return;
   const f = getFitting();
   const replaced = f[item.zone]?.id === item.id;
   f[item.zone] = item;

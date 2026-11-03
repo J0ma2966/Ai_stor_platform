@@ -50,6 +50,11 @@ var (
 	ruleFittingAdd = ratelimit.Rule{Name: "fitting_add_ip", Limit: 120, Window: time.Minute}
 )
 
+var errDisabled = httpx.NewError(http.StatusServiceUnavailable, "tryon_disabled", "AI try-on is turned off")
+
+// Disabled — все маршруты примерки при TRYON_PROVIDER=off.
+func Disabled(w http.ResponseWriter, r *http.Request) { httpx.Fail(w, r, errDisabled) }
+
 // ClientRoutes монтируются за RequireRole(client): /v1/tryon.
 func (h *Handlers) ClientRoutes(r chi.Router) {
 	r.Get("/quote", h.quote)

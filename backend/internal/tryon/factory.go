@@ -8,7 +8,11 @@ import (
 )
 
 // NewProvider создаёт провайдера по конфигурации (TRYON_PROVIDER).
+// Для "off" возвращает nil: примерка выключена, воркер не запускается.
 func NewProvider(c config.TryOnConfig) (Provider, error) {
+	if c.Provider == "off" {
+		return nil, nil
+	}
 	hc := &http.Client{Timeout: c.Timeout}
 	switch c.Provider {
 	case "mock", "":

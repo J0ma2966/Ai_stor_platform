@@ -287,6 +287,9 @@
     "photoExpires": "Ishlatilmasa {date} da o‘chiriladi",
     "revokeText": "Fotolarni qayta ishlashga rozilikni qaytarib olish: barcha fotolaringiz va natijalar o‘chiriladi.",
     "revoke": "Rozilikni qaytarib olish va fotolarni o‘chirish",
-    "revokeConfirm": "Barcha fotolar va natijalar o‘chirilsinmi?"
+    "revokeConfirm": "Barcha fotolar va natijalar o‘chirilsinmi?",
+    "disabledTitle": "Kiyib ko‘rish hozircha mavjud emas",
+    "disabledText": "AI yordamida kiyib ko‘rish tez orada paydo bo‘ladi. Hozircha katalogdan narsalarni tanlab, buyurtma berishingiz mumkin.",
+    "toCatalog": "Katalogga"
   }
 }

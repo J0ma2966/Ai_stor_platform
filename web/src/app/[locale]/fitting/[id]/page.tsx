@@ -1,6 +1,7 @@
 "use client";
 import { use } from "react";
 import { useTranslations } from "next-intl";
+import { TryOnGate } from "@/components/TryOnGate";
 import { AuthGate } from "@/components/AuthGate";
 import { GenerationView } from "@/components/GenerationView";
 import { TryOnWizard } from "@/components/TryOnWizard";
@@ -10,9 +11,11 @@ export default function FittingStepPage({ params }: { params: Promise<{ id: stri
   const { id } = use(params);
   const t = useTranslations("tryon");
   return (
-    <AuthGate role="client">
-      <h1>{id === "new" ? t("newTitle") : t("resultTitle")}</h1>
-      {id === "new" ? <TryOnWizard /> : <GenerationView id={id} />}
-    </AuthGate>
+    <TryOnGate>
+      <AuthGate role="client">
+        <h1>{id === "new" ? t("newTitle") : t("resultTitle")}</h1>
+        {id === "new" ? <TryOnWizard /> : <GenerationView id={id} />}
+      </AuthGate>
+    </TryOnGate>
   );
 }

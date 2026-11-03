@@ -15,6 +15,7 @@
 
 | Значение | Что это | Зоны | Ключ |
 |---|---|---|---|
+| `off` | примерка выключена целиком: `/v1/tryon/*` и `/v1/fitting/adds` отвечают `503 tryon_disabled`, загрузка фото тела запрещена, воркер не запускается; ключи и `BIOMETRIC_S3_*` не нужны даже в prod | — | не нужен |
 | `mock` | демо без AI: фото клиента + карточки товаров, полоса DEMO. Только dev, в prod запрещён | все | не нужен |
 | `gemini` | Google Gemini API, модель `TRYON_MODEL` (по умолчанию `gemini-2.5-flash-image`), один запрос на ракурс со всеми вещами | все 4 | `TRYON_API_KEY` (Google AI Studio) |
 | `fashn` | FASHN AI `tryon-v1.6`, вещи надеваются цепочкой (низ → верх); `return_base64=true` — у FASHN результат живёт ≤ 60 мин | верх, низ | `TRYON_API_KEY` (fashn.ai) |
@@ -55,4 +56,5 @@
 ## Запуск
 
 - dev: `TRYON_PROVIDER=mock` (по умолчанию), воркер внутри API (`TRYON_WORKER_INPROCESS=true`).
+- prod без примерки (текущее решение владельца, 2026-11-03): `TRYON_PROVIDER=off` для API и сборка фронтенда с `NEXT_PUBLIC_TRYON_ENABLED=false` — страницы примерочной, мастера, истории и фото показывают заглушку, `addToFitting` ничего не делает. Gemini/FASHN в prod не включать, пока владелец не вернётся к вопросу.
 - prod: API с `TRYON_WORKER_INPROCESS=false` + отдельный процесс `api worker` (можно несколько реплик).
