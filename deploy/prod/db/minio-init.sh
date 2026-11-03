@@ -9,8 +9,12 @@ mc anonymous set none "$b"
 mc anonymous set download "$b/pub"
 # версии: 7 дней можно откатить случайное удаление/перезапись, потом удаляются насовсем
 mc version enable "$b"
-mc ilm rule ls "$b" 2>/dev/null | grep -q NoncurrentVersionExpiration \
-  || mc ilm rule add --noncurrent-expire-days 7 --expire-delete-marker "$b"
+# в образе mc нет grep: проверяем вывод через case, иначе каждый деплой добавлял бы дубль правила
+rules=$(mc ilm rule ls --json "$b" 2>/dev/null || true)
+case "$rules" in
+  *NoncurrentVersionExpiration*) ;;
+  *) mc ilm rule add --noncurrent-expire-days 7 --expire-delete-marker "$b" ;;
+esac
 
 # пользователь приложения: только объекты своего бакета, без админ-прав
 cat > /tmp/app-policy.json <<JSON

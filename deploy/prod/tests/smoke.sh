@@ -139,8 +139,15 @@ w=h=8; raw=b''.join(b'\x00'+b'\xc8\x50\x50'*w for _ in range(h))
 def ch(t,d): return struct.pack('>I',len(d))+t+d+struct.pack('>I',zlib.crc32(t+d)&0xffffffff)
 open(sys.argv[1],'wb').write(b'\x89PNG\r\n\x1a\n'+ch(b'IHDR',struct.pack('>IIBBBBB',w,h,8,2,0,0,0))+ch(b'IDAT',zlib.compress(raw))+ch(b'IEND',b''))
 PY
-up=$("${CURL[@]}" -H "Authorization: Bearer $tok" -H 'Content-Type: image/png' --data-binary @"$work/p.jpg" "$API/v1/uploads?purpose=delivery")
-purl=$(sed -n 's/.*"url":"\([^"]*\)".*/\1/p' <<<"$up" | sed 's/\\u0026/\&/g')
+# Первая загрузка после старта может попасть на прогрев MinIO/DNS: до 5 попыток, ответ печатаем.
+purl=""
+for _ in $(seq 1 5); do
+  up=$("${CURL[@]}" -H "Authorization: Bearer $tok" -H 'Content-Type: image/png' --data-binary @"$work/p.jpg" "$API/v1/uploads?purpose=delivery" || true)
+  purl=$(sed -n 's/.*"url":"\([^"]*\)".*/\1/p' <<<"$up" | sed 's/\\u0026/\&/g')
+  [[ -n "$purl" ]] && break
+  echo "upload response: ${up:0:300}"; sleep 3
+done
+[[ -n "$purl" ]] || app logs --tail 30 api1 api2 api3 caddy 2>&1 | tail -60
 check "upload returns presigned https://s3.$D URL" grep -q "^https://s3.$D/" <<<"$purl"
 check "presigned URL downloads the photo" bash -c "[[ \$($(printf '%q ' "${CURL[@]}") -o /dev/null -w '%{http_code}' '$purl') == 200 ]]"
 unsigned="${purl%%\?*}"
