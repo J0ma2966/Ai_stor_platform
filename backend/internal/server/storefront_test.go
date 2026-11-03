@@ -62,7 +62,7 @@ func TestPublicStoresAndStoreProfile(t *testing.T) {
 	prof := f.storeA.must(200, "PATCH", "/v1/store/profile", map[string]any{
 		"name": "Альфа", "description": "Лучший бутик", "logo_key": logo, "phone": "+998901112233",
 		"contacts": map[string]any{"instagram": "alpha_uz", "website": "https://alpha.uz"},
-		"address": "Ташкент, ул. Навои 1", "lat": 41.3, "lng": 69.2,
+		"address":  "Ташкент, ул. Навои 1", "lat": 41.3, "lng": 69.2,
 	}).data()
 	if prof["name"] != "Альфа" || !strings.HasPrefix(prof["logo_url"].(string), "https://cdn.test/pub/") {
 		t.Fatalf("profile: %v", prof)
@@ -332,7 +332,7 @@ func TestExcelImportAndBulkPhotos(t *testing.T) {
 		hdr,
 		{"IMP-1", "Кепка", "Хлопок", "headwear", "Acme", "150 000", "да"},
 		{"IMP-2", "Брюки", "Лён", "Pastki kiyimlar", "Acme", 320000.5, "yo'q"},
-		{"IMP-3", "", "x", "tops", "Acme", "1", "да"},          // нет названия
+		{"IMP-3", "", "x", "tops", "Acme", "1", "да"},           // нет названия
 		{"IMP-4", "Туфли", "Кожа", "socks", "Acme", "abc", "?"}, // 3 ошибки
 		{"IMP-1", "Дубль", "x", "tops", "Acme", "1", "да"},      // дубль артикула в файле
 		{},
