@@ -23,7 +23,10 @@ export default function middleware(req: NextRequest) {
   if (prefix === defaultLocale) {
     const url = req.nextUrl.clone();
     url.pathname = stripLocale(pathname);
-    return withCsp(NextResponse.redirect(url, 308), csp);
+    const res = NextResponse.redirect(url, 308);
+    // явная ссылка на русскую версию — это выбор языка: иначе cookie=uz вернула бы на /uz/...
+    res.cookies.set(LOCALE_COOKIE, defaultLocale, { path: "/", maxAge: 31536000, sameSite: "lax" });
+    return withCsp(res, csp);
   }
 
   const saved = req.cookies.get(LOCALE_COOKIE)?.value;
