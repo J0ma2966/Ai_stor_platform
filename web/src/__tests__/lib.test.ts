@@ -24,8 +24,8 @@ describe("safeNext", () => {
 
 describe("formatSum", () => {
   it("converts tiyin to sum", () => {
-    expect(formatSum(150000000, "ru")).toBe("1 500 000 сум");
-    expect(formatSum(150000000, "uz")).toBe("1 500 000 so‘m");
+    expect(formatSum(150000000, "ru")).toBe("1\u00a0500\u00a0000\u00a0сум");
+    expect(formatSum(150000000, "uz")).toBe("1\u00a0500\u00a0000\u00a0so‘m");
   });
 });
 

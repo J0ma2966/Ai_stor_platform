@@ -3,8 +3,9 @@ export function formatSum(tiyin: number, locale: string): string {
   const sum = Math.round(tiyin / 100);
   // Разряды через пробел в обоих языках (так принято и в Узбекистане). Не "uz-UZ": в браузерах без
   // узбекских данных ICU (часть Chromium/WebView) получалось «400,000» и расхождение с сервером.
-  const n = new Intl.NumberFormat("ru-RU").format(sum).replace(/[\u00a0\u202f]/g, " ");
-  return `${n} ${locale === "uz" ? "so‘m" : "сум"}`;
+  // Пробелы неразрывные: сумма не рвётся на строки в узких колонках таблиц и карточек.
+  const n = new Intl.NumberFormat("ru-RU").format(sum).replace(/[\s\u202f]/g, "\u00a0");
+  return `${n}\u00a0${locale === "uz" ? "so‘m" : "сум"}`;
 }
 
 export function formatDateTime(iso: string, locale: string): string {
