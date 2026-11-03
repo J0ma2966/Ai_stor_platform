@@ -8,12 +8,13 @@ export function Header() {
   const pathname = usePathname();
   const other = locale === "ru" ? "uz" : "ru";
   const isStore = pathname.startsWith("/store");
+  const isAdmin = pathname.startsWith("/admin");
   return (
     <header className="site-header">
       <div className="container row between">
         <Link href="/" className="logo">{t("name")}</Link>
         <nav className="row">
-          {isStore ? <Link href="/store/orders">{t("storeOrders")}</Link> : <Link href="/account/orders">{t("myOrders")}</Link>}
+          {isAdmin ? null : isStore ? <Link href="/store/orders">{t("storeOrders")}</Link> : <Link href="/account/orders">{t("myOrders")}</Link>}
           <Link href={pathname} locale={other} className="lang">{t("lang")}</Link>
         </nav>
       </div>
