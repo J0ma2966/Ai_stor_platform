@@ -57,9 +57,12 @@ JWT_SECRET=$JWT_SECRET
 OTP_PEPPER=$OTP_PEPPER
 OTP_ALLOWED_PREFIXES=+998
 UPLOAD_CONCURRENCY=4
+# AI-примерка в первом релизе выключена: не нужны воркер, ключи Gemini/FASHN и биометрическое хранилище.
+# Включение: другой провайдер + TRYON_API_KEY, BIOMETRIC_S3_* (см. docs/DEPLOY.md) и TRYON_ENABLED=true у сайта.
+TRYON_PROVIDER=off
 API_CPUS=2
 API_MEMORY=2g
-# --- ключи SMS-провайдера, Click/Payme, AI-примерки добавляются сюда (см. docs/DEPLOY.md) ---
+# --- ключи SMS-провайдера и Click/Payme добавляются сюда (см. docs/DEPLOY.md) ---
 E
 
 db_common() {

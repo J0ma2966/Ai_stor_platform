@@ -58,11 +58,14 @@ jobs:
         with: {registry: ghcr.io, username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}"}
       - if: steps.cfg.outputs.skip != 'true'
         name: Build site for this environment (NEXT_PUBLIC_* are baked in)
+        env:
+          TRYON_ENABLED: ${{ vars.TRYON_ENABLED }}
         run: |
           docker build -t "$R/web-$ENVNAME:$TAG" \
             --build-arg NEXT_PUBLIC_API_URL=https://${{ vars.API_DOMAIN }} \
             --build-arg NEXT_PUBLIC_MEDIA_ORIGIN=https://${{ vars.MEDIA_DOMAIN }},https://${{ vars.S3_DOMAIN }} \
-            --build-arg NEXT_PUBLIC_SITE_URL=https://${{ vars.SITE_DOMAIN }} web
+            --build-arg NEXT_PUBLIC_SITE_URL=https://${{ vars.SITE_DOMAIN }} \
+            --build-arg NEXT_PUBLIC_TRYON_ENABLED="${TRYON_ENABLED:-false}" web
           docker push "$R/web-$ENVNAME:$TAG"
       - if: steps.cfg.outputs.skip != 'true'
         name: SSH
