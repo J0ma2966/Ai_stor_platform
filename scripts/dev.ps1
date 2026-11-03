@@ -176,12 +176,16 @@ function Update-WebOrigin([int]$Old, [int]$New) {
 
 function Get-ApiUrl { "http://localhost:$(Get-Port 'API_HOST_PORT')" }
 
+# Для проверок из скрипта: localhost на Windows сначала идёт на IPv6 (::1), где Docker не слушает,
+# и отказ там приходит только через ~2 секунды. Поэтому проверяем напрямую по IPv4.
+function Get-ApiProbeUrl { "http://127.0.0.1:$(Get-Port 'API_HOST_PORT')" }
+
 function Wait-Ready {
-  $url = "$(Get-ApiUrl)/readyz"
+  $url = "$(Get-ApiProbeUrl)/readyz"
   Write-Host "Жду готовности API на $url ..."
   for ($i = 0; $i -lt 60; $i++) {
     try {
-      $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 $url
+      $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 $url
       if ($r.StatusCode -eq 200) { Write-Host 'API готов.' -ForegroundColor Green; return }
     } catch { }
     Start-Sleep -Seconds 2
@@ -210,7 +214,7 @@ switch ($Command) {
     Assert-Docker
     Invoke-Compose logs --tail 500 api | Select-String 'DEV OTP' | Select-Object -Last 5
   }
-  'health' { Invoke-WebRequest -UseBasicParsing "$(Get-ApiUrl)/readyz" | Select-Object StatusCode, Content }
+  'health' { Invoke-WebRequest -UseBasicParsing "$(Get-ApiProbeUrl)/readyz" | Select-Object StatusCode, Content }
   'admin'  {
     Assert-Docker
     $login = if ($Arg) { $Arg } else { 'root' }
@@ -227,6 +231,8 @@ switch ($Command) {
       # Пустая или недоустановленная node_modules (прерванный npm ci) тоже требует установки.
       if (-not (Test-Path 'node_modules/.bin/next*')) { & npm ci; if ($LASTEXITCODE -ne 0) { throw 'npm ci завершился с ошибкой' } }
       $env:NEXT_PUBLIC_API_URL = Get-ApiUrl
+      # Запросы со стороны сервера Next.js: тоже мимо IPv6 localhost
+      $env:API_INTERNAL_URL = Get-ApiProbeUrl
       $env:NEXT_PUBLIC_MEDIA_ORIGIN = "http://localhost:$(Get-Port 'MINIO_HOST_PORT')"
       $webPort = Get-Port 'WEB_PORT'
       if (-not (Test-PortFree $webPort)) {
