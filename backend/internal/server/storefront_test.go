@@ -447,6 +447,15 @@ func TestDeleteAccount(t *testing.T) {
 	cl.must(200, "POST", "/v1/me/complete-registration", map[string]any{"gender": "female", "pd_consent": true})
 	cl.must(200, "PUT", "/v1/me/cart/"+f.prodA, map[string]any{"qty": 1})
 	cl.mustH(201, "POST", "/v1/orders", checkoutBody(item(f.prodB, 1)), idem(uuid.NewString()))
+	// фото тела для примерки: должно удалиться вместе с аккаунтом
+	ctx := context.Background()
+	bodyKey := "priv/u/" + uid + "/body_photo/front.jpg"
+	if err := f.e.d.Storage.Put(ctx, bodyKey, []byte("x"), "image/jpeg"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.e.d.DB.Exec(ctx, `INSERT INTO body_photos (user_id, angle, key) VALUES ($1, 'front', $2)`, uid, bodyKey); err != nil {
+		t.Fatal(err)
+	}
 
 	cl.must(422, "DELETE", "/v1/me", map[string]any{"confirm": false})
 	cl.must(204, "DELETE", "/v1/me", map[string]any{"confirm": true})
@@ -454,13 +463,16 @@ func TestDeleteAccount(t *testing.T) {
 		t.Fatalf("deleted user still has access: %d", r.Status)
 	}
 	var phone *string
-	var orders, cart int
-	ctx := context.Background()
+	var orders, cart, photos int
 	_ = f.e.d.DB.QueryRow(ctx, `SELECT phone FROM users WHERE id = $1`, uid).Scan(&phone)
 	_ = f.e.d.DB.QueryRow(ctx, `SELECT count(*) FROM orders WHERE user_id = $1`, uid).Scan(&orders)
 	_ = f.e.d.DB.QueryRow(ctx, `SELECT count(*) FROM cart_items WHERE user_id = $1`, uid).Scan(&cart)
-	if phone != nil || orders != 1 || cart != 0 {
-		t.Fatalf("phone=%v orders=%d cart=%d", phone, orders, cart)
+	_ = f.e.d.DB.QueryRow(ctx, `SELECT count(*) FROM body_photos WHERE user_id = $1`, uid).Scan(&photos)
+	if phone != nil || orders != 1 || cart != 0 || photos != 0 {
+		t.Fatalf("phone=%v orders=%d cart=%d body_photos=%d", phone, orders, cart, photos)
+	}
+	if _, err := f.e.d.Storage.Get(ctx, bodyKey); err == nil {
+		t.Fatal("body photo object still in storage")
 	}
 	// тот же номер регистрируется заново как новый аккаунт
 	again := f.e.client()
