@@ -31,6 +31,7 @@ type Deps struct {
 	Storage media.Storage
 	SMS     auth.SMSSender
 	Views   *products.ViewCounter // nil — просмотры не считаются (тесты)
+	Fitting *tryon.FittingCounter // nil — счётчик «В примерочную» отключён
 }
 
 func New(d Deps) http.Handler {
@@ -50,7 +51,7 @@ func New(d Deps) http.Handler {
 	adminH := &admin.Handlers{DB: d.DB, Revoker: revoker}
 	ordersH := &orders.Handlers{DB: d.DB, Media: d.Storage, Limiter: limiter, PublicBase: d.Cfg.PublicMediaURL}
 	tryonH := &tryon.Handlers{DB: d.DB, Store: d.Storage, Limiter: limiter, Redis: d.Redis, PublicBase: d.Cfg.PublicMediaURL,
-		Retention: RetentionFrom(d.Cfg), MaxActive: d.Cfg.TryOn.MaxActive, Provider: d.Cfg.TryOn.Provider}
+		Retention: RetentionFrom(d.Cfg), MaxActive: d.Cfg.TryOn.MaxActive, Provider: d.Cfg.TryOn.Provider, Fitting: d.Fitting}
 
 	r := chi.NewRouter()
 	r.Use(httpx.RequestContext(d.Log, d.Cfg.TrustedProxy))

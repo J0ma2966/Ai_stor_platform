@@ -380,12 +380,22 @@ func TestTryOnRetention(t *testing.T) {
 
 func TestFittingAddCounter(t *testing.T) {
 	f := newTryonFixture(t)
+	fc := &tryon.FittingCounter{Redis: f.e.d.Redis, DB: f.e.d.DB, Log: f.worker.Log}
+	f.e.d.Fitting = fc
+	f.e.srv.Config.Handler = New(f.e.d)
 	anon := f.e.client()
 	for i := 0; i < 3; i++ {
 		anon.must(204, "POST", "/v1/fitting/adds", map[string]any{"product_id": f.top})
 	}
 	f.cli.must(204, "POST", "/v1/fitting/adds", map[string]any{"product_id": f.top})
 	var n int64
+	_ = f.e.d.DB.QueryRow(context.Background(), `SELECT fitting_adds FROM products WHERE id = $1`, f.top).Scan(&n)
+	if n != 0 {
+		t.Fatalf("counter must be buffered in Redis, got %d in DB before flush", n)
+	}
+	if err := fc.Flush(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 	_ = f.e.d.DB.QueryRow(context.Background(), `SELECT fitting_adds FROM products WHERE id = $1`, f.top).Scan(&n)
 	if n != 2 {
 		t.Fatalf("fitting_adds = %d, want 2 (one per visitor per day)", n)

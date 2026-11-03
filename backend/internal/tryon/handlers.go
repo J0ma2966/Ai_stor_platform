@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -35,9 +36,8 @@ type Handlers struct {
 	Retention  Retention
 	MaxActive  int    // активных генераций на клиента
 	Provider   string // имя провайдера (для фронта: какие зоны поддерживаются)
-	// RecordFittingAdd увеличивает счётчик добавлений товара в примерочную.
-	// TODO(stats): подставить products.RecordFittingAdd (дневная статистика) после мержа.
-	RecordFittingAdd func(ctx context.Context, pool *pgxpool.Pool, productID uuid.UUID) error
+	// Fitting — буфер счётчика «В примерочную» в Redis (nil — без счётчика).
+	Fitting *FittingCounter
 }
 
 const (
@@ -813,20 +813,12 @@ func (h *Handlers) fittingAdd(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	rec := h.RecordFittingAdd
-	if rec == nil {
-		rec = recordFittingAdd
-	}
-	if err := rec(r.Context(), h.DB, req.ProductID); err != nil {
-		httpx.Fail(w, r, err)
-		return
+	if h.Fitting != nil {
+		if err := h.Fitting.Hit(r.Context(), req.ProductID); err != nil {
+			httpx.LoggerFrom(r.Context()).Warn("fitting counter unavailable", slog.String("err", err.Error()))
+		}
 	}
 	httpx.NoContent(w)
-}
-
-func recordFittingAdd(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) error {
-	_, err := pool.Exec(ctx, `UPDATE products SET fitting_adds = fitting_adds + 1 WHERE id = $1 AND status = 'published'`, id)
-	return err
 }
 
 // ---------- админ ----------

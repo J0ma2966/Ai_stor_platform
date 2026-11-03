@@ -121,6 +121,8 @@ func run(log *slog.Logger, args []string) error {
 
 	views := &products.ViewCounter{Redis: rdb, DB: pool, Log: log}
 	go views.Run(ctx, 30*time.Second)
+	fitting := &tryon.FittingCounter{Redis: rdb, DB: pool, Log: log}
+	go fitting.Run(ctx, 30*time.Second)
 	ret := server.RetentionFrom(cfg)
 	tryonJob := func(name string, fn func(context.Context, *pgxpool.Pool, media.Storage, tryon.Retention, time.Time) (int64, error)) janitor.Job {
 		return janitor.Job{Name: name, Run: func(ctx context.Context) (int64, error) { return fn(ctx, pool, store, ret, time.Now()) }}
@@ -141,7 +143,7 @@ func run(log *slog.Logger, args []string) error {
 
 	api := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           server.New(server.Deps{Cfg: cfg, Log: log, DB: pool, Redis: rdb, Storage: store, SMS: sms, Views: views}),
+		Handler:           server.New(server.Deps{Cfg: cfg, Log: log, DB: pool, Redis: rdb, Storage: store, SMS: sms, Views: views, Fitting: fitting}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       60 * time.Second,
 		WriteTimeout:      75 * time.Second,
