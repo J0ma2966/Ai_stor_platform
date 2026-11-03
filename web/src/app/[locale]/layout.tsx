@@ -7,6 +7,7 @@ import { headers } from "next/headers";
 import { routing } from "@/i18n/routing";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { StaleWorkerGuard } from "@/components/StaleWorkerGuard";
 import { SessionProvider } from "@/lib/session";
 import { alternates, siteUrl } from "@/lib/site";
 import "../globals.css";
@@ -34,6 +35,9 @@ export default async function LocaleLayout({ children, params }: { children: Rea
   await headers();
   return (
     <html lang={locale}>
+      <head>
+        <StaleWorkerGuard />
+      </head>
       <body>
         <NextIntlClientProvider>
           <SessionProvider>
