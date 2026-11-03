@@ -6,13 +6,13 @@
 #   3) в секрете ENV_APP поменять DB_PRIVATE_IP на адрес реплики и перезапустить деплой app.
 set -euo pipefail
 compose() { docker compose -f compose.yml "$@"; }
-state=$(compose exec -T postgres psql -U postgres -tAc "select pg_is_in_recovery()")
+state=$(compose exec -T -u postgres postgres psql -U postgres -tAc "select pg_is_in_recovery()")
 if [[ "$state" != "t" ]]; then echo "this server is already primary"; exit 0; fi
 if [[ "${CONFIRM_FAILOVER:-}" != "yes" ]]; then
   echo "Old primary must be stopped. Re-run with CONFIRM_FAILOVER=yes" >&2; exit 2
 fi
-compose exec -T postgres psql -U postgres -tAc "select pg_promote(wait => true, wait_seconds => 60)"
-compose exec -T postgres psql -U postgres -tAc "select case when pg_is_in_recovery() then 'still replica' else 'promoted: primary' end"
+compose exec -T -u postgres postgres psql -U postgres -tAc "select pg_promote(wait => true, wait_seconds => 60)"
+compose exec -T -u postgres postgres psql -U postgres -tAc "select case when pg_is_in_recovery() then 'still replica' else 'promoted: primary' end"
 # этот сервер теперь primary: базовые бэкапы WAL-G
 sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=replica,drill,walg/' .env
 compose up -d walg

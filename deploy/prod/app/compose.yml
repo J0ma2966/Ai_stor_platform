@@ -60,9 +60,6 @@ services:
     networks:
       default:
         aliases: ["${S3_DOMAIN}"]
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:2019/config/"]
-      interval: 10s
 
   api1:
     <<: *api

@@ -90,3 +90,29 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - run: docker build -t boutique-api:ci backend
+
+  # Весь прод-стек на одном раннере: Caddy/TLS, 3 API, Redis, PostgreSQL + WAL-G, реплика,
+  # MinIO, сайт, Prometheus/Alertmanager/Grafana/Loki; бэкапы, PITR, деплой без простоя.
+  deploy-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Static checks of deploy configs
+        run: |
+          shellcheck -S warning deploy/prod/scripts/*.sh deploy/prod/tests/*.sh deploy/backup/*.sh deploy/prod/db/*.sh deploy/prod/db/postgres/*.sh
+          docker run --rm -v "$PWD/deploy/prod/monitoring:/m" --entrypoint promtool prom/prometheus:v3.5.0 check rules /m/rules/alerts.yml
+          pipx install ansible-core==2.18.6 >/dev/null && ansible-galaxy collection install -r ansible/requirements.yml >/dev/null
+          ansible-playbook -i ansible/inventory.example.yml ansible/site.yml --syntax-check
+      - name: Build images
+        run: |
+          R=local/boutique
+          docker build -q -t $R/api:smoke1 backend
+          docker build -q -t $R/postgres:smoke deploy/prod/db/postgres
+          docker build -q -t $R/backup:smoke -f deploy/backup/Dockerfile .
+          docker build -q -t $R/web-production:smoke1 \
+            --build-arg NEXT_PUBLIC_API_URL=https://api.boutique.test \
+            --build-arg NEXT_PUBLIC_MEDIA_ORIGIN=https://media.boutique.test,https://s3.boutique.test \
+            --build-arg NEXT_PUBLIC_SITE_URL=https://boutique.test web
+      - name: Smoke test
+        run: sudo -E env "PATH=$PATH" REGISTRY=local/boutique TAG=smoke1 TAG2=smoke2 deploy/prod/tests/smoke.sh

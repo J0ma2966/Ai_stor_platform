@@ -43,6 +43,14 @@ wait_http() {
   return 1
 }
 
+# каталог textfile-метрик node_exporter: туда пишут задачи бэкапа (любой uid)
+metrics_dir() {
+  local d; d="$(sed -n 's/^METRICS_HOST_DIR=//p' .env | tail -1)"; d="${d:-/var/lib/boutique/metrics}"
+  mkdir -p "$d" && chmod 1777 "$d"
+}
+
+pull() { [[ "${SKIP_PULL:-0}" == "1" ]] || compose pull -q --ignore-buildable; }
+
 rolling() { # rolling <сервис-проверяльщик> <путь> <сервисы...>
   local via="$1" path="$2"; shift 2
   for s in "$@"; do
@@ -59,14 +67,14 @@ rolling() { # rolling <сервис-проверяльщик> <путь> <сер
 
 case "$role" in
   host)
-    mkdir -p "${METRICS_HOST_DIR:-/var/lib/boutique/metrics}" && chmod 1777 "${METRICS_HOST_DIR:-/var/lib/boutique/metrics}"
-    compose pull -q
+    metrics_dir
+    pull
     compose up -d --remove-orphans
     ;;
 
   db)
-    mkdir -p "${METRICS_HOST_DIR:-/var/lib/boutique/metrics}" && chmod 1777 "${METRICS_HOST_DIR:-/var/lib/boutique/metrics}"
-    compose pull -q
+    metrics_dir
+    pull
     # сначала хранилище и бакеты (архив WAL пишется туда с первой секунды)
     if [[ ",${COMPOSE_PROFILES:-$(sed -n 's/^COMPOSE_PROFILES=//p' .env)}," == *",primary,"* ]]; then
       compose up -d --wait minio
@@ -75,7 +83,7 @@ case "$role" in
     # Postgres пересоздаётся только если поменялся образ/конфиг (тег образа = хэш его файлов)
     compose up -d --remove-orphans --wait --wait-timeout 300 postgres
     compose up -d --remove-orphans
-    log "postgres: $(compose exec -T postgres psql -U postgres -tAc 'select pg_is_in_recovery()' | sed 's/t/replica/;s/f/primary/')"
+    log "postgres: $(compose exec -T -u postgres postgres psql -U postgres -tAc 'select pg_is_in_recovery()' | sed 's/t/replica/;s/f/primary/')"
     ;;
 
   app)
@@ -83,10 +91,17 @@ case "$role" in
     old="$(prev_tag)"
     set_tag "$tag"
     PORT=8080
-    compose pull -q
-    compose up -d --no-recreate redis redis-exporter loki caddy
+    restore_tag() { if [[ -n "$old" ]]; then set_tag "$old"; else sed -i '/^IMAGE_TAG=/d' .env; fi; }
+    if ! pull; then log "ERROR: cannot pull $tag"; restore_tag; exit 1; fi
+    # всё, кроме инстансов API, — поднять, если ещё не запущено
+    mapfile -t others < <(compose config --services | grep -vxE 'api[0-9]+|migrate')
+    compose up -d --no-recreate "${others[@]}"
+    sleep 2
     log "running migrations"
-    compose --profile tools run --rm migrate
+    # миграции обратно совместимы (expand -> migrate -> contract), старые инстансы работают дальше
+    if ! compose --profile tools run --rm -T migrate; then
+      log "ERROR: migrations failed, nothing restarted"; restore_tag; exit 1
+    fi
     if ! rolling caddy /readyz api1 api2 api3; then
       if [[ -n "$old" ]]; then
         set_tag "$old"; log "rollback to $old"
@@ -106,8 +121,10 @@ case "$role" in
     set_tag "$tag"
     PORT=3000
     "$root/scripts/render-targets.sh"
-    compose pull -q
-    compose up -d --no-recreate caddy prometheus alertmanager blackbox grafana
+    restore_tag() { if [[ -n "$old" ]]; then set_tag "$old"; else sed -i '/^IMAGE_TAG=/d' .env; fi; }
+    if ! pull; then log "ERROR: cannot pull $tag"; restore_tag; exit 1; fi
+    mapfile -t others < <(compose config --services | grep -vxE 'web[0-9]+')
+    compose up -d --no-recreate "${others[@]}"
     if ! rolling caddy /api/healthz web1 web2; then
       if [[ -n "$old" ]]; then
         set_tag "$old"; log "rollback to $old"

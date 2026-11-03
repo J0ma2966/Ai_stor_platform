@@ -32,7 +32,8 @@ run_backup() {
 last=0
 # Первый базовый бэкап сразу, если в хранилище ещё нет ни одного (новая установка)
 until pg_isready -q; do sleep 2; done
-latest="$(wal-g backup-list --json 2>/dev/null | jq -r 'map(.time) | max // empty')"
+# время в ISO 8601 сортируется как строка
+latest="$(wal-g backup-list --json 2>/dev/null | grep -o '"time":"[^"]*"' | cut -d'"' -f4 | sort | tail -1)"
 if [[ -z "$latest" ]]; then run_backup; else
   last=$(date -u -d "$latest" +%s); metric "$last" 1
   log info "latest base backup: $latest"

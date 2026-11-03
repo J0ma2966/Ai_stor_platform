@@ -1,0 +1,33 @@
+# Ручная подготовка серверов Ansible'ом прямо из GitHub (удобно с Windows).
+# Секреты окружения: SSH_PRIVATE_KEY (ключ root/deploy), SSH_KNOWN_HOSTS, ANSIBLE_INVENTORY (inventory.yml целиком).
+name: infra
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment: {type: choice, options: [staging, production], default: staging}
+      check_only: {type: boolean, default: true, description: "Только показать изменения (--check --diff)"}
+
+permissions:
+  contents: read
+
+jobs:
+  ansible:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - run: pipx install ansible-core==2.18.6 && ansible-galaxy collection install -r ansible/requirements.yml
+      - name: SSH and inventory
+        env:
+          KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          KNOWN: ${{ secrets.SSH_KNOWN_HOSTS }}
+          INV: ${{ secrets.ANSIBLE_INVENTORY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN" > ~/.ssh/known_hosts
+          printf '%s\n' "$INV" > ansible/inventory.yml
+      - name: ansible-playbook
+        working-directory: ansible
+        run: ansible-playbook -i inventory.yml site.yml ${{ inputs.check_only && '--check --diff' || '' }}

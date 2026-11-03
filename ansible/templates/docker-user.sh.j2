@@ -1,0 +1,10 @@
+#!/bin/sh
+# Управляется Ansible. Внутренние порты контейнеров доступны только через wg0.
+set -e
+iptables -N BOUTIQUE-PRIVATE 2>/dev/null || iptables -F BOUTIQUE-PRIVATE
+iptables -A BOUTIQUE-PRIVATE -i wg0 -j RETURN
+iptables -A BOUTIQUE-PRIVATE -i lo -j RETURN
+iptables -A BOUTIQUE-PRIVATE -i docker0 -j RETURN
+iptables -A BOUTIQUE-PRIVATE -i br+ -j RETURN
+iptables -A BOUTIQUE-PRIVATE -p tcp -m multiport --dports {{ private_ports | join(',') }} -j DROP
+iptables -C DOCKER-USER -j BOUTIQUE-PRIVATE 2>/dev/null || iptables -I DOCKER-USER -j BOUTIQUE-PRIVATE
