@@ -176,7 +176,7 @@ check "archive has no failures" bash -c "$(declare -f psqlp dbc); work=$work; [[
 check "first WAL-G base backup made automatically" retry 60 bash -c "$(declare -f dbc); work=$work; dbc exec -T walg wal-g backup-list 2>/dev/null | grep -q base_"
 check "base backup metric written" retry 10 grep -q 'boutique_walg_last_run_ok 1' "$work/metrics-db/walg.prom"
 check "replica streaming" retry 60 bash -c "$(declare -f psqlp dbc); work=$work; psqlp \"select state from pg_stat_replication where application_name='replica1'\" | grep -q streaming"
-psqlp "create table if not exists smoke_marker(id int primary key, note text); insert into smoke_marker values (1, 'before') on conflict do nothing" >/dev/null
+psqlp "create table if not exists smoke_marker(id int primary key, note text); insert into smoke_marker values (1, 'before') on conflict do nothing; alter table smoke_marker owner to boutique" >/dev/null
 check "replica sees new rows" retry 20 bash -c "$(declare -f rep); work=$work; rep exec -T -u postgres postgres psql -U postgres -d boutique -tAc 'select note from smoke_marker where id=1' | grep -q before"
 ro_check() { ! rep exec -T -u postgres postgres psql -d boutique -c "insert into smoke_marker values (2, 'x')" >/dev/null 2>&1; }
 check "replica is read-only" ro_check
