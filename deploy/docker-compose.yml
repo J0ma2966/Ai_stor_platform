@@ -59,7 +59,7 @@ services:
       # dev: воркер AI-примерки внутри API, демо-провайдер без ключей (docs/TRYON.md)
       TRYON_PROVIDER: ${TRYON_PROVIDER:-mock}
       TRYON_WORKER_INPROCESS: "true"
-    ports: ["127.0.0.1:8080:8080", "127.0.0.1:9090:9090"]
+    ports: ["127.0.0.1:${API_HOST_PORT:-8080}:8080", "127.0.0.1:9090:9090"]
 
   backup:
     build: {context: .., dockerfile: deploy/backup/Dockerfile}

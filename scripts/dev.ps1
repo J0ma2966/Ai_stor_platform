@@ -25,6 +25,15 @@ $Root = Split-Path -Parent $PSScriptRoot
 $Compose = Join-Path $Root 'deploy/docker-compose.yml'
 Set-Location $Root
 
+# Порт API на хосте: API_HOST_PORT из окружения или deploy/.env (на Windows 8080 бывает зарезервирован Hyper-V).
+$ApiPort = if ($env:API_HOST_PORT) { $env:API_HOST_PORT } else { 8080 }
+$localEnv = Join-Path $Root 'deploy/.env'
+if (-not $env:API_HOST_PORT -and (Test-Path $localEnv)) {
+  $m = Select-String -Path $localEnv -Pattern '^API_HOST_PORT=(d+)' | Select-Object -First 1
+  if ($m) { $ApiPort = $m.Matches[0].Groups[1].Value }
+}
+$ApiUrl = "http://localhost:$ApiPort"
+
 function Invoke-Compose {
   & docker compose -f $Compose @args
   if ($LASTEXITCODE -ne 0) { throw "docker compose $($args -join ' ') завершился с кодом $LASTEXITCODE" }
@@ -50,11 +59,11 @@ function Assert-Env {
 }
 
 function Wait-Ready {
-  Write-Host 'Жду готовности API на http://localhost:8080/readyz ...'
+  Write-Host "Жду готовности API на $ApiUrl/readyz ..."
   for ($i = 0; $i -lt 60; $i++) {
     try {
       # 127.0.0.1, а не localhost: порты проброшены только на IPv4, а PowerShell 7 сначала пробует ::1 и не успевает за 2 секунды.
-      $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 http://127.0.0.1:8080/readyz
+      $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 http://127.0.0.1:${ApiPort}/readyz
       if ($r.StatusCode -eq 200) { Write-Host 'API готов.' -ForegroundColor Green; return }
     } catch { }
     Start-Sleep -Seconds 2
@@ -82,7 +91,7 @@ switch ($Command) {
     Assert-Docker
     & docker compose -f $Compose logs --tail 500 api | Select-String 'DEV OTP' | Select-Object -Last 5
   }
-  'health' { Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8080/readyz | Select-Object StatusCode, Content }
+  'health' { Invoke-WebRequest -UseBasicParsing http://127.0.0.1:${ApiPort}/readyz | Select-Object StatusCode, Content }
   'admin'  {
     Assert-Docker
     $login = if ($Arg) { $Arg } else { 'root' }
@@ -103,7 +112,7 @@ switch ($Command) {
           (Get-Item 'package-lock.json').LastWriteTime -gt (Get-Item $installed).LastWriteTime) {
         & npm ci; if ($LASTEXITCODE -ne 0) { throw 'npm ci завершился с ошибкой' }
       }
-      $env:NEXT_PUBLIC_API_URL = 'http://localhost:8080'
+      $env:NEXT_PUBLIC_API_URL = $ApiUrl
       $env:NEXT_PUBLIC_MEDIA_ORIGIN = 'http://localhost:9000'
       & npm run dev
     } finally { Pop-Location }
