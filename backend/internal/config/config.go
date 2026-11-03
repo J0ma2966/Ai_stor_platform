@@ -5,6 +5,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/netip"
 	"os"
 	"strconv"
 	"strings"
@@ -47,6 +48,28 @@ type Config struct {
 
 	AutoMigrate bool
 
+	// SMS: log (только dev/test) | eskiz
+	SMSProvider   string
+	EskizURL      string
+	EskizEmail    string
+	EskizPassword string
+	EskizFrom     string
+	SMSTemplate   string // одобренный в кабинете Eskiz текст, %s — код
+
+	// Платежи. Провайдер включён, только если заданы его ключи.
+	PaymentReturnURL string // куда вернуть клиента после оплаты, напр. https://shop.uz/ru/account/balance
+	ClickServiceID   string
+	ClickMerchantID  string
+	ClickSecretKey   string
+	ClickAllowedIPs  []string // CIDR/IP, пусто — без проверки IP (подпись проверяется всегда)
+	PaymeMerchantID  string
+	PaymeKey         string // ключ кассы (тестовый или боевой)
+	PaymeTest        bool   // песочница checkout.test.paycom.uz
+	PaymeAccountKey  string // имя поля account в кабинете Payme, по умолчанию payment_id
+	PaymeAllowedIPs  []string
+	PaymeIKPU        string // код ИКПУ (МХИК) для фискального чека, пусто — без detail
+	PaymePackageCode string
+	PaymeVATPercent  int
 	// Хранилище биометрии (фото клиента, результаты примерки). Должно физически
 	// находиться в Узбекистане. Если BIOMETRIC_S3_ENDPOINT пуст — используется
 	// основное хранилище (только dev/test; в prod сервер не стартует).
@@ -78,6 +101,12 @@ type TryOnConfig struct {
 	ResultTTL     time.Duration // результат, если образ не сохранён
 	SavedLookTTL  time.Duration // сохранённый образ
 }
+
+func (c Config) ClickEnabled() bool {
+	return c.ClickServiceID != "" && c.ClickMerchantID != "" && c.ClickSecretKey != ""
+}
+
+func (c Config) PaymeEnabled() bool { return c.PaymeMerchantID != "" && c.PaymeKey != "" }
 
 func (c Config) IsProd() bool { return c.Env == "prod" }
 
@@ -134,6 +163,26 @@ func Load() (Config, error) {
 			ResultTTL:     getDur("TRYON_RESULT_TTL", 30*24*time.Hour),
 			SavedLookTTL:  getDur("TRYON_SAVED_LOOK_TTL", 365*24*time.Hour),
 		},
+		SMSProvider:      get("SMS_PROVIDER", "log"),
+		EskizURL:         get("ESKIZ_URL", "https://notify.eskiz.uz/api"),
+		EskizEmail:       os.Getenv("ESKIZ_EMAIL"),
+		EskizPassword:    os.Getenv("ESKIZ_PASSWORD"),
+		EskizFrom:        get("ESKIZ_FROM", "4546"),
+		SMSTemplate:      get("SMS_OTP_TEMPLATE", "Kod dlya vhoda: %s"),
+		PaymentReturnURL: os.Getenv("PAYMENT_RETURN_URL"),
+		ClickServiceID:   os.Getenv("CLICK_SERVICE_ID"),
+		ClickMerchantID:  os.Getenv("CLICK_MERCHANT_ID"),
+		ClickSecretKey:   os.Getenv("CLICK_SECRET_KEY"),
+		ClickAllowedIPs:  splitList(os.Getenv("CLICK_ALLOWED_IPS")),
+		PaymeMerchantID:  os.Getenv("PAYME_MERCHANT_ID"),
+		PaymeKey:         os.Getenv("PAYME_KEY"),
+		// песочница по умолчанию только вне prod: забытая переменная не уведёт клиентов на test.paycom.uz
+		PaymeTest:        getBool("PAYME_TEST", get("APP_ENV", "dev") != "prod"),
+		PaymeAccountKey:  get("PAYME_ACCOUNT_KEY", "payment_id"),
+		PaymeAllowedIPs:  splitList(os.Getenv("PAYME_ALLOWED_IPS")),
+		PaymeIKPU:        os.Getenv("PAYME_IKPU"),
+		PaymePackageCode: os.Getenv("PAYME_PACKAGE_CODE"),
+		PaymeVATPercent:  getInt("PAYME_VAT_PERCENT", 0),
 	}
 	var errs []error
 	if c.DatabaseURL == "" {
@@ -149,6 +198,39 @@ func Load() (Config, error) {
 		errs = append(errs, errors.New("COOKIE_SECURE must be true in prod"))
 	}
 	errs = append(errs, c.validateTryOn()...)
+	switch c.SMSProvider {
+	case "log":
+		if c.IsProd() {
+			errs = append(errs, errors.New("SMS_PROVIDER=log is forbidden in prod (use eskiz)"))
+		}
+	case "eskiz":
+		if c.EskizEmail == "" || c.EskizPassword == "" {
+			errs = append(errs, errors.New("ESKIZ_EMAIL and ESKIZ_PASSWORD are required for SMS_PROVIDER=eskiz"))
+		}
+		if strings.Count(c.SMSTemplate, "%") != strings.Count(c.SMSTemplate, "%s") || strings.Count(c.SMSTemplate, "%s") > 1 {
+			errs = append(errs, errors.New("SMS_OTP_TEMPLATE must contain at most one %s and no other % verbs"))
+		}
+	default:
+		errs = append(errs, fmt.Errorf("unknown SMS_PROVIDER %q", c.SMSProvider))
+	}
+	for _, ip := range append(append([]string{}, c.ClickAllowedIPs...), c.PaymeAllowedIPs...) {
+		if _, err := netip.ParsePrefix(ip); err != nil {
+			if _, err := netip.ParseAddr(ip); err != nil {
+				errs = append(errs, fmt.Errorf("invalid IP or CIDR %q in CLICK_/PAYME_ALLOWED_IPS", ip))
+			}
+		}
+	}
+	// Поле error в Click Complete не подписано, а ключ Payme статичен: в prod вебхуки
+	// принимаются только с IP провайдеров.
+	if c.IsProd() && c.ClickEnabled() && len(c.ClickAllowedIPs) == 0 {
+		errs = append(errs, errors.New("CLICK_ALLOWED_IPS is required in prod when Click is enabled"))
+	}
+	if c.IsProd() && c.PaymeEnabled() && len(c.PaymeAllowedIPs) == 0 {
+		errs = append(errs, errors.New("PAYME_ALLOWED_IPS is required in prod when Payme is enabled"))
+	}
+	if (c.ClickEnabled() || c.PaymeEnabled()) && c.PaymentReturnURL == "" {
+		errs = append(errs, errors.New("PAYMENT_RETURN_URL is required when a payment provider is configured"))
+	}
 	return c, errors.Join(errs...)
 }
 

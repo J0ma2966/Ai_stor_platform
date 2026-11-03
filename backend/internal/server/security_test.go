@@ -18,19 +18,21 @@ import (
 // publicRoutes — routes reachable without a token. Anything else must answer 401
 // to an anonymous caller. A new public route must be added here consciously.
 var publicRoutes = map[string]bool{
-	"GET /healthz":              true,
-	"GET /readyz":               true,
-	"POST /v1/auth/otp/request": true,
-	"POST /v1/auth/otp/verify":  true,
-	"POST /v1/auth/login":       true,
-	"POST /v1/auth/refresh":     true,
-	"POST /v1/auth/logout":      true,
-	"GET /v1/categories":        true,
-	"GET /v1/products":          true,
-	"GET /v1/products/{id}":     true,
-	"POST /v1/fitting/adds":     true, // счётчик «В примерочную»: работает и без входа, лимит по IP + дедуп
-	"POST /v1/payments/click/*": true, // provider webhooks: authenticated by signature, not by user token
-	"POST /v1/payments/payme/*": true,
+	"GET /healthz":                     true,
+	"GET /readyz":                      true,
+	"POST /v1/auth/otp/request":        true,
+	"POST /v1/auth/otp/verify":         true,
+	"POST /v1/auth/login":              true,
+	"POST /v1/auth/refresh":            true,
+	"POST /v1/auth/logout":             true,
+	"GET /v1/categories":               true,
+	"GET /v1/products":                 true,
+	"GET /v1/products/{id}":            true,
+	"GET /v1/tariffs":                  true,
+	"POST /v1/fitting/adds":            true, // счётчик «В примерочную»: работает и без входа, лимит по IP + дедуп
+	"POST /v1/payments/click/prepare":  true, // provider webhooks: authenticated by signature, not by user token
+	"POST /v1/payments/click/complete": true,
+	"POST /v1/payments/payme":          true,
 }
 
 // rolePrefixes — which roles may reach a route prefix. Every other authenticated role must get 403.

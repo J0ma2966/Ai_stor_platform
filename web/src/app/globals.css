@@ -141,6 +141,15 @@ input:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visib
   .fitting { grid-template-columns: 1fr; }
   .grid-3 { grid-template-columns: 1fr; }
 }
+
+/* Баланс и покупка токенов */
+.balance-value { font-size: 1.6rem; font-weight: 700; margin: 0; }
+.tariff-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.tariff-hl { border-color: var(--accent); }
+.tariff-grid .row { flex-wrap: wrap; }
+.alert-ok { border-color: var(--ok); }
+.stack-tight { display: flex; flex-direction: column; gap: 2px; }
+
 /* ---------- Панель суперадмина ---------- */
 .wrap { flex-wrap: wrap; }
 .admin-shell { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 24px; align-items: start; }
