@@ -1,15 +1,24 @@
 # Staging / локальная проверка с TLS_MODE=internal: API доверяет внутреннему CA Caddy.
 # В prod НЕ используется (там Let's Encrypt). Ключи Caddy в API не попадают:
 # ca-export копирует только публичный root.crt в отдельный том.
+# Go читает список доверенных CA один раз, при первом TLS-соединении. Поэтому API стартует
+# только после того, как root.crt уже лежит в томе (healthcheck ca-export).
 x-ca: &ca
   environment:
     SSL_CERT_DIR: /etc/ssl/certs:/staging-ca
   volumes: ["staging_ca:/staging-ca:ro"]
+  depends_on:
+    ca-export: {condition: service_healthy}
 services:
   ca-export:
     image: caddy:2.10.2-alpine
     restart: unless-stopped
     volumes: ["caddy_data:/data:ro", "staging_ca:/out"]
+    depends_on: [caddy]
+    healthcheck:
+      test: ["CMD", "test", "-s", "/out/caddy-root.crt"]
+      interval: 2s
+      retries: 60
     entrypoint:
       - /bin/sh
       - -c
@@ -17,7 +26,7 @@ services:
         while true; do
           f=/data/caddy/pki/authorities/local/root.crt
           [ -f "$$f" ] && cp "$$f" /out/caddy-root.crt && chmod 644 /out/caddy-root.crt
-          sleep 30
+          sleep 2
         done
   api1: *ca
   api2: *ca

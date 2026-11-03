@@ -95,7 +95,7 @@ case "$role" in
     if ! pull; then log "ERROR: cannot pull $tag"; restore_tag; exit 1; fi
     # всё, кроме инстансов API, — поднять, если ещё не запущено
     mapfile -t others < <(compose config --services | grep -vxE 'api[0-9]+|migrate')
-    compose up -d --no-recreate "${others[@]}"
+    compose up -d --no-recreate --wait --wait-timeout 300 "${others[@]}"
     sleep 2
     log "running migrations"
     # миграции обратно совместимы (expand -> migrate -> contract), старые инстансы работают дальше
