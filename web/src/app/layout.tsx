@@ -6,6 +6,7 @@ import { headers } from "next/headers";
 import { LocaleSync } from "@/i18n/switch";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { StaleWorkerGuard } from "@/components/StaleWorkerGuard";
 import { SessionProvider } from "@/lib/session";
 import { alternates, siteUrl } from "@/lib/site";
 import "./globals.css";
@@ -33,6 +34,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   await headers();
   return (
     <html lang={locale}>
+      <head>
+        <StaleWorkerGuard />
+      </head>
       <body>
         <NextIntlClientProvider>
           <LocaleSync />
