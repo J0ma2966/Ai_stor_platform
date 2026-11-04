@@ -33,7 +33,8 @@ import (
 // in_stock — да/нет, ha/yo'q, yes/no, 1/0.
 //
 // Товар ищется по артикулу (sku): новый создаётся черновиком, существующий
-// обновляется (кроме заблокированных модератором). Фотографии загружаются
+// обновляется (кроме заблокированных модератором). Пустой sku — всегда новый
+// товар с автоартикулом (NextSKU); выданные артикулы возвращаются в generated. Фотографии загружаются
 // отдельно и сопоставляются по артикулу в имени файла (bulkImages).
 const (
 	MaxImportBytes = 5 << 20
@@ -55,6 +56,13 @@ type ImportResult struct {
 	Updated int           `json:"updated"`
 	Failed  int           `json:"failed"`
 	Errors  []ImportError `json:"errors"`
+	// Generated — автоартикулы, выданные строкам с пустым sku (чтобы назвать по ним фото).
+	Generated []GeneratedSKU `json:"generated,omitempty"`
+}
+
+type GeneratedSKU struct {
+	Row int    `json:"row"`
+	SKU string `json:"sku"`
 }
 
 type importRow struct {
@@ -145,6 +153,14 @@ func (h *Handlers) importExcel(w http.ResponseWriter, r *http.Request) {
 		err = db.Tx(r.Context(), h.DB, func(tx pgx.Tx) error {
 			for _, it := range parsed {
 				var created bool
+				if it.sku == "" { // пустой артикул в строке — новый товар с автоартикулом
+					sku, err := NextSKU(r.Context(), tx, p.StoreID)
+					if err != nil {
+						return err
+					}
+					it.sku = sku
+					res.Generated = append(res.Generated, GeneratedSKU{Row: it.row, SKU: sku})
+				}
 				err := tx.QueryRow(r.Context(), `
 					INSERT INTO products (store_id, category_id, sku, title, description, brand, price, in_stock)
 					VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -254,7 +270,9 @@ func parseImport(rows [][]string, cats map[string]uuid.UUID) ([]importRow, *Impo
 				bad(field, "too_long")
 			}
 		}
-		textField("sku", it.sku, 64)
+		if utf8.RuneCountInString(it.sku) > 64 { // пустой артикул допустим: выдадим автоматически
+			bad("sku", "too_long")
+		}
 		textField("title", it.title, 300)
 		textField("description", it.description, 10000)
 		textField("brand", it.brand, 120)

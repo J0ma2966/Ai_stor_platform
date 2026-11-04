@@ -77,6 +77,14 @@ export default function ImportPage() {
         {res && (
           <div role="status" className="stack-sm">
             <p className={res.failed ? "" : "ok-text"}>{t("result", { total: res.total, created: res.created, updated: res.updated, failed: res.failed })}</p>
+            {res.generated && res.generated.length > 0 && (
+              <details>
+                <summary>{t("generatedTitle")} ({res.generated.length})</summary>
+                <ul className="small">
+                  {res.generated.slice(0, 500).map((g) => <li key={g.row}>{t("row", { row: g.row })}: <code>{g.sku}</code></li>)}
+                </ul>
+              </details>
+            )}
             {res.errors.length > 0 && (
               <details open>
                 <summary>{t("errorsTitle")} ({res.errors.length})</summary>

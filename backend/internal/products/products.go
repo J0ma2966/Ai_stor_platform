@@ -276,8 +276,9 @@ func (h *Handlers) storeList(w http.ResponseWriter, r *http.Request) {
 }
 
 type createReq struct {
-	CategoryID  uuid.UUID         `json:"category_id" validate:"required"`
-	SKU         string            `json:"sku" validate:"required,min=1,max=64"`
+	CategoryID uuid.UUID `json:"category_id" validate:"required"`
+	// SKU необязателен: пустой — сервер выдаст автоартикул (см. NextSKU).
+	SKU         string            `json:"sku" validate:"max=64"`
 	Title       string            `json:"title" validate:"required,min=1,max=300"`
 	Description string            `json:"description" validate:"required,min=1,max=10000"`
 	Brand       string            `json:"brand" validate:"required,min=1,max=120"`
@@ -300,11 +301,16 @@ func (h *Handlers) storeCreate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	var id uuid.UUID
+	var sku string
 	err := db.Tx(r.Context(), h.DB, func(tx pgx.Tx) error {
+		var err error
+		if sku, err = skuOrAuto(r.Context(), tx, p.StoreID, req.SKU); err != nil {
+			return err
+		}
 		if err := tx.QueryRow(r.Context(), `
 			INSERT INTO products (store_id, category_id, sku, title, description, brand, price, in_stock)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
-			p.StoreID, req.CategoryID, req.SKU, req.Title, req.Description, req.Brand, req.Price, *req.InStock).Scan(&id); err != nil {
+			p.StoreID, req.CategoryID, sku, req.Title, req.Description, req.Brand, req.Price, *req.InStock).Scan(&id); err != nil {
 			return err
 		}
 		for angle, key := range req.Images {
@@ -326,7 +332,7 @@ func (h *Handlers) storeCreate(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, r, err)
 		return
 	}
-	httpx.JSON(w, http.StatusCreated, map[string]any{"id": id, "status": "draft"})
+	httpx.JSON(w, http.StatusCreated, map[string]any{"id": id, "sku": sku, "status": "draft"})
 }
 
 type statusReq struct {

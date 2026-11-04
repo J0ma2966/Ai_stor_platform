@@ -9,13 +9,13 @@ export async function uploadImage(file: File, purpose: "product" | "store"): Pro
 
 export const listMyProducts = () => apiList<Product>("/v1/store/products");
 export const getMyProduct = (id: string) => api<Product>(`/v1/store/products/${id}`);
-export const createProduct = (body: unknown) => api<{ id: string }>("/v1/store/products", { method: "POST", body });
+export const createProduct = (body: unknown) => api<{ id: string; sku: string; status: string }>("/v1/store/products", { method: "POST", body });
 export const updateProduct = (id: string, body: unknown) => api<Product>(`/v1/store/products/${id}`, { method: "PATCH", body });
 export const deleteProduct = (id: string) => api<void>(`/v1/store/products/${id}`, { method: "DELETE" });
 export const setProductStatus = (id: string, status: "published" | "draft") =>
   api<{ status: string }>(`/v1/store/products/${id}/status`, { method: "PATCH", body: { status } });
 
-export type ImportResult = { total: number; created: number; updated: number; failed: number; errors: { row: number; field?: string; code: string; message?: string }[] };
+export type ImportResult = { total: number; created: number; updated: number; failed: number; errors: { row: number; field?: string; code: string; message?: string }[]; generated?: { row: number; sku: string }[] };
 export async function importExcel(file: File): Promise<ImportResult> {
   const res = await apiRaw("/v1/store/products/import", { method: "POST", rawBody: file, headers: { "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" } });
   return (await res.json()).data;

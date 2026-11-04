@@ -312,6 +312,30 @@ func TestStoreLifecycleAndCatalog(t *testing.T) {
 	}
 	st.must(200, "PATCH", "/v1/store/products/"+pid+"/status", map[string]any{"status": "published"})
 
+	// автоартикул: пустой sku — сервер выдаёт следующий номер магазина,
+	// пропуская номера, занятые вручную; у другого магазина своя нумерация
+	autoProd := func(c *client, sku string) string {
+		t.Helper()
+		imgs := map[string]string{}
+		for _, a := range []string{"front", "side", "back"} {
+			imgs[a] = c.must(201, "POST", "/v1/uploads?purpose=product", pngFile(t)).data()["key"].(string)
+		}
+		p := map[string]any{"category_id": catID, "sku": sku, "title": "Шарф", "description": "Кашемир", "brand": "Acme", "price": 5000000, "in_stock": true, "images": imgs}
+		return c.must(201, "POST", "/v1/store/products", p).data()["sku"].(string)
+	}
+	if got := autoProd(st, ""); got != "A-000001" {
+		t.Fatalf("first auto sku = %q", got)
+	}
+	if got := autoProd(st, "  A-000002 "); got != "A-000002" { // вручную, с пробелами
+		t.Fatalf("manual sku = %q", got)
+	}
+	if got := autoProd(st, ""); got != "A-000003" {
+		t.Fatalf("auto sku must skip manual A-000002, got %q", got)
+	}
+	if got := autoProd(other, ""); got != "A-000001" {
+		t.Fatalf("other store auto sku = %q", got)
+	}
+
 	anon := e.client()
 	list := anon.must(200, "GET", "/v1/products?q=пальто&sort=price_asc", nil).Body["data"].([]any)
 	if len(list) != 1 {
