@@ -71,7 +71,8 @@
     "too_many_active_generations": "Joriy kiyib ko‘rish tugashini kuting.",
     "generation_in_progress": "Kiyib ko‘rish hali bajarilmoqda, kuting.",
     "corrupt_image": "Tasvirni o‘qib bo‘lmadi. Boshqa fotoni sinab ko‘ring.",
-    "tryon_transfer_consent_required": "Fotolarni tashqi AI-xizmatga yuborish uchun alohida rozilik kerak."
+    "tryon_transfer_consent_required": "Fotolarni tashqi AI-xizmatga yuborish uchun alohida rozilik kerak.",
+    "email_taken": "Bu pochta allaqachon ro‘yxatdan o‘tgan. Kiring."
   },
   "fieldErrors": {
     "required": "Majburiy maydon",
@@ -123,6 +124,18 @@
     "storeTitle": "Do‘kon uchun kirish",
     "login": "Login",
     "password": "Parol"
+  },
+  "emailAuth": {
+    "loginTitle": "Pochta orqali kirish",
+    "registerTitle": "Pochta orqali ro‘yxatdan o‘tish",
+    "testingNote": "Sinov davri uchun vaqtinchalik kirish usuli.",
+    "email": "Elektron pochta",
+    "password": "Parol",
+    "passwordHint": "Kamida 10 ta belgi",
+    "signIn": "Kirish",
+    "register": "Ro‘yxatdan o‘tish",
+    "toRegister": "Akkauntingiz yo‘qmi? Ro‘yxatdan o‘ting",
+    "toLogin": "Akkauntingiz bormi? Kiring"
   },
   "checkout": {
     "title": "Buyurtmani rasmiylashtirish",

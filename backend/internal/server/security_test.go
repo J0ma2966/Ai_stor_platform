@@ -25,6 +25,9 @@ var publicRoutes = map[string]bool{
 	"POST /v1/auth/login":              true,
 	"POST /v1/auth/refresh":            true,
 	"POST /v1/auth/logout":             true,
+	"GET /v1/auth/email/status":        true, // ВРЕМЕННО: вход по почте на время тестирования
+	"POST /v1/auth/email/register":     true,
+	"POST /v1/auth/email/login":        true,
 	"GET /v1/categories":               true,
 	"GET /v1/products":                 true,
 	"GET /v1/products/{id}":            true,
