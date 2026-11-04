@@ -54,6 +54,8 @@ services:
       DATABASE_URL: postgres://boutique:${POSTGRES_PASSWORD:-devpassword}@postgres:5432/boutique?sslmode=disable
       REDIS_URL: redis://redis:6379/0
       S3_ENDPOINT: minio:9000
+      # ссылки на приватные фото/результаты открывает браузер: minio:9000 ему не виден
+      S3_PUBLIC_ENDPOINT: localhost:${MINIO_HOST_PORT:-9000}
       S3_USE_SSL: "false"
       INTERNAL_ADDR: 0.0.0.0:9090
       AUTO_MIGRATE: "true"

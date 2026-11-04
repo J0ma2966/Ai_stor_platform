@@ -216,6 +216,9 @@ func newStorage(cfg config.Config) (media.Storage, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := main.WithPublicEndpoint(cfg.S3PublicEndpoint, cfg.S3Region, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3UseSSL); err != nil {
+		return nil, err
+	}
 	if cfg.BiometricS3Endpoint == "" {
 		return media.Routed{Default: main, Biometric: main}, nil
 	}

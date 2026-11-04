@@ -198,3 +198,26 @@ func TestProcessAppliesEXIFOrientation(t *testing.T) {
 		t.Fatal("garbage must be orientation 1")
 	}
 }
+
+func TestPresignUsesPublicEndpoint(t *testing.T) {
+	s, err := NewS3("minio:9000", "us-east-1", "bkt", "ak", "sk", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	u, err := s.PresignGet(ctx, "priv/x.jpg", time.Minute)
+	if !strings.HasPrefix(u, "http://minio:9000/") {
+		t.Fatalf("default signer: %s %v", u, err)
+	}
+	if err := s.WithPublicEndpoint("localhost:19000", "us-east-1", "ak", "sk", false); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []func() (string, error){
+		func() (string, error) { return s.PresignGet(ctx, "priv/x.jpg", time.Minute) },
+		func() (string, error) { return s.PresignDownload(ctx, "priv/x.jpg", time.Minute, "a.jpg") },
+	} {
+		if u, err := f(); err != nil || !strings.HasPrefix(u, "http://localhost:19000/bkt/priv/x.jpg?") {
+			t.Fatalf("browser link must use the public endpoint: %s %v", u, err)
+		}
+	}
+}

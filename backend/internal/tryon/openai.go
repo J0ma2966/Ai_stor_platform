@@ -410,7 +410,8 @@ func openAIStatusErr(code int, raw []byte) error {
 		return permanent(CodeProviderFailure, "openai auth failed (401): check OPENAI_API_KEY")
 	case code == http.StatusForbidden:
 		return permanent(CodeProviderFailure, "openai access denied (403): %s", or(e.Error.Code, "no access to model or organization not verified"))
-	case code == http.StatusTooManyRequests && (e.Error.Code == "insufficient_quota" || strings.Contains(e.Error.Code, "billing")):
+	case code == http.StatusTooManyRequests && (e.Error.Code == "insufficient_quota" || e.Error.Type == "insufficient_quota" ||
+		e.Error.Code == "credit_balance_exhausted" || strings.Contains(e.Error.Code, "billing")):
 		return permanent(CodeProviderFailure, "openai quota exhausted (429): %s", desc)
 	case code == http.StatusBadRequest && (e.Error.Code == "moderation_blocked" || e.Error.Code == "content_policy_violation" ||
 		strings.Contains(e.Error.Type, "safety") || strings.Contains(strings.ToLower(msg), "safety system")):
