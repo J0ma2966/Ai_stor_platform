@@ -103,10 +103,16 @@ export function GenerationView({ id }: { id: string }) {
 
       {g.status === "succeeded" && g.result_url && (
         <figure className="card result">
-          <img src={g.result_url} alt={t("resultAlt")} />
+          <a href={g.result_url} target="_blank" rel="noopener noreferrer" title={t("openFull")}>
+            <img src={g.result_url} alt={t("resultAlt")} />
+          </a>
           <figcaption className="result-labels small muted">
             {ANGLES.map((a) => <span key={a}>{t(`angle.${a}`)}</span>)}
           </figcaption>
+          <div className="row wrap">
+            <a className="btn btn-secondary" href={g.result_url} target="_blank" rel="noopener noreferrer">{t("openFull")}</a>
+            <a className="btn btn-secondary" href={g.download_url ?? g.result_url} download={`tryon-${g.id.slice(0, 8)}.jpg`} rel="noopener noreferrer">{t("download")}</a>
+          </div>
           {g.result_expires_at && <p className="small muted">{t("expires", { date: formatDateTime(g.result_expires_at, locale) })}</p>}
         </figure>
       )}

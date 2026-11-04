@@ -87,7 +87,7 @@ type Config struct {
 
 // TryOnConfig — AI-примерка: провайдер, воркер, сроки хранения.
 type TryOnConfig struct {
-	Provider      string // off | mock | fashn | gemini | http
+	Provider      string // off | mock | fashn | gemini | http | openai
 	APIKey        string // TRYON_API_KEY (fashn, gemini, http — Bearer)
 	Endpoint      string // TRYON_ENDPOINT — для http (свой сервер) или переопределения URL провайдера
 	Model         string // TRYON_MODEL — модель провайдера (gemini: gemini-2.5-flash-image)
@@ -100,6 +100,33 @@ type TryOnConfig struct {
 	SavedPhotoTTL time.Duration // сохранённые фото без использования
 	ResultTTL     time.Duration // результат, если образ не сохранён
 	SavedLookTTL  time.Duration // сохранённый образ
+
+	OpenAI OpenAIConfig // TRYON_PROVIDER=openai
+}
+
+// OpenAIConfig — OpenAI Images API (POST /v1/images/edits): один запрос на генерацию,
+// результат — одно изображение с тремя ракурсами. Ключ берётся только из окружения
+// и никогда не логируется (Config.String его не выводит).
+type OpenAIConfig struct {
+	APIKey  string        // OPENAI_API_KEY
+	BaseURL string        // OPENAI_BASE_URL (по умолчанию https://api.openai.com) — для тестов и прокси
+	Model   string        // OPENAI_IMAGE_MODEL
+	Quality string        // OPENAI_IMAGE_QUALITY: low | medium | high | xhigh | max | auto
+	Size    string        // OPENAI_IMAGE_SIZE: WxH или auto
+	Format  string        // OPENAI_IMAGE_FORMAT: jpeg | png | webp
+	Timeout time.Duration // OPENAI_TIMEOUT_SECONDS — на один HTTP-запрос к OpenAI
+	// ProdApproved — OPENAI_PROD_APPROVED=true: юридическое подтверждение передачи
+	// фото тела в OpenAI. Без него prod не стартует с TRYON_PROVIDER=openai (ТЗ §12).
+	ProdApproved bool
+}
+
+// JobTimeout — таймаут одного задания воркера: для openai не меньше таймаута
+// HTTP-запроса плюс запас на загрузку фото и сохранение результата.
+func (t TryOnConfig) JobTimeout() time.Duration {
+	if t.Provider == "openai" {
+		return max(t.Timeout, t.OpenAI.Timeout+30*time.Second)
+	}
+	return t.Timeout
 }
 
 func (c Config) ClickEnabled() bool {
@@ -162,6 +189,16 @@ func Load() (Config, error) {
 			SavedPhotoTTL: getDur("TRYON_SAVED_PHOTO_TTL", 180*24*time.Hour),
 			ResultTTL:     getDur("TRYON_RESULT_TTL", 30*24*time.Hour),
 			SavedLookTTL:  getDur("TRYON_SAVED_LOOK_TTL", 365*24*time.Hour),
+			OpenAI: OpenAIConfig{
+				APIKey:       strings.TrimSpace(os.Getenv("OPENAI_API_KEY")),
+				BaseURL:      os.Getenv("OPENAI_BASE_URL"),
+				Model:        get("OPENAI_IMAGE_MODEL", "gpt-image-2.5-sunburst"),
+				Quality:      get("OPENAI_IMAGE_QUALITY", "high"),
+				Size:         get("OPENAI_IMAGE_SIZE", "1536x1024"),
+				Format:       get("OPENAI_IMAGE_FORMAT", "jpeg"),
+				Timeout:      time.Duration(min(max(getInt("OPENAI_TIMEOUT_SECONDS", 180), 10), 900)) * time.Second,
+				ProdApproved: getBool("OPENAI_PROD_APPROVED", false),
+			},
 		},
 		SMSProvider:      get("SMS_PROVIDER", "log"),
 		EskizURL:         get("ESKIZ_URL", "https://notify.eskiz.uz/api"),
@@ -256,8 +293,10 @@ func (c Config) validateTryOn() []error {
 		if c.TryOn.Endpoint == "" {
 			errs = append(errs, errors.New("TRYON_ENDPOINT is required for TRYON_PROVIDER=http"))
 		}
+	case "openai":
+		errs = append(errs, c.validateOpenAI()...)
 	default:
-		errs = append(errs, fmt.Errorf("unknown TRYON_PROVIDER %q (off|mock|fashn|gemini|http)", c.TryOn.Provider))
+		errs = append(errs, fmt.Errorf("unknown TRYON_PROVIDER %q (off|mock|fashn|gemini|http|openai)", c.TryOn.Provider))
 	}
 	if c.IsProd() {
 		if c.BiometricS3Endpoint == "" {
@@ -268,6 +307,54 @@ func (c Config) validateTryOn() []error {
 		}
 	}
 	return errs
+}
+
+var (
+	openAIQualities = map[string]bool{"low": true, "medium": true, "high": true, "xhigh": true, "max": true, "auto": true}
+	openAIFormats   = map[string]bool{"jpeg": true, "png": true, "webp": true}
+)
+
+// validateOpenAI: ключ обязателен в любом окружении (без него — понятная ошибка
+// конфигурации, а не фиктивная генерация); в prod — ещё и явное юридическое одобрение.
+func (c Config) validateOpenAI() []error {
+	o := c.TryOn.OpenAI
+	var errs []error
+	if o.APIKey == "" {
+		errs = append(errs, errors.New("OPENAI_API_KEY is required for TRYON_PROVIDER=openai"))
+	}
+	if o.Model == "" {
+		errs = append(errs, errors.New("OPENAI_IMAGE_MODEL must not be empty"))
+	}
+	if !openAIQualities[o.Quality] {
+		errs = append(errs, fmt.Errorf("OPENAI_IMAGE_QUALITY %q is not one of low|medium|high|xhigh|max|auto", o.Quality))
+	}
+	if !openAIFormats[o.Format] {
+		errs = append(errs, fmt.Errorf("OPENAI_IMAGE_FORMAT %q is not one of jpeg|png|webp", o.Format))
+	}
+	if err := ValidOpenAISize(o.Size); err != nil {
+		errs = append(errs, err)
+	}
+	if c.IsProd() && !o.ProdApproved {
+		errs = append(errs, errors.New("TRYON_PROVIDER=openai in prod needs OPENAI_PROD_APPROVED=true "+
+			"(body photos are biometric data; confirm the legal basis for sending them to OpenAI first, see docs/TRYON.md)"))
+	}
+	return errs
+}
+
+// ValidOpenAISize проверяет OPENAI_IMAGE_SIZE: auto или WxH, обе стороны кратны 16,
+// соотношение сторон от 1:3 до 3:1, не больше 3840x2160 по площади (правила gpt-image-2.x).
+func ValidOpenAISize(s string) error {
+	if s == "auto" {
+		return nil
+	}
+	var w, h int
+	if n, err := fmt.Sscanf(s, "%dx%d", &w, &h); err != nil || n != 2 || fmt.Sprintf("%dx%d", w, h) != s {
+		return fmt.Errorf("OPENAI_IMAGE_SIZE %q must be auto or WIDTHxHEIGHT", s)
+	}
+	if w < 256 || h < 256 || w%16 != 0 || h%16 != 0 || w > 3*h || h > 3*w || w*h > 3840*2160 {
+		return fmt.Errorf("OPENAI_IMAGE_SIZE %q: sides must be >=256 and divisible by 16, aspect 1:3..3:1, at most 3840x2160 pixels", s)
+	}
+	return nil
 }
 
 func get(k, def string) string {

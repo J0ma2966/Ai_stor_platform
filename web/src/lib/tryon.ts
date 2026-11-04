@@ -14,6 +14,8 @@ export type Quote = {
   active: number;
   max_active: number;
   supported_zones: Zone[];
+  // Отдельное согласие на передачу фото внешнему AI-провайдеру (OpenAI и т.п.).
+  transfer?: { required: boolean; recipient: string; consent: boolean };
   retention: { photo_hours: number; saved_photo_days: number; result_days: number; saved_look_days: number };
 };
 
@@ -29,6 +31,7 @@ export type Generation = {
   refunded: boolean;
   saved: boolean;
   result_url: string | null;
+  download_url?: string | null;
   result_expires_at: string | null;
   photos: { angle: Angle; key: string; url: string }[];
   products: {
@@ -44,6 +47,7 @@ export type BodyInput = { height_cm?: number; weight_kg?: number; params?: Recor
 
 export const getQuote = () => api<Quote>("/v1/tryon/quote");
 export const giveConsent = () => api<void>("/v1/tryon/consent", { method: "POST" });
+export const giveTransferConsent = () => api<void>("/v1/tryon/consent/transfer", { method: "POST" });
 export const revokeConsent = () => api<void>("/v1/tryon/consent", { method: "DELETE" });
 export const listPhotos = async () => (await apiList<SavedPhoto>("/v1/tryon/photos")).items;
 export const savePhoto = (angle: Angle, key: string) => api<SavedPhoto[]>(`/v1/tryon/photos/${angle}`, { method: "PUT", body: { key } });

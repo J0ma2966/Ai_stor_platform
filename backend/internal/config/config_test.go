@@ -116,3 +116,57 @@ func TestTryOnEnabledInProdRequiresUZStorage(t *testing.T) {
 		t.Fatal("mock must be refused in prod")
 	}
 }
+
+func TestOpenAIConfig(t *testing.T) {
+	base(t)
+	t.Setenv("TRYON_PROVIDER", "openai")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "OPENAI_API_KEY is required") {
+		t.Fatalf("missing key must be a config error even in dev: %v", err)
+	}
+	t.Setenv("OPENAI_API_KEY", "sk-test")
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	o := c.TryOn.OpenAI
+	if o.Model != "gpt-image-2.5-sunburst" || o.Quality != "high" || o.Size != "1536x1024" || o.Format != "jpeg" || o.Timeout.Seconds() != 180 {
+		t.Fatalf("defaults: %+v", o)
+	}
+	if c.TryOn.JobTimeout() < o.Timeout {
+		t.Fatalf("job timeout %s must cover the OpenAI request timeout %s", c.TryOn.JobTimeout(), o.Timeout)
+	}
+	if strings.Contains(c.String(), "sk-test") {
+		t.Fatal("API key must not be printed")
+	}
+	for k, v := range map[string]string{"OPENAI_IMAGE_QUALITY": "ultra", "OPENAI_IMAGE_FORMAT": "gif", "OPENAI_IMAGE_SIZE": "1000x1000"} {
+		t.Setenv(k, v)
+		if _, err := Load(); err == nil || !strings.Contains(err.Error(), k) {
+			t.Fatalf("%s=%s must be rejected: %v", k, v, err)
+		}
+		t.Setenv(k, "")
+	}
+	for _, s := range []string{"auto", "1536x1024", "1024x1536", "2304x1536", "3840x2160"} {
+		if err := ValidOpenAISize(s); err != nil {
+			t.Fatalf("%s: %v", s, err)
+		}
+	}
+	for _, s := range []string{"1536x", "1536x1024x2", "4096x4096", "3072x512", "1530x1024"} {
+		if ValidOpenAISize(s) == nil {
+			t.Fatalf("%s must be invalid", s)
+		}
+	}
+}
+
+func TestOpenAINotInProdWithoutApproval(t *testing.T) {
+	base(t)
+	t.Setenv("APP_ENV", "prod")
+	t.Setenv("TRYON_PROVIDER", "openai")
+	t.Setenv("OPENAI_API_KEY", "sk-test")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "OPENAI_PROD_APPROVED") {
+		t.Fatalf("prod must not enable OpenAI automatically: %v", err)
+	}
+	t.Setenv("OPENAI_PROD_APPROVED", "true")
+	if _, err := Load(); err != nil && strings.Contains(err.Error(), "OPENAI_PROD_APPROVED") {
+		t.Fatalf("approval flag ignored: %v", err)
+	}
+}

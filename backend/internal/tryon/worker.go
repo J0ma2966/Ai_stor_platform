@@ -207,8 +207,8 @@ func (w *Worker) get(ctx context.Context, key, code string) ([]byte, error) {
 	return b, err
 }
 
-// process: загрузить входные данные, вызвать провайдера на каждый ракурс параллельно,
-// склеить результат.
+// process: загрузить входные данные; для CompositeProvider — один вызов без склейки,
+// для остальных — вызов провайдера на каждый ракурс параллельно и склейка Compose.
 func (w *Worker) process(ctx context.Context, j *job) ([]byte, error) {
 	if len(j.photoKeys) != len(Angles) {
 		return nil, permanent(CodePhotoMissing, "expected %d photos", len(Angles))
@@ -235,6 +235,12 @@ func (w *Worker) process(ctx context.Context, j *job) ([]byte, error) {
 			gs = append(gs, Garment{Zone: p.zone, Title: p.title, Brand: p.brand, Image: img})
 		}
 		return gs, nil
+	}
+	if err := w.checkTransferConsent(ctx, j); err != nil {
+		return nil, err
+	}
+	if cp, ok := w.Provider.(CompositeProvider); ok {
+		return w.processComposite(ctx, j, cp, prods)
 	}
 	reqs := make([]Request, len(Angles))
 	for i, a := range Angles {
@@ -276,6 +282,51 @@ func (w *Worker) process(ctx context.Context, j *job) ([]byte, error) {
 		return nil, permanent(CodeProviderFailure, "compose: %v", err)
 	}
 	return out, nil
+}
+
+// checkTransferConsent — последняя проверка перед отправкой фото внешнему провайдеру:
+// согласие на передачу должно быть дано именно ему (на случай смены TRYON_PROVIDER,
+// пока задание стояло в очереди). Без согласия фото не отправляются, токены возвращаются.
+func (w *Worker) checkTransferConsent(ctx context.Context, j *job) error {
+	name := w.Provider.Name()
+	if TransferRecipients[name] == "" {
+		return nil
+	}
+	var ok bool
+	if err := w.DB.QueryRow(ctx, `SELECT COALESCE(tryon_transfer_provider = $2, false) FROM users WHERE id = $1`,
+		j.userID, name).Scan(&ok); err != nil {
+		return err
+	}
+	if !ok {
+		return permanent(CodeTransferConsent, "no consent to send photos to %s", name)
+	}
+	return nil
+}
+
+// processComposite — сценарий «один запрос — одно изображение» (OpenAI): три фото
+// клиента и фронтальные фото всех выбранных вещей уходят в ОДИН вызов провайдера,
+// результат сохраняется как есть, без Compose.
+func (w *Worker) processComposite(ctx context.Context, j *job, cp CompositeProvider, prods []productInput) ([]byte, error) {
+	photos := make([][]byte, len(Angles))
+	for i := range Angles {
+		b, err := w.get(ctx, j.photoKeys[i], CodePhotoMissing)
+		if err != nil {
+			return nil, err
+		}
+		photos[i] = b
+	}
+	req := CompositeRequest{FrontPhoto: photos[0], SidePhoto: photos[1], BackPhoto: photos[2], Body: j.body}
+	if j.gender != nil {
+		req.Gender = *j.gender
+	}
+	for _, p := range prods {
+		img, err := w.get(ctx, p.keys["front"], CodeProductMissing)
+		if err != nil {
+			return nil, err
+		}
+		req.Garments = append(req.Garments, Garment{Zone: p.zone, Title: p.title, Brand: p.brand, Image: img})
+	}
+	return cp.GenerateComposite(ctx, req)
 }
 
 // owned — UPDATE применяется, только если задание всё ещё за этой попыткой

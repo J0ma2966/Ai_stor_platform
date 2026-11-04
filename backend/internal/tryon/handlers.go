@@ -60,6 +60,8 @@ func (h *Handlers) ClientRoutes(r chi.Router) {
 	r.Get("/quote", h.quote)
 	r.Post("/consent", h.consent)
 	r.Delete("/consent", h.revokeConsent)
+	r.Post("/consent/transfer", h.transferConsent)
+	r.Delete("/consent/transfer", h.revokeTransferConsent)
 	r.Get("/photos", h.listPhotos)
 	r.Put("/photos/{angle}", h.savePhoto)
 	r.Delete("/photos/{angle}", h.deletePhoto)
@@ -92,6 +94,24 @@ func SupportedZones(provider string) []string {
 	return []string{ZoneHeadwear, ZoneTop, ZoneBottom, ZoneShoes}
 }
 
+// TransferRecipients — провайдеры, которые отправляют фото клиента за пределы нашей
+// инфраструктуры (за рубеж). Для них нужно отдельное согласие на передачу (ТЗ OpenAI §12).
+var TransferRecipients = map[string]string{
+	"openai": "OpenAI, L.L.C. (USA)",
+	"gemini": "Google LLC — Gemini API (USA)",
+	"fashn":  "FASHN AI (USA)",
+}
+
+func (h *Handlers) transferRequired() bool { return TransferRecipients[h.Provider] != "" }
+
+// transferOK: согласие на передачу не требуется или дано именно этому провайдеру.
+func (h *Handlers) transferOK(provider *string) bool {
+	return !h.transferRequired() || (provider != nil && *provider == h.Provider)
+}
+
+var errTransferConsent = httpx.NewError(http.StatusConflict, "tryon_transfer_consent_required",
+	"consent to send photos to the external AI provider is required")
+
 func (h *Handlers) quote(w http.ResponseWriter, r *http.Request) {
 	uid := auth.MustFrom(r.Context()).UserID
 	cost, err := tokens.Setting(r.Context(), h.DB, "generation_cost")
@@ -102,10 +122,11 @@ func (h *Handlers) quote(w http.ResponseWriter, r *http.Request) {
 	var bal int64
 	var gender *string
 	var consent, pd *time.Time
+	var transferTo *string
 	var active int
-	if err := h.DB.QueryRow(r.Context(), `SELECT token_balance, gender::text, tryon_consent_at, pd_consent_at,
+	if err := h.DB.QueryRow(r.Context(), `SELECT token_balance, gender::text, tryon_consent_at, pd_consent_at, tryon_transfer_provider,
 		(SELECT count(*) FROM generations WHERE user_id = $1 AND status IN ('queued','running'))
-		FROM users WHERE id = $1`, uid).Scan(&bal, &gender, &consent, &pd, &active); err != nil {
+		FROM users WHERE id = $1`, uid).Scan(&bal, &gender, &consent, &pd, &transferTo, &active); err != nil {
 		httpx.Fail(w, r, db.NotFound(err))
 		return
 	}
@@ -114,6 +135,10 @@ func (h *Handlers) quote(w http.ResponseWriter, r *http.Request) {
 		"consent": consent != nil, "registered": gender != nil && pd != nil, "gender": gender,
 		"active": active, "max_active": h.MaxActive,
 		"supported_zones": SupportedZones(h.Provider),
+		"transfer": map[string]any{
+			"required": h.transferRequired(), "recipient": TransferRecipients[h.Provider],
+			"consent": h.transferRequired() && h.transferOK(transferTo),
+		},
 		"retention": map[string]any{
 			"photo_hours": int(h.Retention.Photo.Hours()), "saved_photo_days": int(h.Retention.SavedPhoto.Hours() / 24),
 			"result_days": int(h.Retention.Result.Hours() / 24), "saved_look_days": int(h.Retention.SavedLook.Hours() / 24),
@@ -141,10 +166,49 @@ func (h *Handlers) revokeConsent(w http.ResponseWriter, r *http.Request) {
 		if active > 0 {
 			return errInProgress
 		}
-		if _, err := t.Exec(r.Context(), `UPDATE users SET tryon_consent_at = NULL WHERE id = $1`, uid); err != nil {
+		if _, err := t.Exec(r.Context(), `UPDATE users SET tryon_consent_at = NULL, tryon_transfer_consent_at = NULL,
+			tryon_transfer_provider = NULL WHERE id = $1`, uid); err != nil {
 			return err
 		}
 		return PurgeUser(r.Context(), t, h.Store, uid)
+	})
+	if err != nil {
+		httpx.Fail(w, r, err)
+		return
+	}
+	httpx.NoContent(w)
+}
+
+// transferConsent: POST /v1/tryon/consent/transfer — отдельное согласие на передачу
+// фото текущему внешнему провайдеру (имя провайдера сохраняется вместе с датой).
+func (h *Handlers) transferConsent(w http.ResponseWriter, r *http.Request) {
+	uid := auth.MustFrom(r.Context()).UserID
+	if !h.transferRequired() {
+		httpx.NoContent(w)
+		return
+	}
+	if _, err := h.DB.Exec(r.Context(), `UPDATE users SET tryon_transfer_consent_at = now(), tryon_transfer_provider = $2
+		WHERE id = $1`, uid, h.Provider); err != nil {
+		httpx.Fail(w, r, err)
+		return
+	}
+	httpx.NoContent(w)
+}
+
+// revokeTransferConsent: DELETE /v1/tryon/consent/transfer. Пока генерация в работе,
+// отозвать нельзя: фото, возможно, уже отправляются провайдеру.
+func (h *Handlers) revokeTransferConsent(w http.ResponseWriter, r *http.Request) {
+	uid := auth.MustFrom(r.Context()).UserID
+	err := db.Tx(r.Context(), h.DB, func(t pgx.Tx) error {
+		var active int
+		if err := t.QueryRow(r.Context(), `SELECT count(*) FROM generations WHERE user_id = $1 AND status IN ('queued','running')`, uid).Scan(&active); err != nil {
+			return err
+		}
+		if active > 0 {
+			return errInProgress
+		}
+		_, err := t.Exec(r.Context(), `UPDATE users SET tryon_transfer_consent_at = NULL, tryon_transfer_provider = NULL WHERE id = $1`, uid)
+		return err
 	})
 	if err != nil {
 		httpx.Fail(w, r, err)
@@ -386,11 +450,12 @@ func (h *Handlers) enqueue(ctx context.Context, t pgx.Tx, uid uuid.UUID, req *cr
 	// Блокировка строки клиента сериализует его параллельные запуски (лимит активных).
 	var gender *string
 	var consent, pd *time.Time
+	var transferTo *string
 	var height *int16
 	var weight *float64
 	var params []byte
-	if err := t.QueryRow(ctx, `SELECT gender::text, tryon_consent_at, pd_consent_at, height_cm, weight_kg::float8, body_params
-		FROM users WHERE id = $1 FOR UPDATE`, uid).Scan(&gender, &consent, &pd, &height, &weight, &params); err != nil {
+	if err := t.QueryRow(ctx, `SELECT gender::text, tryon_consent_at, pd_consent_at, tryon_transfer_provider, height_cm, weight_kg::float8, body_params
+		FROM users WHERE id = $1 FOR UPDATE`, uid).Scan(&gender, &consent, &pd, &transferTo, &height, &weight, &params); err != nil {
 		return uuid.Nil, db.NotFound(err)
 	}
 	if gender == nil || pd == nil {
@@ -398,6 +463,9 @@ func (h *Handlers) enqueue(ctx context.Context, t pgx.Tx, uid uuid.UUID, req *cr
 	}
 	if consent == nil {
 		return uuid.Nil, httpx.NewError(http.StatusConflict, "tryon_consent_required", "consent to photo processing is required")
+	}
+	if !h.transferOK(transferTo) {
+		return uuid.Nil, errTransferConsent
 	}
 	var active int
 	if err := t.QueryRow(ctx, `SELECT count(*) FROM generations WHERE user_id = $1 AND status IN ('queued','running')`, uid).Scan(&active); err != nil {
@@ -502,20 +570,22 @@ type productView struct {
 }
 
 type generationView struct {
-	ID         uuid.UUID     `json:"id"`
-	Status     string        `json:"status"`
-	Cost       int64         `json:"cost"`
-	ErrorCode  *string       `json:"error_code"`
-	Refunded   bool          `json:"refunded"`
-	Saved      bool          `json:"saved"`
-	ResultURL  *string       `json:"result_url"`
-	Photos     []photoRef    `json:"photos"`
-	Products   []productView `json:"products"`
-	Body       Body          `json:"body"`
-	CreatedAt  time.Time     `json:"created_at"`
-	StartedAt  *time.Time    `json:"started_at"`
-	FinishedAt *time.Time    `json:"finished_at"`
-	ExpiresAt  *time.Time    `json:"result_expires_at"`
+	ID        uuid.UUID `json:"id"`
+	Status    string    `json:"status"`
+	Cost      int64     `json:"cost"`
+	ErrorCode *string   `json:"error_code"`
+	Refunded  bool      `json:"refunded"`
+	Saved     bool      `json:"saved"`
+	ResultURL *string   `json:"result_url"`
+	// DownloadURL — та же картинка, но с Content-Disposition: attachment (кнопка «Скачать»).
+	DownloadURL *string       `json:"download_url"`
+	Photos      []photoRef    `json:"photos"`
+	Products    []productView `json:"products"`
+	Body        Body          `json:"body"`
+	CreatedAt   time.Time     `json:"created_at"`
+	StartedAt   *time.Time    `json:"started_at"`
+	FinishedAt  *time.Time    `json:"finished_at"`
+	ExpiresAt   *time.Time    `json:"result_expires_at"`
 
 	resultKey   *string
 	photoKeys   []string
@@ -615,6 +685,12 @@ func (h *Handlers) enrich(ctx context.Context, q queryer, gens []*generationView
 				return err
 			}
 			g.ResultURL = &u
+			if d, ok := h.Store.(media.DownloadPresigner); ok {
+				name := "tryon-" + g.ID.String()[:8] + ".jpg"
+				if du, err := d.PresignDownload(ctx, *g.resultKey, presignTTL, name); err == nil {
+					g.DownloadURL = &du
+				}
+			}
 			var exp time.Time
 			if g.savedAt != nil {
 				exp = g.savedAt.Add(h.Retention.SavedLook)

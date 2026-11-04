@@ -20,6 +20,7 @@ const quote: Quote = {
 };
 const createGeneration = vi.fn();
 const giveConsent = vi.fn(async () => undefined);
+const giveTransferConsent = vi.fn(async () => undefined);
 const uploadBodyPhoto = vi.fn();
 vi.mock("@/lib/tryon", async (orig) => ({
   ...(await orig<typeof import("@/lib/tryon")>()),
@@ -29,6 +30,7 @@ vi.mock("@/lib/tryon", async (orig) => ({
     { id: "2", angle: "side", key: "ks", url: "us", expires_at: "2027-01-01T00:00:00Z" },
   ],
   giveConsent: () => giveConsent(),
+  giveTransferConsent: () => giveTransferConsent(),
   uploadBodyPhoto: (f: Blob) => uploadBodyPhoto(f),
   createGeneration: (...a: unknown[]) => createGeneration(...a),
 }));
@@ -63,6 +65,7 @@ describe("TryOnWizard", () => {
     fireEvent.click(screen.getByLabelText(/Я согласен/));
     fireEvent.click(next);
     await waitFor(() => expect(giveConsent).toHaveBeenCalledTimes(1));
+    expect(giveTransferConsent).not.toHaveBeenCalled(); // провайдер без передачи за рубеж
 
     expect(await screen.findByText(/Укажите рост, вес и параметры тела/)).toBeInTheDocument();
     expect(screen.getByLabelText("Рост, см")).toHaveValue("170");
@@ -79,5 +82,22 @@ describe("TryOnWizard", () => {
     const [, key2] = createGeneration.mock.calls[1];
     expect(key1).toBe(key2);
     expect(input1).toMatchObject({ product_ids: ["p1"], photos: { front: "kf", side: "ks", back: "kb" }, save_photos: true, body: { height_cm: 170 } });
+  });
+
+  it("asks for a separate consent to send photos to an external AI provider", async () => {
+    quote.transfer = { required: true, recipient: "OpenAI, L.L.C. (USA)", consent: false };
+    uploadBodyPhoto.mockResolvedValue({ key: "kb", url: "ub" });
+    renderIt();
+    const next = await screen.findByRole("button", { name: "Далее" });
+    const file = new File([new Uint8Array([1, 2, 3])], "b.jpg", { type: "image/jpeg" });
+    fireEvent.change(screen.getByLabelText("Загрузить фото: Сзади"), { target: { files: [file] } });
+    fireEvent.click(await screen.findByLabelText(/обработку моих фотографий/));
+    expect(next).toBeDisabled(); // одного общего согласия мало
+    fireEvent.click(screen.getByLabelText(/передачу моих фотографий в OpenAI, L.L.C. \(USA\)/));
+    await waitFor(() => expect(next).toBeEnabled());
+    fireEvent.click(next);
+    await waitFor(() => expect(giveTransferConsent).toHaveBeenCalledTimes(1));
+    expect(giveConsent).toHaveBeenCalledTimes(1);
+    delete quote.transfer;
   });
 });

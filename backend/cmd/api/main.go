@@ -106,7 +106,7 @@ func run(log *slog.Logger, args []string) error {
 		return err
 	}
 	worker := &tryon.Worker{DB: pool, Store: store, Provider: provider, Log: log,
-		Concurrency: cfg.TryOn.Workers, Timeout: cfg.TryOn.Timeout, MaxAttempts: cfg.TryOn.MaxAttempts,
+		Concurrency: cfg.TryOn.Workers, Timeout: cfg.TryOn.JobTimeout(), MaxAttempts: cfg.TryOn.MaxAttempts,
 		Notify: func(ctx context.Context, tx pgx.Tx, userID uuid.UUID, kind string, data map[string]any) error {
 			return notify.Send(ctx, tx, userID, kind, data)
 		}}

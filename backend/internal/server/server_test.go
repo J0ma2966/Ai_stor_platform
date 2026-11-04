@@ -56,7 +56,7 @@ type env struct {
 	d   Deps
 }
 
-func setup(t *testing.T) *env {
+func setup(t *testing.T, mods ...func(*Deps)) *env {
 	pool := testutil.DB(t)
 	mr := miniredis.RunT(t)
 	sms := &captureSMS{codes: map[string]string{}}
@@ -72,6 +72,9 @@ func setup(t *testing.T) *env {
 		},
 		Log: slog.New(slog.NewJSONHandler(io.Discard, nil)), DB: pool,
 		Redis: redis.NewClient(&redis.Options{Addr: mr.Addr()}), Storage: media.NewMemory(), SMS: sms,
+	}
+	for _, m := range mods {
+		m(&d)
 	}
 	srv := httptest.NewServer(New(d))
 	t.Cleanup(srv.Close)
