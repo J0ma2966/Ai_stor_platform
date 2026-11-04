@@ -332,14 +332,20 @@ func TestExcelImportAndBulkPhotos(t *testing.T) {
 		hdr,
 		{"IMP-1", "Кепка", "Хлопок", "headwear", "Acme", "150 000", "да"},
 		{"IMP-2", "Брюки", "Лён", "Pastki kiyimlar", "Acme", 320000.5, "yo'q"},
-		{"IMP-3", "", "x", "tops", "Acme", "1", "да"},           // нет названия
-		{"IMP-4", "Туфли", "Кожа", "socks", "Acme", "abc", "?"}, // 3 ошибки
-		{"IMP-1", "Дубль", "x", "tops", "Acme", "1", "да"},      // дубль артикула в файле
+		{"IMP-3", "", "x", "tops", "Acme", "1", "да"},              // нет названия
+		{"IMP-4", "Туфли", "Кожа", "socks", "Acme", "abc", "?"},    // 3 ошибки
+		{"IMP-1", "Дубль", "x", "tops", "Acme", "1", "да"},         // дубль артикула в файле
+		{"", "Шапка", "Шерсть", "headwear", "Acme", "90000", "да"}, // без артикула — автоартикул
+		{"", "Шарф", "Шерсть", "tops", "Acme", "90000", "да"},      // второй пустой — не дубль
 		{},
 	})
 	res := f.storeA.must(200, "POST", "/v1/store/products/import", file).data()
-	if res["total"].(float64) != 5 || res["created"].(float64) != 2 || res["failed"].(float64) != 3 {
+	if res["total"].(float64) != 7 || res["created"].(float64) != 4 || res["failed"].(float64) != 3 {
 		t.Fatalf("import result: %v", res)
+	}
+	if g := res["generated"].([]any); len(g) != 2 || g[0].(map[string]any)["sku"] != "A-000001" || g[1].(map[string]any)["sku"] != "A-000002" ||
+		g[0].(map[string]any)["row"].(float64) != 7 {
+		t.Fatalf("generated: %v", res["generated"])
 	}
 	if n := len(res["errors"].([]any)); n != 5 {
 		t.Fatalf("errors: %v", res["errors"])

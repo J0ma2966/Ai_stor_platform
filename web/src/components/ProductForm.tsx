@@ -45,7 +45,9 @@ export function ProductForm({ product, onSaved }: { product?: Product; onSaved?:
     }
     setBusy(true);
     try {
-      const body = { ...f, price, sku: f.sku.trim(), ...(Object.keys(keys).length ? { images: keys } : {}) };
+      // Пустой артикул у нового товара — сервер выдаст его автоматически.
+      const sku = f.sku.trim();
+      const body = { ...f, price, sku, ...(Object.keys(keys).length ? { images: keys } : {}) };
       if (product) {
         await updateProduct(product.id, body);
         setOk(t("saved"));
@@ -62,10 +64,10 @@ export function ProductForm({ product, onSaved }: { product?: Product; onSaved?:
       setBusy(false);
     }
   }
-  const field = (k: "title" | "brand" | "sku", max: number, hint?: string) => (
+  const field = (k: "title" | "brand" | "sku", max: number, hint?: string, optional = false, placeholder?: string) => (
     <div className="field">
       <label htmlFor={`pf-${k}`}>{t(k)}</label>
-      <input id={`pf-${k}`} required maxLength={max} value={f[k]} onChange={set(k)} aria-invalid={!!fields[k]} aria-describedby={hint ? `pf-${k}-h` : undefined} />
+      <input id={`pf-${k}`} required={!optional} placeholder={placeholder} maxLength={max} value={f[k]} onChange={set(k)} aria-invalid={!!fields[k]} aria-describedby={hint ? `pf-${k}-h` : undefined} />
       {hint && <span id={`pf-${k}-h`} className="muted small">{hint}</span>}
       {fields[k] && <span className="field-error">{fe(fields[k])}</span>}
     </div>
@@ -96,7 +98,7 @@ export function ProductForm({ product, onSaved }: { product?: Product; onSaved?:
         </div>
         <div className="grid-2">
           {field("brand", 120)}
-          {field("sku", 64, t("skuHint"))}
+          {product ? field("sku", 64, t("skuHint")) : field("sku", 64, t("skuAutoHint"), true, t("skuAuto"))}
         </div>
         <label className="row check"><input type="checkbox" checked={f.in_stock} onChange={(e) => setF((p) => ({ ...p, in_stock: e.target.checked }))} /><span>{t("inStock")}</span></label>
       </fieldset>
