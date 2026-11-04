@@ -72,6 +72,11 @@ func New(d Deps) http.Handler {
 	usersH.Purge = append(usersH.Purge, func(ctx context.Context, tx pgx.Tx, userID uuid.UUID) error {
 		return tryon.PurgeUser(ctx, tx, tryonH.Store, userID)
 	})
+	// ВРЕМЕННО: тестовый вход по почте — удаление аккаунта стирает почту и пароль.
+	usersH.Purge = append(usersH.Purge, auth.PurgeEmail)
+	if d.Cfg.EmailAuthEnabled && d.Cfg.IsProd() {
+		d.Log.Warn("EMAIL_AUTH_ENABLED=true in prod: temporary email sign-up without verification is open")
+	}
 	paymentsH, err := payments.New(d.DB, d.Cfg, limiter)
 	if err != nil {
 		panic("payments config: " + err.Error()) // неверный CLICK_/PAYME_ALLOWED_IPS — ошибка конфигурации
@@ -105,7 +110,10 @@ func New(d Deps) http.Handler {
 			r.Group(func(r chi.Router) {
 				r.Use(timeout(15 * time.Second))
 
-				r.Route("/auth", authH.Routes)
+				r.Route("/auth", func(r chi.Router) {
+					authH.Routes(r)
+					r.Route("/email", authH.EmailRoutes(d.Cfg.EmailAuthEnabled)) // ВРЕМЕННО, см. auth/email_temp.go
+				})
 				productsH.PublicRoutes(r)
 				storesH.PublicRoutes(r)
 				catalogH.PublicRoutes(r)

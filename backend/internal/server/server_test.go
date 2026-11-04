@@ -65,7 +65,7 @@ func setup(t *testing.T, mods ...func(*Deps)) *env {
 			Env: "test", JWTSecret: []byte(strings.Repeat("k", 32)), AccessTTL: 15 * time.Minute, RefreshTTL: 24 * time.Hour,
 			OTPTTL: 5 * time.Minute, OTPCooldown: time.Minute, OTPMaxTries: 5, OTPPepper: []byte("pepper-pepper-pepper"),
 			MaxUploadMB: 5, CookieSecure: false, OTPAllowedPrefixes: []string{"+998"},
-			PublicMediaURL: "https://cdn.test", UploadConcurrency: 2,
+			PublicMediaURL: "https://cdn.test", UploadConcurrency: 2, EmailAuthEnabled: true,
 			PaymentReturnURL: "https://shop.test/account/balance",
 			ClickServiceID:   "777", ClickMerchantID: "555", ClickSecretKey: testClickSecret,
 			PaymeMerchantID: "pm-merchant", PaymeKey: testPaymeKey, PaymeTest: true, PaymeAccountKey: "payment_id",

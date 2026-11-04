@@ -48,6 +48,10 @@ type Config struct {
 
 	AutoMigrate bool
 
+	// ВРЕМЕННО (тестирование): вход клиента по почте и паролю, см. auth/email_temp.go.
+	// EMAIL_AUTH_ENABLED; по умолчанию включено в dev/test и выключено в prod.
+	EmailAuthEnabled bool
+
 	// SMS: log (только dev/test) | eskiz
 	SMSProvider   string
 	EskizURL      string
@@ -167,6 +171,7 @@ func Load() (Config, error) {
 		PublicMediaURL:     get("PUBLIC_MEDIA_URL", "http://localhost:9000/boutique-media"),
 		UploadConcurrency:  min(max(getInt("UPLOAD_CONCURRENCY", 4), 1), 64),
 		AutoMigrate:        getBool("AUTO_MIGRATE", false),
+		EmailAuthEnabled:   getBool("EMAIL_AUTH_ENABLED", get("APP_ENV", "dev") != "prod"),
 
 		BiometricS3Endpoint:  os.Getenv("BIOMETRIC_S3_ENDPOINT"),
 		BiometricS3Region:    get("BIOMETRIC_S3_REGION", "uz-tashkent-1"),
@@ -404,6 +409,6 @@ func (c Config) String() string {
 	if c.BiometricS3Endpoint != "" {
 		bio = c.BiometricS3Endpoint + "/" + c.BiometricS3Bucket + " (" + c.BiometricCountry + ")"
 	}
-	return fmt.Sprintf("env=%s http=%s internal=%s s3=%s/%s biometric=%s tryon=%s",
-		c.Env, c.HTTPAddr, c.InternalAddr, c.S3Endpoint, c.S3Bucket, bio, c.TryOn.Provider)
+	return fmt.Sprintf("env=%s http=%s internal=%s s3=%s/%s biometric=%s tryon=%s email_auth=%t",
+		c.Env, c.HTTPAddr, c.InternalAddr, c.S3Endpoint, c.S3Bucket, bio, c.TryOn.Provider, c.EmailAuthEnabled)
 }

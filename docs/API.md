@@ -62,6 +62,7 @@
 |---|---|---|
 | GET | `/healthz`, `/readyz` | — |
 | POST | `/v1/auth/otp/request`, `/v1/auth/otp/verify`, `/v1/auth/login`, `/v1/auth/refresh`, `/v1/auth/logout` | — |
+| POST | `/v1/auth/email/register`, `/v1/auth/email/login` (ВРЕМЕННО, при `EMAIL_AUTH_ENABLED`, см. docs/EMAIL_AUTH.md); GET `/v1/auth/email/status` | — |
 | GET | `/v1/categories`, `/v1/products`, `/v1/products/{id}` | — |
 | GET | `/v1/me` | любая |
 | PATCH | `/v1/me` | client |

@@ -9,6 +9,7 @@ import { ErrorBox } from "@/components/ErrorBox";
 import { useSession } from "@/lib/session";
 import { api } from "@/lib/api";
 import type { Me } from "@/lib/session";
+import { EmailAuthForm } from "@/components/EmailAuthForm"; // ВРЕМЕННО: вход по почте на время тестирования
 
 export default function ClientLogin() {
   const t = useTranslations("login");
@@ -21,6 +22,13 @@ export default function ClientLogin() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
+  async function afterSignIn() {
+    const me = await api<Me>("/v1/me");
+    await reload();
+    // новый клиент: сначала обязательный выбор пола и согласие на обработку ПД
+    router.replace(me.registration_complete ? next : `/account/welcome?next=${encodeURIComponent(next)}`);
+  }
+
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -31,10 +39,7 @@ export default function ClientLogin() {
         setSent(true);
       } else {
         await verifyOtp(phone.trim(), code.trim());
-        const me = await api<Me>("/v1/me");
-        await reload();
-        // новый клиент: сначала обязательный выбор пола и согласие на обработку ПД
-        router.replace(me.registration_complete ? next : `/account/welcome?next=${encodeURIComponent(next)}`);
+        await afterSignIn();
       }
     } catch (err) {
       setError(err);
@@ -44,20 +49,23 @@ export default function ClientLogin() {
   }
 
   return (
-    <form onSubmit={submit} className="card stack narrow">
-      <h1>{t("title")}</h1>
-      <div className="field">
-        <label htmlFor="phone">{t("phone")}</label>
-        <input id="phone" type="tel" inputMode="tel" autoComplete="tel" value={phone} disabled={sent} onChange={(e) => setPhone(e.target.value)} />
-      </div>
-      {sent && (
+    <>
+      <form onSubmit={submit} className="card stack narrow">
+        <h1>{t("title")}</h1>
         <div className="field">
-          <label htmlFor="code">{t("code")}</label>
-          <input id="code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(e) => setCode(e.target.value)} />
+          <label htmlFor="phone">{t("phone")}</label>
+          <input id="phone" type="tel" inputMode="tel" autoComplete="tel" value={phone} disabled={sent} onChange={(e) => setPhone(e.target.value)} />
         </div>
-      )}
-      <ErrorBox error={error} />
-      <button className="btn btn-primary" disabled={busy}>{sent ? t("signIn") : t("sendCode")}</button>
-    </form>
+        {sent && (
+          <div className="field">
+            <label htmlFor="code">{t("code")}</label>
+            <input id="code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(e) => setCode(e.target.value)} />
+          </div>
+        )}
+        <ErrorBox error={error} />
+        <button className="btn btn-primary" disabled={busy}>{sent ? t("signIn") : t("sendCode")}</button>
+      </form>
+      <EmailAuthForm onSignedIn={afterSignIn} />
+    </>
   );
 }
