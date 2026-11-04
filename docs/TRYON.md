@@ -94,7 +94,8 @@ curl https://api.openai.com/v1/images/edits \
 ### Диагностика
 
 - Генерация `failed`, `error_code=provider_error`: причина в админке (журнал генераций, поле `error`) и в логе воркера `tryon failed`/`tryon retry` (`generation_id`, текст ошибки OpenAI без фото и ключа).
-- `openai auth failed (401)` — неверный/отозванный ключ. `access denied (403)` — нет доступа к модели или не пройдена верификация организации. `quota exhausted (429)` — пополнить баланс / поднять лимит проекта.
+- `openai auth failed (401)` — неверный/отозванный ключ. `access denied (403)` — нет доступа к модели или не пройдена верификация организации. `quota exhausted (429)` (OpenAI: `type=insufficient_quota`, `code=credit_balance_exhausted` — «You have no credits remaining») — пополнить баланс на platform.openai.com → Settings → Billing / поднять лимит проекта; генерация завершается сразу, без повторов, токены возвращаются.
+- Локально картинка результата или превью фото не открывается: ссылки подписываются на `S3_PUBLIC_ENDPOINT` (в `deploy/docker-compose.yml` это `localhost:${MINIO_HOST_PORT}`); если API запущен иначе, задайте `S3_PUBLIC_ENDPOINT` вручную — адрес `minio:9000` браузеру не виден.
 - Много `retry` с `openai status 429` — упёрлись в rate limit: уменьшить `TRYON_WORKERS`.
 - `context deadline exceeded` — генерация дольше `OPENAI_TIMEOUT_SECONDS`: поднять таймаут или перейти на `gpt-image-2.5-flare` / `quality=medium`.
 - `content_blocked` — модерация OpenAI отклонила фото; клиенту показывается просьба загрузить другие фото, токены возвращены.

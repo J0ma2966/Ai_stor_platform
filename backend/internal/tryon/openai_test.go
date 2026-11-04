@@ -158,6 +158,8 @@ func TestOpenAIErrorMapping(t *testing.T) {
 		{403, `{"error":{"message":"org must be verified"}}`, true, CodeProviderFailure},
 		{429, `{"error":{"message":"Rate limit","code":"rate_limit_exceeded"}}`, false, CodeProviderFailure},
 		{429, `{"error":{"message":"quota","code":"insufficient_quota"}}`, true, CodeProviderFailure},
+		// реальный ответ OpenAI без кредитов (2026-11-04): тип insufficient_quota, код другой
+		{429, `{"error":{"message":"You have no credits remaining.","type":"insufficient_quota","code":"credit_balance_exhausted"}}`, true, CodeProviderFailure},
 		{500, `{"error":{"message":"oops"}}`, false, CodeProviderFailure},
 		{502, `bad gateway`, false, CodeProviderFailure},
 		{503, ``, false, CodeProviderFailure},

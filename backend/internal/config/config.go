@@ -35,13 +35,16 @@ type Config struct {
 	// Префиксы номеров, на которые разрешено слать SMS (защита от SMS pumping).
 	OTPAllowedPrefixes []string
 
-	S3Endpoint  string
-	S3Region    string
-	S3Bucket    string
-	S3AccessKey string
-	S3SecretKey string
-	S3UseSSL    bool
-	MaxUploadMB int
+	S3Endpoint string
+	// S3PublicEndpoint — адрес хранилища, видимый браузеру, для подписанных ссылок
+	// (S3_PUBLIC_ENDPOINT). Пусто — тот же S3Endpoint. В dev: localhost:<MINIO_HOST_PORT>.
+	S3PublicEndpoint string
+	S3Region         string
+	S3Bucket         string
+	S3AccessKey      string
+	S3SecretKey      string
+	S3UseSSL         bool
+	MaxUploadMB      int
 	// Базовый URL публичных картинок (CDN или публичный префикс бакета), напр. https://cdn.example.uz
 	PublicMediaURL    string
 	UploadConcurrency int // одновременных декодирований изображений на инстанс
@@ -162,6 +165,7 @@ func Load() (Config, error) {
 		OTPPepper:          []byte(os.Getenv("OTP_PEPPER")),
 		OTPAllowedPrefixes: splitList(get("OTP_ALLOWED_PREFIXES", "+998")),
 		S3Endpoint:         get("S3_ENDPOINT", "localhost:9000"),
+		S3PublicEndpoint:   os.Getenv("S3_PUBLIC_ENDPOINT"),
 		S3Region:           get("S3_REGION", "us-east-1"),
 		S3Bucket:           get("S3_BUCKET", "boutique-media"),
 		S3AccessKey:        os.Getenv("S3_ACCESS_KEY"),

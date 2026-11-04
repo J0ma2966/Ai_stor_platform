@@ -46,7 +46,32 @@ func attachment(filename string) string {
 
 type S3 struct {
 	c      *minio.Client
+	signer *minio.Client // подписывает ссылки для браузера; nil — тот же c
 	bucket string
+}
+
+// WithPublicEndpoint: ссылки для браузера подписываются на другой адрес хранилища.
+// В dev API ходит в MinIO по имени контейнера (minio:9000), а браузер его не видит —
+// ему нужен localhost:<порт>. Подпись считается локально (регион задан), без запросов.
+func (s *S3) WithPublicEndpoint(endpoint, region, access, secret string, useSSL bool) error {
+	if endpoint == "" {
+		return nil
+	}
+	c, err := minio.New(endpoint, &minio.Options{
+		Creds: credentials.NewStaticV4(access, secret, ""), Secure: useSSL, Region: region,
+	})
+	if err != nil {
+		return err
+	}
+	s.signer = c
+	return nil
+}
+
+func (s *S3) presigner() *minio.Client {
+	if s.signer != nil {
+		return s.signer
+	}
+	return s.c
 }
 
 func NewS3(endpoint, region, bucket, access, secret string, useSSL bool) (*S3, error) {
@@ -90,7 +115,7 @@ func (s *S3) Get(ctx context.Context, key string) ([]byte, error) {
 }
 
 func (s *S3) PresignGet(ctx context.Context, key string, ttl time.Duration) (string, error) {
-	u, err := s.c.PresignedGetObject(ctx, s.bucket, key, ttl, url.Values{})
+	u, err := s.presigner().PresignedGetObject(ctx, s.bucket, key, ttl, url.Values{})
 	if err != nil {
 		return "", err
 	}
@@ -100,7 +125,7 @@ func (s *S3) PresignGet(ctx context.Context, key string, ttl time.Duration) (str
 func (s *S3) PresignDownload(ctx context.Context, key string, ttl time.Duration, filename string) (string, error) {
 	q := url.Values{}
 	q.Set("response-content-disposition", attachment(filename))
-	u, err := s.c.PresignedGetObject(ctx, s.bucket, key, ttl, q)
+	u, err := s.presigner().PresignedGetObject(ctx, s.bucket, key, ttl, q)
 	if err != nil {
 		return "", err
 	}
