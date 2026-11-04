@@ -70,7 +70,8 @@
     "insufficient_tokens": "Tokenlar yetarli emas. Balansni to‘ldiring.",
     "too_many_active_generations": "Joriy kiyib ko‘rish tugashini kuting.",
     "generation_in_progress": "Kiyib ko‘rish hali bajarilmoqda, kuting.",
-    "corrupt_image": "Tasvirni o‘qib bo‘lmadi. Boshqa fotoni sinab ko‘ring."
+    "corrupt_image": "Tasvirni o‘qib bo‘lmadi. Boshqa fotoni sinab ko‘ring.",
+    "tryon_transfer_consent_required": "Fotolarni tashqi AI-xizmatga yuborish uchun alohida rozilik kerak."
   },
   "fieldErrors": {
     "required": "Majburiy maydon",
@@ -717,7 +718,8 @@
       "unsupported_items": "Tanlangan kiyimlarni hozircha bu AI modeli bilan kiyib ko‘rib bo‘lmaydi.",
       "photo_missing": "Fotolar ishga tushirishdan oldin o‘chirilgan. Ularni qayta yuklang.",
       "product_unavailable": "Mahsulotlar endi mavjud emas.",
-      "provider_error": "Generatsiyada texnik xatolik. Keyinroq urinib ko‘ring."
+      "provider_error": "Generatsiyada texnik xatolik. Keyinroq urinib ko‘ring.",
+      "transfer_consent_required": "Suratlarni AI-xizmatga yuborishga rozilik berilmagan. Rozilik bering va qayta ishga tushiring — tokenlar qaytarildi."
     },
     "refunded": "{n} token balansga qaytarildi.",
     "resultAlt": "Siz tanlangan obrazda: old, yon va orqa tomondan",
@@ -752,6 +754,9 @@
     "revokeConfirm": "Barcha fotolar va natijalar o‘chirilsinmi?",
     "disabledTitle": "Kiyib ko‘rish hozircha mavjud emas",
     "disabledText": "AI yordamida kiyib ko‘rish tez orada paydo bo‘ladi. Hozircha katalogdan narsalarni tanlab, buyurtma berishingiz mumkin.",
-    "toCatalog": "Katalogga"
+    "toCatalog": "Katalogga",
+    "transferConsent": "Suratlarimni kiyib ko'rish uchun {recipient} ga yuborishga roziman. Suratlar O'zbekistondan tashqarida qayta ishlanadi; provayder ularni suiiste'mollarni nazorat qilish uchun 30 kungacha saqlashi mumkin va o'qitish uchun ishlatmaydi.",
+    "openFull": "To'liq o'lchamda ochish",
+    "download": "Yuklab olish"
   }
 }

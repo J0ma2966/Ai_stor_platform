@@ -48,8 +48,8 @@ type tryonFixture struct {
 	providerFail func(tryon.Request) error
 }
 
-func newTryonFixture(t *testing.T) *tryonFixture {
-	of := newOrderFixture(t)
+func newTryonFixture(t *testing.T, mods ...func(*Deps)) *tryonFixture {
+	of := newOrderFixture(t, mods...)
 	f := &tryonFixture{orderFixture: of, mem: of.e.d.Storage.(*media.Memory)}
 	ctx := context.Background()
 	mk := func(zone string) string {

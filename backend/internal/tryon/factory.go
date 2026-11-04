@@ -1,6 +1,7 @@
 package tryon
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -23,6 +24,14 @@ func NewProvider(c config.TryOnConfig) (Provider, error) {
 		return &Gemini{APIKey: c.APIKey, Model: c.Model, BaseURL: c.Endpoint, HTTP: hc}, nil
 	case "http":
 		return &SelfHosted{Endpoint: c.Endpoint, APIKey: c.APIKey, HTTP: hc}, nil
+	case "openai":
+		o := c.OpenAI
+		if o.APIKey == "" {
+			// config.Load уже не пускает такую конфигурацию; защита на случай прямого вызова
+			return nil, errors.New("tryon: OPENAI_API_KEY is required for TRYON_PROVIDER=openai")
+		}
+		return &OpenAI{APIKey: o.APIKey, BaseURL: o.BaseURL, Model: o.Model, Quality: o.Quality,
+			Size: o.Size, Format: o.Format, HTTP: &http.Client{Timeout: o.Timeout}}, nil
 	}
 	return nil, fmt.Errorf("unknown tryon provider %q", c.Provider)
 }

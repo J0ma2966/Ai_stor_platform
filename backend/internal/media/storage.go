@@ -28,6 +28,22 @@ type Storage interface {
 	List(ctx context.Context, prefix string, before time.Time, fn func(key string) error) error
 }
 
+// DownloadPresigner — подписанная ссылка, по которой браузер СКАЧИВАЕТ файл
+// (Content-Disposition: attachment), а не открывает его. Атрибут download у <a>
+// для ссылок на другой домен (хранилище) браузеры игнорируют.
+type DownloadPresigner interface {
+	PresignDownload(ctx context.Context, key string, ttl time.Duration, filename string) (string, error)
+}
+
+func attachment(filename string) string {
+	return `attachment; filename="` + strings.Map(func(r rune) rune {
+		if r == '"' || r == '\\' || r < 0x20 || r > 0x7e {
+			return '_'
+		}
+		return r
+	}, filename) + `"`
+}
+
 type S3 struct {
 	c      *minio.Client
 	bucket string
@@ -75,6 +91,16 @@ func (s *S3) Get(ctx context.Context, key string) ([]byte, error) {
 
 func (s *S3) PresignGet(ctx context.Context, key string, ttl time.Duration) (string, error) {
 	u, err := s.c.PresignedGetObject(ctx, s.bucket, key, ttl, url.Values{})
+	if err != nil {
+		return "", err
+	}
+	return u.String(), nil
+}
+
+func (s *S3) PresignDownload(ctx context.Context, key string, ttl time.Duration, filename string) (string, error) {
+	q := url.Values{}
+	q.Set("response-content-disposition", attachment(filename))
+	u, err := s.c.PresignedGetObject(ctx, s.bucket, key, ttl, q)
 	if err != nil {
 		return "", err
 	}
@@ -159,6 +185,10 @@ func (m *Memory) Has(key string) bool {
 func (m *Memory) PresignGet(_ context.Context, key string, _ time.Duration) (string, error) {
 	return "memory://" + key, nil
 }
+func (m *Memory) PresignDownload(_ context.Context, key string, _ time.Duration, filename string) (string, error) {
+	return "memory://" + key + "?download=" + url.QueryEscape(filename), nil
+}
+
 func (m *Memory) Delete(_ context.Context, key string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -193,6 +223,13 @@ func (r Routed) Get(ctx context.Context, key string) ([]byte, error) {
 func (r Routed) PresignGet(ctx context.Context, key string, ttl time.Duration) (string, error) {
 	return r.pick(key).PresignGet(ctx, key, ttl)
 }
+func (r Routed) PresignDownload(ctx context.Context, key string, ttl time.Duration, filename string) (string, error) {
+	if d, ok := r.pick(key).(DownloadPresigner); ok {
+		return d.PresignDownload(ctx, key, ttl, filename)
+	}
+	return r.pick(key).PresignGet(ctx, key, ttl)
+}
+
 func (r Routed) Delete(ctx context.Context, key string) error { return r.pick(key).Delete(ctx, key) }
 func (r Routed) Ping(ctx context.Context) error {
 	return errors.Join(r.Default.Ping(ctx), r.Biometric.Ping(ctx))

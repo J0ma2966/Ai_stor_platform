@@ -149,3 +149,52 @@ func TestBiometricRouting(t *testing.T) {
 		t.Fatal("missing object error")
 	}
 }
+
+// jpegWithOrientation вставляет минимальный EXIF (II, IFD0 с одним тегом Orientation).
+func jpegWithOrientation(t *testing.T, w, h int, o uint16) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for x := 0; x < w/4; x++ { // метка в левом верхнем углу
+		for y := 0; y < h/4; y++ {
+			img.Set(x, y, color.RGBA{255, 0, 0, 255})
+		}
+	}
+	var b bytes.Buffer
+	_ = jpeg.Encode(&b, img, &jpeg.Options{Quality: 95})
+	tiff := []byte{'I', 'I', 42, 0, 8, 0, 0, 0, 1, 0, 0x12, 0x01, 3, 0, 1, 0, 0, 0, byte(o), 0, 0, 0, 0, 0, 0, 0}
+	seg := append([]byte("Exif\x00\x00"), tiff...)
+	app1 := []byte{0xFF, 0xE1, byte((len(seg) + 2) >> 8), byte(len(seg) + 2)}
+	raw := b.Bytes()
+	return append(append(append([]byte{}, raw[:2]...), append(app1, seg...)...), raw[2:]...)
+}
+
+func TestProcessAppliesEXIFOrientation(t *testing.T) {
+	for o, wantPortrait := range map[uint16]bool{1: false, 3: false, 6: true, 8: true} {
+		in := jpegWithOrientation(t, 80, 40, o)
+		if got := jpegOrientation(in); got != int(o) {
+			t.Fatalf("parsed orientation %d, want %d", got, o)
+		}
+		out, err := Process(bytes.NewReader(in), 1<<20)
+		if err != nil {
+			t.Fatal(err)
+		}
+		img, err := jpeg.Decode(bytes.NewReader(out))
+		if err != nil {
+			t.Fatal(err)
+		}
+		b := img.Bounds()
+		if (b.Dy() > b.Dx()) != wantPortrait {
+			t.Fatalf("orientation %d: got %dx%d", o, b.Dx(), b.Dy())
+		}
+		// красная метка из левого верхнего угла исходника: при 3 (180°) — справа внизу
+		if o == 3 {
+			r, _, _, _ := img.At(b.Dx()-3, b.Dy()-3).RGBA()
+			if r>>8 < 200 {
+				t.Fatal("180° rotation not applied")
+			}
+		}
+	}
+	if jpegOrientation([]byte("not a jpeg")) != 1 {
+		t.Fatal("garbage must be orientation 1")
+	}
+}

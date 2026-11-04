@@ -6,7 +6,7 @@ import { api, newIdempotencyKey } from "@/lib/api";
 import { formatSum } from "@/lib/money";
 import { fittingItems } from "@/lib/fitting";
 import {
-  ANGLES, createGeneration, getQuote, giveConsent, listPhotos, uploadBodyPhoto,
+  ANGLES, createGeneration, getQuote, giveConsent, giveTransferConsent, listPhotos, uploadBodyPhoto,
   type Angle, type BodyInput, type Quote, type SavedPhoto,
 } from "@/lib/tryon";
 import { useFitting } from "@/components/FittingRoom";
@@ -31,6 +31,7 @@ export function TryOnWizard() {
   const [slots, setSlots] = useState<Record<Angle, Slot>>({ front: null, side: null, back: null });
   const [savePhotos, setSavePhotos] = useState(true);
   const [consent, setConsent] = useState(false);
+  const [transfer, setTransfer] = useState(false);
   const [body, setBody] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<Angle | "submit" | null>(null);
   const [error, setError] = useState<unknown>(null);
@@ -47,6 +48,7 @@ export function TryOnWizard() {
         ]);
         setQuote(q);
         setConsent(q.consent);
+        setTransfer(!q.transfer?.required || q.transfer.consent);
         const s: Record<Angle, Slot> = { front: null, side: null, back: null };
         saved.forEach((p: SavedPhoto) => (s[p.angle] = { key: p.key, url: p.url, saved: true }));
         setSlots(s);
@@ -80,15 +82,19 @@ export function TryOnWizard() {
 
   const toBody = async () => {
     setError(null);
-    if (!consent) return;
-    if (!quote?.consent) {
-      try {
+    if (!consent || !transfer) return;
+    try {
+      if (!quote?.consent) {
         await giveConsent();
         setQuote((q) => (q ? { ...q, consent: true } : q));
-      } catch (e) {
-        setError(e);
-        return;
       }
+      if (quote?.transfer?.required && !quote.transfer.consent) {
+        await giveTransferConsent();
+        setQuote((q) => (q && q.transfer ? { ...q, transfer: { ...q.transfer, consent: true } } : q));
+      }
+    } catch (e) {
+      setError(e);
+      return;
     }
     setStep("body");
   };
@@ -197,11 +203,17 @@ export function TryOnWizard() {
               {t("consent")}
             </label>
           )}
+          {quote.transfer?.required && !quote.transfer.consent && (
+            <label className="row small">
+              <input type="checkbox" checked={transfer} onChange={(e) => setTransfer(e.target.checked)} />
+              {t("transferConsent", { recipient: quote.transfer.recipient })}
+            </label>
+          )}
           {!allPhotos && <p className="small warn-text">{t("needAllPhotos")}</p>}
           <ErrorBox error={error} />
           <div className="row between">
             <Link href="/fitting" className="btn btn-secondary">{t("backToRoom")}</Link>
-            <button type="button" className="btn btn-primary" disabled={!allPhotos || !consent || busy !== null} onClick={toBody}>
+            <button type="button" className="btn btn-primary" disabled={!allPhotos || !consent || !transfer || busy !== null} onClick={toBody}>
               {t("next")}
             </button>
           </div>

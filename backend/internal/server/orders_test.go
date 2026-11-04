@@ -46,8 +46,8 @@ type orderFixture struct {
 	prodB             string
 }
 
-func newOrderFixture(t *testing.T) *orderFixture {
-	e := setup(t)
+func newOrderFixture(t *testing.T, mods ...func(*Deps)) *orderFixture {
+	e := setup(t, mods...)
 	ctx := context.Background()
 	if _, err := admin.CreateAdmin(ctx, e.d.DB, "root", "admin-password-123"); err != nil {
 		t.Fatal(err)

@@ -54,6 +54,8 @@ describe("GenerationView", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(3100); });
     const img = await screen.findByAltText("Вы в выбранном образе: спереди, сбоку и сзади");
     expect(img).toHaveAttribute("src", "https://s3/r.jpg");
+    expect(screen.getByRole("link", { name: "Открыть в полном размере" })).toHaveAttribute("href", "https://s3/r.jpg");
+    expect(screen.getByRole("link", { name: "Скачать" })).toHaveAttribute("href", "https://s3/r.jpg");
     expect(getGeneration).toHaveBeenCalledTimes(3);
     // после завершения опрос прекращается
     await act(async () => { await vi.advanceTimersByTimeAsync(10000); });

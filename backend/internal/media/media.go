@@ -1,7 +1,8 @@
 // Package media — единый модуль загрузки изображений (фото товаров, фото клиента,
 // фото места доставки). Всё, что загружают пользователи, проходит через Process:
 // проверка сигнатуры (magic bytes), лимиты размера и разрешения, перекодирование
-// в JPEG — это удаляет EXIF/GPS и любые встроенные данные. SVG/HTML не принимаются.
+// в JPEG — это удаляет EXIF/GPS и любые встроенные данные (поворот из EXIF Orientation
+// применяется до этого). SVG/HTML не принимаются.
 package media
 
 import (
@@ -101,7 +102,7 @@ func Process(r io.Reader, maxBytes int64) ([]byte, error) {
 	if err != nil {
 		return nil, ErrCorrupt
 	}
-	img = fit(img, MaxSide)
+	img = orient(fit(img, MaxSide), jpegOrientation(data))
 	var out bytes.Buffer
 	if err := jpeg.Encode(&out, img, &jpeg.Options{Quality: JPEGQuality}); err != nil {
 		return nil, err

@@ -55,6 +55,27 @@ type Provider interface {
 	Generate(ctx context.Context, req Request) ([]byte, error)
 }
 
+// CompositeRequest — все входные данные одной генерации для провайдеров, которые
+// сами рисуют итоговое изображение с тремя ракурсами (OpenAI): три фото клиента и
+// по одной вещи на зону. Фото — JPEG/PNG/WebP.
+type CompositeRequest struct {
+	FrontPhoto []byte
+	SidePhoto  []byte
+	BackPhoto  []byte
+	Garments   []Garment // 1..4, не больше одной на зону
+	Gender     string    // male | female | ""
+	Body       Body
+}
+
+// CompositeProvider — провайдер «один запрос — одно изображение с тремя ракурсами».
+// Если провайдер реализует этот интерфейс, воркер вызывает GenerateComposite ровно
+// один раз на попытку и НЕ склеивает результат через Compose. Остальные провайдеры
+// (Gemini, FASHN, HTTP, Mock) работают по-старому: Generate на каждый ракурс + Compose.
+type CompositeProvider interface {
+	Provider
+	GenerateComposite(ctx context.Context, req CompositeRequest) ([]byte, error)
+}
+
 // PermanentError — ошибка, которую повтор не исправит (фото без человека, модерация
 // контента). Code уходит фронту как error_code.
 type PermanentError struct {
@@ -75,7 +96,8 @@ const (
 	CodeUnsupported     = "unsupported_items" // провайдер не умеет эти категории
 	CodePhotoMissing    = "photo_missing"     // фото удалено до запуска
 	CodeProductMissing  = "product_unavailable"
-	CodeProviderFailure = "provider_error" // техническая ошибка после всех повторов
+	CodeProviderFailure = "provider_error"            // техническая ошибка после всех повторов
+	CodeTransferConsent = "transfer_consent_required" // нет согласия на передачу фото этому провайдеру
 )
 
 // ErrorCode возвращает код для фронта.
