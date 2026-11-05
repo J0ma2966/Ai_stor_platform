@@ -54,7 +54,7 @@ class StoreOrderContentTest {
 
     @Test fun confirmNeedsOnlyConfirmation() {
         val calls = mutableListOf<Pair<OrderStatus, String>>()
-        show(order(OrderStatus.PENDING, listOf(OrderStatus.CONFIRMED, OrderStatus.REJECTED))) { s, r -> calls += s to r }
+        show(order(OrderStatus.PENDING, listOf(OrderStatus.CONFIRMED, OrderStatus.REJECTED)), onStatus = { s, r -> calls += s to r })
         rule.onNodeWithTag("action_confirmed").performClick()
         rule.onNodeWithTag("confirm").performClick()
         assertEquals(listOf(OrderStatus.CONFIRMED to ""), calls)
@@ -62,7 +62,7 @@ class StoreOrderContentTest {
 
     @Test fun rejectRequiresReason() {
         val calls = mutableListOf<Pair<OrderStatus, String>>()
-        show(order(OrderStatus.PENDING, listOf(OrderStatus.CONFIRMED, OrderStatus.REJECTED))) { s, r -> calls += s to r }
+        show(order(OrderStatus.PENDING, listOf(OrderStatus.CONFIRMED, OrderStatus.REJECTED)), onStatus = { s, r -> calls += s to r })
         rule.onNodeWithTag("action_rejected").performClick()
         rule.onNodeWithTag("confirm").assertIsNotEnabled()
         rule.onNodeWithTag("reason").performTextInput("Нет размера M")

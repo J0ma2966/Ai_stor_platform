@@ -29,6 +29,8 @@ dependencies {
 
 tasks.test {
     // Интеграционный тест против запущенного бэкенда: BOUTIQUE_IT_API=http://localhost:8080
-    environment("BOUTIQUE_IT_API", System.getenv("BOUTIQUE_IT_API") ?: "")
+    for (k in listOf("BOUTIQUE_IT_API", "BOUTIQUE_IT_OTP_LOG", "BOUTIQUE_IT_STORE_LOGIN", "BOUTIQUE_IT_STORE_PASSWORD")) {
+        environment(k, System.getenv(k) ?: "")
+    }
     testLogging { events("failed"); exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
 }
