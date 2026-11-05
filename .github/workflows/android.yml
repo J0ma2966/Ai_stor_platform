@@ -1,0 +1,61 @@
+name: Android
+on:
+  push:
+    branches: [main]
+    paths: ["mobile/**", ".github/workflows/android.yml"]
+  pull_request:
+    paths: ["mobile/**", ".github/workflows/android.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    name: core (JVM tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults: {run: {working-directory: mobile/core}}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with: {distribution: temurin, java-version: "17"}
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+      - run: ../gradlew test --console=plain
+
+  apps:
+    name: apps (build, unit/UI tests, lint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults: {run: {working-directory: mobile}}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with: {distribution: temurin, java-version: "17"}
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+      - name: Strings ru/uz are in sync with the code
+        run: python3 tools/strings.py --check && git diff --exit-code -- ui/src/main/res
+      - name: Unit and Compose UI tests (Robolectric)
+        run: ./gradlew testDebugUnitTest --console=plain
+      - name: Lint
+        run: ./gradlew lintDebug --console=plain
+      - name: Build debug and release APKs
+        run: ./gradlew :app-client:assembleDebug :app-store:assembleDebug :app-client:assembleRelease :app-store:assembleRelease --console=plain
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: apk-debug
+          path: |
+            mobile/app-client/build/outputs/apk/debug/*.apk
+            mobile/app-store/build/outputs/apk/debug/*.apk
+          retention-days: 14
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure()
+        with:
+          name: reports
+          path: |
+            mobile/**/build/reports/
+            mobile/**/build/test-results/
+          retention-days: 7
