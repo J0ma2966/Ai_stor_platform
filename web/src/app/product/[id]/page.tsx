@@ -12,6 +12,9 @@ import { ProductActions } from "@/components/ProductActions";
 import { ProductGrid } from "@/components/ProductGrid";
 import { JsonLd } from "@/components/JsonLd";
 import { Icon } from "@/components/Icon";
+import { ProductReviews } from "@/components/ProductReviews";
+import { Stars } from "@/components/Stars";
+import { formatRating } from "@/lib/reviews";
 
 type P = Promise<{ id: string }>;
 
@@ -36,6 +39,9 @@ export default async function ProductPage({ params }: { params: P }) {
   const p = await fetchProduct(id);
   if (!p) notFound();
   const t = await getTranslations("product");
+  const tr = await getTranslations("reviews");
+  const ratingCount = p.rating_count ?? 0;
+  const ratingAvg = p.rating_avg ?? 0;
   const [cats, more] = await Promise.all([
     fetchCategories().catch(() => []),
     fetchProducts({ store: p.store_id, sort: "popular" }, "", 9).catch(() => ({ items: [], nextCursor: "" })),
@@ -55,6 +61,9 @@ export default async function ProductPage({ params }: { params: P }) {
           image: Object.values(p.images),
           sku: p.id,
           category: cat ? catName(cat, locale) : undefined,
+          aggregateRating: ratingCount > 0
+            ? { "@type": "AggregateRating", ratingValue: ratingAvg.toFixed(2), reviewCount: ratingCount, bestRating: 5, worstRating: 1 }
+            : undefined,
           offers: {
             "@type": "Offer",
             url,
@@ -75,6 +84,17 @@ export default async function ProductPage({ params }: { params: P }) {
           <div className="buy-box">
             <p className="muted product-brand">{p.brand}</p>
             <h1>{p.title}</h1>
+            <a href="#reviews" className="rating-link small">
+              {ratingCount > 0 ? (
+                <>
+                  <Stars value={ratingAvg} label={tr("avgLabel", { avg: formatRating(ratingAvg), max: 5 })} />
+                  <span>{formatRating(ratingAvg)}</span>
+                  <span className="muted">{tr("count", { n: ratingCount })}</span>
+                </>
+              ) : (
+                <span className="muted">{tr("noneShort")}</span>
+              )}
+            </a>
             <div className="row wrap product-price-row">
               <p className="price price-lg">{formatSum(p.price, locale)}</p>
               <span className={`badge ${p.in_stock ? "badge-ok" : "badge-bad"}`}>{p.in_stock ? t("inStock") : t("outOfStock")}</span>
@@ -100,6 +120,7 @@ export default async function ProductPage({ params }: { params: P }) {
           )}
         </div>
       </div>
+      <ProductReviews productId={p.id} avg={ratingAvg} count={ratingCount} dist={p.rating_dist ?? [0, 0, 0, 0, 0]} />
       {others.length > 0 && (
         <section>
           <div className="section-head">

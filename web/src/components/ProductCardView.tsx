@@ -1,6 +1,7 @@
 import { Link } from "@/i18n/navigation";
 import { frontImage, type Product } from "@/lib/catalog";
 import { formatSum } from "@/lib/money";
+import { formatRating } from "@/lib/reviews";
 import { CardCartButton } from "./CardCartButton";
 import { FavoriteButton } from "./FavoriteButton";
 
@@ -19,6 +20,11 @@ export function ProductCardView({ p, locale, outOfStock, priority = false }: { p
           <span className="price">{formatSum(p.price, locale)}</span>
           <span className="pcard-title">{p.title}</span>
           <span className="pcard-store">{seller}</span>
+          {!!p.rating_count && (
+            <span className="pcard-rating small" title={`${formatRating(p.rating_avg ?? 0)} / 5`}>
+              <span aria-hidden="true">★</span> {formatRating(p.rating_avg ?? 0)} <span className="muted">({p.rating_count})</span>
+            </span>
+          )}
         </div>
       </Link>
       <FavoriteButton productId={p.id} className="pcard-fav" />
