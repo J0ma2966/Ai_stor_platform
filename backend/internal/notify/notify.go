@@ -26,6 +26,7 @@ import (
 const (
 	OrderCreated        = "order_created"        // магазину: новый заказ
 	OrderStatus         = "order_status"         // клиенту: статус заказа изменён
+	OrderCancelled      = "order_cancelled"      // магазину: клиент отменил заказ
 	ProductModerated    = "product_moderated"    // магазину: товар снят/заблокирован/возвращён
 	PaymentPaid         = "payment_paid"         // клиенту: оплата прошла, токены начислены
 	PaymentFailed       = "payment_failed"       // клиенту: оплата отклонена/отменена

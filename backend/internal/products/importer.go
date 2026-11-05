@@ -32,6 +32,10 @@ import (
 // price — цена в сумах (целое или с дробной частью до тийина);
 // in_stock — да/нет, ha/yo'q, yes/no, 1/0.
 //
+// Необязательный столбец sizes — размеры с остатками: «S:3; M:5; L:0» (разделители
+// «;» или «,», между размером и количеством «:» или «=»). Пустая ячейка не меняет
+// размеры товара. С размерами наличие считается по остаткам, in_stock игнорируется.
+//
 // Товар ищется по артикулу (sku): новый создаётся черновиком, существующий
 // обновляется (кроме заблокированных модератором). Пустой sku — всегда новый
 // товар с автоартикулом (NextSKU); выданные артикулы возвращаются в generated. Фотографии загружаются
@@ -74,22 +78,23 @@ type importRow struct {
 	brand       string
 	price       int64
 	inStock     bool
+	sizes       []SizeIn // nil — размеры не меняются
 }
 
 func (h *Handlers) importTemplate(w http.ResponseWriter, r *http.Request) {
 	f := excelize.NewFile()
 	defer f.Close()
 	sh := f.GetSheetName(0)
-	for i, c := range importColumns {
+	for i, c := range append(append([]string{}, importColumns...), "sizes") {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 		_ = f.SetCellValue(sh, cell, c)
 	}
-	example := []any{"A-100", "Пальто шерстяное", "Шерсть 80%, подкладка", "tops", "Acme", 1500000, "да"}
+	example := []any{"A-100", "Пальто шерстяное", "Шерсть 80%, подкладка", "tops", "Acme", 1500000, "да", "S:2; M:5; L:3"}
 	for i, v := range example {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 2)
 		_ = f.SetCellValue(sh, cell, v)
 	}
-	_ = f.SetColWidth(sh, "A", "G", 22)
+	_ = f.SetColWidth(sh, "A", "H", 22)
 	// справочник категорий на втором листе
 	_, _ = f.NewSheet("categories")
 	rows, err := h.DB.Query(r.Context(), `SELECT slug, name_ru, name_uz FROM categories WHERE is_active ORDER BY sort, slug`)
@@ -161,6 +166,7 @@ func (h *Handlers) importExcel(w http.ResponseWriter, r *http.Request) {
 					it.sku = sku
 					res.Generated = append(res.Generated, GeneratedSKU{Row: it.row, SKU: sku})
 				}
+				var id uuid.UUID
 				err := tx.QueryRow(r.Context(), `
 					INSERT INTO products (store_id, category_id, sku, title, description, brand, price, in_stock)
 					VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -168,8 +174,11 @@ func (h *Handlers) importExcel(w http.ResponseWriter, r *http.Request) {
 					  category_id = EXCLUDED.category_id, title = EXCLUDED.title, description = EXCLUDED.description,
 					  brand = EXCLUDED.brand, price = EXCLUDED.price, in_stock = EXCLUDED.in_stock
 					WHERE products.status <> 'blocked'
-					RETURNING (xmax = 0)`,
-					p.StoreID, it.categoryID, it.sku, it.title, it.description, it.brand, it.price, it.inStock).Scan(&created)
+					RETURNING (xmax = 0), id`,
+					p.StoreID, it.categoryID, it.sku, it.title, it.description, it.brand, it.price, it.inStock).Scan(&created, &id)
+				if err == nil && it.sizes != nil {
+					err = ReplaceSizes(r.Context(), tx, id, it.sizes)
+				}
 				switch {
 				case errors.Is(err, pgx.ErrNoRows): // существующий заблокированный товар
 					res.Errors = append(res.Errors, ImportError{Row: it.row, Field: "sku", Code: "product_blocked"})
@@ -296,6 +305,14 @@ func parseImport(rows [][]string, cats map[string]uuid.UUID) ([]importRow, *Impo
 		} else {
 			bad("in_stock", "invalid")
 		}
+		if _, hasCol := col["sizes"]; hasCol && get("sizes") != "" {
+			v := get("sizes")
+			if sizes, ok := ParseSizeList(v); ok {
+				it.sizes = sizes
+			} else {
+				bad("sizes", "invalid")
+			}
+		}
 		if len(errs) > 0 {
 			res.Errors = append(res.Errors, errs...)
 			res.Failed++
@@ -304,6 +321,31 @@ func parseImport(rows [][]string, cats map[string]uuid.UUID) ([]importRow, *Impo
 		out = append(out, it)
 	}
 	return out, res, nil
+}
+
+// ParseSizeList разбирает «S:3; M:5; L:0» в список размеров.
+func ParseSizeList(s string) ([]SizeIn, bool) {
+	var out []SizeIn
+	for _, part := range strings.FieldsFunc(s, func(r rune) bool { return r == ';' || r == ',' || r == '\n' }) {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		i := strings.LastIndexAny(part, ":=")
+		if i <= 0 {
+			return nil, false
+		}
+		n, err := strconv.Atoi(strings.TrimSpace(part[i+1:]))
+		if err != nil {
+			return nil, false
+		}
+		out = append(out, SizeIn{Size: part[:i], Stock: n})
+	}
+	if len(out) == 0 {
+		return nil, false
+	}
+	norm, fields := NormalizeSizes(out)
+	return norm, fields == nil
 }
 
 // parsePrice: сумы → тийины. Принимает "1500000", "1 500 000", "1500000.50", "1500000,5".

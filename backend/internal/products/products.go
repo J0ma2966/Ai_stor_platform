@@ -47,6 +47,7 @@ type Product struct {
 	Status      string            `json:"status,omitempty"`
 	Reason      *string           `json:"moderation_reason,omitempty"`
 	Images      map[string]string `json:"images"`
+	Sizes       []Size            `json:"sizes,omitempty"` // карточка товара и кабинет магазина
 	CreatedAt   time.Time         `json:"created_at"`
 	sortVal     string
 	imageKeys   map[string]string
@@ -228,6 +229,10 @@ func (h *Handlers) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p.Images = h.urls(p.imageKeys)
+	if p.Sizes, err = LoadSizes(r.Context(), h.DB, p.ID, false); err != nil {
+		httpx.Fail(w, r, err)
+		return
+	}
 	h.Views.Hit(r.Context(), p.ID)
 	w.Header().Set("Cache-Control", "public, max-age=30")
 	httpx.JSON(w, http.StatusOK, p)
@@ -285,6 +290,7 @@ type createReq struct {
 	Price       int64             `json:"price" validate:"required,gt=0"`
 	InStock     *bool             `json:"in_stock" validate:"required"`
 	Images      map[string]string `json:"images" validate:"required,len=3,dive,keys,oneof=front side back,endkeys,required"`
+	Sizes       []SizeIn          `json:"sizes"` // необязательно; с размерами наличие считается по остаткам
 }
 
 func (h *Handlers) storeCreate(w http.ResponseWriter, r *http.Request) {
@@ -299,6 +305,11 @@ func (h *Handlers) storeCreate(w http.ResponseWriter, r *http.Request) {
 			httpx.Fail(w, r, &httpx.Error{Status: 422, Code: "validation_failed", Message: "image key not owned", Fields: map[string]string{"images." + angle: "not_owned"}})
 			return
 		}
+	}
+	sizes, fields := NormalizeSizes(req.Sizes)
+	if fields != nil {
+		httpx.Fail(w, r, &httpx.Error{Status: 422, Code: "validation_failed", Message: "invalid sizes", Fields: fields})
+		return
 	}
 	var id uuid.UUID
 	var sku string
@@ -318,7 +329,7 @@ func (h *Handlers) storeCreate(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 		}
-		return nil
+		return ReplaceSizes(r.Context(), tx, id, sizes)
 	})
 	if db.IsUniqueViolation(err, "products_store_id_sku_key") {
 		httpx.Fail(w, r, httpx.NewError(http.StatusConflict, "sku_taken", "product with this SKU already exists"))

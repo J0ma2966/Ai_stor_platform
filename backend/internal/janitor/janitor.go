@@ -26,6 +26,9 @@ var Tasks = []Task{
 	                     OR revoked_at < now() - interval '7 days'`},
 	// уведомления старше 180 дней (notify.Retention)
 	{"notifications", `DELETE FROM notifications WHERE created_at < now() - interval '180 days'`},
+	// исходящие Telegram/SMS (содержат телефон клиента) — неделя на разбор жалоб «не пришло»
+	{"outbound_messages", `DELETE FROM outbound_messages WHERE created_at < now() - interval '7 days'
+	                        AND (sent_at IS NOT NULL OR failed_at IS NOT NULL)`},
 	// дневная статистика нужна для отчётов за период до года, храним два
 	{"product_stats_daily", `DELETE FROM product_stats_daily WHERE day < (now() - interval '2 years')::date`},
 }

@@ -26,6 +26,7 @@ import (
 	"github.com/boutique-market/backend/internal/ratelimit"
 	"github.com/boutique-market/backend/internal/shop"
 	"github.com/boutique-market/backend/internal/stores"
+	"github.com/boutique-market/backend/internal/telegram"
 	"github.com/boutique-market/backend/internal/tryon"
 	"github.com/boutique-market/backend/internal/users"
 )
@@ -41,6 +42,7 @@ type Deps struct {
 	// UserPurge — очистка данных клиента в других модулях при удалении аккаунта.
 	UserPurge []users.PurgeFunc
 	Fitting   *tryon.FittingCounter // nil — счётчик «В примерочную» отключён
+	Telegram  *telegram.Bot         // nil — бот магазинов выключен
 }
 
 func New(d Deps) http.Handler {
@@ -65,7 +67,10 @@ func New(d Deps) http.Handler {
 		mediaH.Disabled = map[media.Purpose]bool{media.PurposeBodyPhoto: true}
 	}
 	adminH := &admin.Handlers{DB: d.DB, Revoker: revoker}
-	ordersH := &orders.Handlers{DB: d.DB, Media: d.Storage, Limiter: limiter, PublicBase: d.Cfg.PublicMediaURL}
+	ordersH := &orders.Handlers{DB: d.DB, Media: d.Storage, Limiter: limiter, PublicBase: d.Cfg.PublicMediaURL,
+		SiteURL: d.Cfg.SiteURL, OrderSMS: d.Cfg.OrderSMS}
+	telegramH := &telegram.Handlers{DB: d.DB, Bot: d.Telegram, BotUsername: d.Cfg.TelegramBotUsername,
+		Secret: d.Cfg.TelegramWebhookSecret, Orders: ordersH}
 	tryonH := &tryon.Handlers{DB: d.DB, Store: d.Storage, Limiter: limiter, Redis: d.Redis, PublicBase: d.Cfg.PublicMediaURL,
 		Retention: RetentionFrom(d.Cfg), MaxActive: d.Cfg.TryOn.MaxActive, Provider: d.Cfg.TryOn.Provider, Fitting: d.Fitting}
 	// Удаление аккаунта стирает и биометрию (фото тела, результаты примерок).
@@ -98,6 +103,8 @@ func New(d Deps) http.Handler {
 		r.Group(func(r chi.Router) {
 			r.Use(timeout(15 * time.Second))
 			paymentsH.WebhookRoutes(r)
+			// Telegram-бот магазинов; защищён секретом в заголовке.
+			r.Post("/telegram/webhook", telegramH.Webhook)
 		})
 		r.Group(func(r chi.Router) {
 			r.Use(limiter.ByIP(ratelimit.Rule{Name: "global_ip", Limit: 600, Window: time.Minute}))
@@ -151,6 +158,7 @@ func New(d Deps) http.Handler {
 					storesH.StoreRoutes(r)
 					// Окно доставки магазина: только заказы своего магазина.
 					r.Route("/orders", ordersH.StoreRoutes)
+					r.Route("/telegram", telegramH.StoreRoutes)
 				})
 
 				r.Route("/admin", func(r chi.Router) {
