@@ -321,13 +321,16 @@ const CardImageSQL = `(SELECT CASE WHEN pi.variants = 'ready' THEN left(pi.key, 
 
 // ---------- кабинет магазина ----------
 
-func (h *Handlers) storeList(w http.ResponseWriter, r *http.Request) {
-	p := auth.MustFrom(r.Context())
-	rows, err := h.DB.Query(r.Context(), `
+// storeListSQL собирается из констант на этапе компиляции.
+const storeListSQL = `
 		SELECT p.id, p.store_id, p.category_id, p.sku, p.title, p.brand, p.price, p.in_stock, p.status, p.moderation_reason, p.created_at,
 		       p.views_count, p.fitting_adds,
-		       `+imagesSQL+`
-		FROM products p WHERE p.store_id = $1 ORDER BY p.created_at DESC LIMIT 2000`, p.StoreID)
+		       ` + imagesSQL + `
+		FROM products p WHERE p.store_id = $1 ORDER BY p.created_at DESC LIMIT 2000`
+
+func (h *Handlers) storeList(w http.ResponseWriter, r *http.Request) {
+	p := auth.MustFrom(r.Context())
+	rows, err := h.DB.Query(r.Context(), storeListSQL, p.StoreID)
 	if err != nil {
 		httpx.Fail(w, r, err)
 		return
