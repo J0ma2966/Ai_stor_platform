@@ -25,7 +25,7 @@ export function useFitting(): Fitting {
 }
 
 type Category = { id: string; zone: Zone; name_ru: string; name_uz: string };
-type Product = { id: string; title: string; brand: string; price: number; store_name: string; images: Record<string, string> };
+type Product = { id: string; title: string; brand: string; price: number; store_name: string; images: Record<string, string>; thumbs?: Record<string, string> };
 
 // Экран примерочной: манекен, карточки у зон, выбор товаров, запуск генерации.
 export function FittingRoom() {
@@ -141,7 +141,7 @@ function ProductPicker({ fitting }: { fitting: Fitting }) {
   }, [load]);
 
   const add = (p: Product) => {
-    const item: FittingItem = { id: p.id, title: p.title, brand: p.brand, price: p.price, image_url: p.images?.front ?? "", zone, store_name: p.store_name };
+    const item: FittingItem = { id: p.id, title: p.title, brand: p.brand, price: p.price, image_url: p.thumbs?.front ?? p.images?.front ?? "", zone, store_name: p.store_name };
     addToFitting(item);
   };
 
@@ -163,7 +163,7 @@ function ProductPicker({ fitting }: { fitting: Fitting }) {
           const chosen = fitting[zone]?.id === p.id;
           return (
             <li key={p.id} className="product-tile">
-              {p.images?.front && <img src={p.images.front} alt="" loading="lazy" />}
+              {(p.thumbs?.front ?? p.images?.front) && <img src={p.thumbs?.front ?? p.images.front} alt="" loading="lazy" />}
               <div className="small clamp">{p.title}</div>
               <div className="small muted">{p.brand} · {formatSum(p.price, locale)}</div>
               <button type="button" className="btn btn-secondary small" disabled={chosen} onClick={() => add(p)}>

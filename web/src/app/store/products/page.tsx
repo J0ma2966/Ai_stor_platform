@@ -77,7 +77,7 @@ export default function StoreProducts() {
               <tbody>
                 {shown.map((p) => (
                   <tr key={p.id}>
-                    <td>{p.images.front ? <img src={p.images.front} alt="" width={40} height={53} loading="lazy" /> : <span className="muted small">{t("noPhotos")}</span>}</td>
+                    <td>{p.images.front ? <img src={p.thumbs?.front ?? p.images.front} alt="" width={40} height={53} loading="lazy" /> : <span className="muted small">{t("noPhotos")}</span>}</td>
                     <td><Link href={`/store/products/${p.id}`}>{p.title}</Link><br /><span className="muted small">{p.brand}</span>{p.moderation_reason && (p.status === "unpublished" || p.status === "blocked") && <><br /><span className="field-error">{t("reason", { reason: p.moderation_reason })}</span></>}</td>
                     <td>{p.sku}</td>
                     <td>{formatSum(p.price, locale)}</td>

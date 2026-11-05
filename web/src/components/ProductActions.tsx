@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Link, usePathname, useRouter } from "@/i18n/navigation";
-import { frontImage, type Product } from "@/lib/catalog";
+import { cardImage, type Product } from "@/lib/catalog";
 import { addToFitting, getFitting, TRYON_ENABLED } from "@/lib/fitting";
 import { useSession } from "@/lib/session";
 import { setCartQty } from "@/lib/shop";
@@ -60,7 +60,7 @@ export function ProductActions({ product: p }: { product: Product }) {
 
   function toFitting() {
     if (!p.zone) return;
-    addToFitting({ id: p.id, title: p.title, brand: p.brand, price: p.price, image_url: frontImage(p), zone: p.zone, store_name: p.store_name });
+    addToFitting({ id: p.id, title: p.title, brand: p.brand, price: p.price, image_url: cardImage(p), zone: p.zone, store_name: p.store_name });
   }
 
   function pick(s: string) {

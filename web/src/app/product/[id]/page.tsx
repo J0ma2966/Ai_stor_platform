@@ -79,7 +79,7 @@ export default async function ProductPage({ params }: { params: P }) {
         {cat && <> / <Link href={`/catalog?category=${cat.id}`}>{catName(cat, locale)}</Link></>}
       </nav>
       <div className="product-layout">
-        <Gallery images={p.images} title={p.title} />
+        <Gallery images={p.images} thumbs={p.thumbs} title={p.title} />
         <div className="stack product-info">
           <div className="buy-box">
             <p className="muted product-brand">{p.brand}</p>

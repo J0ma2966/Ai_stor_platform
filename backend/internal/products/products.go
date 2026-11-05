@@ -46,7 +46,8 @@ type Product struct {
 	InStock     bool              `json:"in_stock"`
 	Status      string            `json:"status,omitempty"`
 	Reason      *string           `json:"moderation_reason,omitempty"`
-	Images      map[string]string `json:"images"`
+	Images      map[string]string `json:"images"`           // большое фото (1600 px), пока копий нет — оригинал
+	Thumbs      map[string]string `json:"thumbs,omitempty"` // карточки и миниатюры (800 px), пока копий нет — оригинал
 	Sizes       []Size            `json:"sizes,omitempty"`       // карточка товара и кабинет магазина
 	HasSizes    bool              `json:"has_sizes,omitempty"`   // каталог: в корзину — только с выбором размера
 	RatingAvg   float64           `json:"rating_avg"`            // средняя оценка видимых отзывов, 0 — отзывов нет
@@ -54,7 +55,7 @@ type Product struct {
 	RatingDist  []int             `json:"rating_dist,omitempty"` // только карточка: сколько отзывов на 1…5 звёзд
 	CreatedAt   time.Time         `json:"created_at"`
 	sortVal     string
-	imageKeys   map[string]string
+	imageKeys   map[string]imageRef
 }
 
 func (h *Handlers) PublicRoutes(r chi.Router) {
@@ -180,7 +181,7 @@ func (h *Handlers) list(w http.ResponseWriter, r *http.Request) {
 	sql := fmt.Sprintf(`
 		SELECT p.id, p.store_id, p.store_name, p.store_slug, p.category_id, c.zone::text, p.title, p.brand, p.price, p.in_stock, p.created_at, p.sort_val,
 		       p.rating_avg::float8, p.rating_count,
-		       COALESCE((SELECT jsonb_object_agg(angle, key) FROM product_images pi WHERE pi.product_id = p.id), '{}'),
+		       ` + imagesSQL + `,
 		       EXISTS (SELECT 1 FROM product_sizes ps WHERE ps.product_id = p.id)
 		FROM (
 			SELECT p.id, p.store_id, s.name AS store_name, s.slug AS store_slug, p.category_id, p.title, p.brand, p.price, p.in_stock,
@@ -216,7 +217,7 @@ func (h *Handlers) list(w http.ResponseWriter, r *http.Request) {
 		next = encodeCursor(last.sortVal, last.ID)
 	}
 	for i := range items {
-		items[i].Images = h.urls(items[i].imageKeys)
+		items[i].Images, items[i].Thumbs = h.urls(items[i].imageKeys)
 	}
 	if items == nil {
 		items = []Product{}
@@ -237,7 +238,7 @@ func (h *Handlers) get(w http.ResponseWriter, r *http.Request) {
 		  ARRAY(SELECT count(r.id)::int FROM generate_series(1, 5) g
 		        LEFT JOIN product_reviews r ON r.product_id = p.id AND r.status = 'visible' AND r.rating = g
 		        GROUP BY g ORDER BY g),
-		  COALESCE((SELECT jsonb_object_agg(angle, key) FROM product_images pi WHERE pi.product_id = p.id), '{}')
+		  ` + imagesSQL + `
 		FROM products p JOIN stores s ON s.id = p.store_id JOIN categories c ON c.id = p.category_id
 		WHERE p.id = $1 AND p.status = 'published' AND s.status = 'active'`, id).
 		Scan(&p.ID, &p.StoreID, &p.StoreName, &p.StoreSlug, &p.CategoryID, &p.Zone, &p.Title, &p.Description, &p.Brand, &p.Price, &p.InStock, &p.CreatedAt,
@@ -250,7 +251,7 @@ func (h *Handlers) get(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, r, err)
 		return
 	}
-	p.Images = h.urls(p.imageKeys)
+	p.Images, p.Thumbs = h.urls(p.imageKeys)
 	if p.Sizes, err = LoadSizes(r.Context(), h.DB, p.ID, false); err != nil {
 		httpx.Fail(w, r, err)
 		return
@@ -260,16 +261,39 @@ func (h *Handlers) get(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, p)
 }
 
-// urls — постоянные CDN-ссылки (кэшируются браузером и CDN).
-func (h *Handlers) urls(keys map[string]string) map[string]string {
-	out := make(map[string]string, len(keys))
-	for angle, k := range keys {
-		if u := media.PublicURL(h.PublicBase, k); u != "" {
-			out[angle] = u
+// imageRef — ключ оригинала и готовность уменьшенных копий (см. imagesSQL).
+type imageRef struct {
+	K string `json:"k"`
+	V bool   `json:"v"`
+}
+
+// imagesSQL — фото товара p: {"front": {"k": key, "v": копии готовы}, ...}.
+const imagesSQL = `COALESCE((SELECT jsonb_object_agg(angle, jsonb_build_object('k', key, 'v', variants = 'ready'))
+		FROM product_images pi WHERE pi.product_id = p.id), '{}')`
+
+// urls — постоянные CDN-ссылки (кэшируются браузером и CDN): большое фото и миниатюра.
+// Пока копии не построены (products.Variants), обе ссылки ведут на оригинал.
+func (h *Handlers) urls(refs map[string]imageRef) (images, thumbs map[string]string) {
+	images = make(map[string]string, len(refs))
+	thumbs = make(map[string]string, len(refs))
+	for angle, ref := range refs {
+		large, card := ref.K, ref.K
+		if ref.V {
+			large, card = media.VariantKey(ref.K, media.VariantLarge), media.VariantKey(ref.K, media.VariantCard)
+		}
+		if u := media.PublicURL(h.PublicBase, large); u != "" {
+			images[angle] = u
+			thumbs[angle] = media.PublicURL(h.PublicBase, card)
 		}
 	}
-	return out
+	return images, thumbs
 }
+
+// CardImageSQL — ключ фото «спереди» товара p для миниатюры (корзина, избранное):
+// копия 800 px (media.VariantKey), если готова, иначе оригинал. Ключи всегда на .jpg.
+// Суффикс совпадает с media.VariantKey(key, media.VariantCard) — проверяет тест.
+const CardImageSQL = `(SELECT CASE WHEN pi.variants = 'ready' THEN left(pi.key, -4) || '_800.jpg' ELSE pi.key END
+		FROM product_images pi WHERE pi.product_id = p.id AND pi.angle = 'front')`
 
 // ---------- кабинет магазина ----------
 
@@ -278,7 +302,7 @@ func (h *Handlers) storeList(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.DB.Query(r.Context(), `
 		SELECT p.id, p.store_id, p.category_id, p.sku, p.title, p.brand, p.price, p.in_stock, p.status, p.moderation_reason, p.created_at,
 		       p.views_count, p.fitting_adds,
-		       COALESCE((SELECT jsonb_object_agg(angle, key) FROM product_images pi WHERE pi.product_id = p.id), '{}')
+		       ` + imagesSQL + `
 		FROM products p WHERE p.store_id = $1 ORDER BY p.created_at DESC LIMIT 2000`, p.StoreID)
 	if err != nil {
 		httpx.Fail(w, r, err)
@@ -292,7 +316,7 @@ func (h *Handlers) storeList(w http.ResponseWriter, r *http.Request) {
 			httpx.Fail(w, r, err)
 			return
 		}
-		it.Images = h.urls(it.imageKeys)
+		it.Images, it.Thumbs = h.urls(it.imageKeys)
 		items = append(items, it)
 	}
 	if err := rows.Err(); err != nil {

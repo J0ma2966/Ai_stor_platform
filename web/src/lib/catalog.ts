@@ -20,7 +20,8 @@ export type Product = {
   has_sizes?: boolean; // каталог: у товара есть размеры (в корзину — через карточку)
   status?: "draft" | "published" | "unpublished" | "blocked";
   moderation_reason?: string;
-  images: Partial<Record<"front" | "side" | "back", string>>;
+  images: Partial<Record<"front" | "side" | "back", string>>; // большое фото (1600 px)
+  thumbs?: Partial<Record<"front" | "side" | "back", string>>; // миниатюры и карточки (800 px)
   views?: number;
   fitting_adds?: number;
   rating_avg?: number; // средняя оценка видимых отзывов, 0 — отзывов нет
@@ -141,4 +142,10 @@ export function catName(c: Category | undefined, locale: string): string {
 
 export function frontImage(p: Pick<Product, "images">): string {
   return p.images.front ?? p.images.side ?? p.images.back ?? "";
+}
+
+// Фото для карточки и миниатюр: уменьшенная копия, если API её отдал (иначе большое фото).
+export function cardImage(p: Pick<Product, "images" | "thumbs">): string {
+  const t = p.thumbs ?? {};
+  return t.front ?? t.side ?? t.back ?? frontImage(p);
 }
