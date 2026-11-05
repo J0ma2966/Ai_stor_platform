@@ -78,6 +78,13 @@ SMS_PROVIDER=$sms
 ESKIZ_EMAIL=
 ESKIZ_PASSWORD=
 ESKIZ_FROM=4546
+# Уведомления о заказах (docs/NOTIFICATIONS.md): бот магазинов включается, когда задан токен.
+SITE_URL=https://$site
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_BOT_USERNAME=
+TELEGRAM_WEBHOOK_SECRET=$(rnd 24)
+TELEGRAM_WEBHOOK_URL=
+ORDER_SMS_ENABLED=false
 # Оплата: куда вернуть клиента после оплаты. Click/Payme включаются, когда заполнены их ключи;
 # тогда *_ALLOWED_IPS обязательны (адреса из договора с провайдером).
 PAYMENT_RETURN_URL=https://$site/account/balance
