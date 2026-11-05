@@ -139,10 +139,12 @@ case "$role" in
     # один сервер: своего Caddy нет, инстансы проверяются изнутри
     via=caddy; printf '%s\n' "${others[@]}" | grep -qx caddy || via=self
     compose up -d --no-recreate "${others[@]}"
-    if ! rolling "$via" /api/healthz web1 web2; then
+    # инстансы сайта: web1, web2 (несколько серверов) или web1..web6 (один сервер)
+    mapfile -t webs < <(compose config --services | grep -xE 'web[0-9]+' | sort -V)
+    if ! rolling "$via" /api/healthz "${webs[@]}"; then
       if [[ -n "$old" ]]; then
         set_tag "$old"; log "rollback to $old"
-        compose up -d --no-deps --force-recreate web1 web2
+        compose up -d --no-deps --force-recreate "${webs[@]}"
       fi
       exit 1
     fi

@@ -36,7 +36,7 @@ docker compose up -d <сервис>          # перезапуск одного
 `EndpointDown`: внешняя проверка не получает 200.
 1. `curl -sv https://api.<домен>/readyz`: если ответ 503 и `"db":"fail"` или `"redis":"fail"`, проблема в базе или Redis (см. разделы ниже).
 2. Ошибка TLS: `docker compose logs caddy | grep -i acme`. Причины: DNS указывает не туда, закрыт порт 80, лимит Let's Encrypt. Caddy повторяет попытки сам.
-3. Если сайт не отвечает, а API работает: `cd /opt/boutique/prod/edge && docker compose ps web1 web2`.
+3. Если сайт не отвечает, а API работает: `cd /opt/boutique/prod/edge && docker compose -f compose.yml -f compose.single.yml ps` (инстансы web1..web6).
 
 ## Ошибки 5xx
 `ApiHighErrorRate`: больше 2% ответов 5xx.

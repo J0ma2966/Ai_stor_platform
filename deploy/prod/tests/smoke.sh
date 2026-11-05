@@ -179,7 +179,8 @@ check "site /login 200 with nonce CSP" bash -c "$(printf '%q ' "${CURL[@]}") -sI
 check "www redirects to the site" bash -c "$(printf '%q ' "${CURL[@]}") -sI https://www.$D:$SITE_PORT/ | grep -qi '^location: https://$D'"
 if ! multi; then
   check "edge Caddy not running (single server: app Caddy serves the site)" bash -c "! docker ps --format '{{.Names}}' | grep -q '^boutique-edge-caddy'"
-  check "Next.js instances published only on the private address" bash -c "[[ \$(docker port boutique-edge-web1-1 3000) == $IP:3001 ]]"
+  check "Next.js instances published only on the private address" bash -c "[[ \$(docker port boutique-edge-web1-1 3000) == $IP:3001 && \$(docker port boutique-edge-web6-1 3000) == $IP:3006 ]]"
+  check "6 site instances behind app Caddy" bash -c "[[ \$(docker ps --format '{{.Names}}' | grep -c '^boutique-edge-web[0-9]-1$') == 6 ]]"
 fi
 
 step "monitoring: scrape targets, alert rules, logs"

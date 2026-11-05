@@ -1,6 +1,11 @@
 # Схема «один сервер» (SINGLE_HOST=1 в edge/.env): сайт отдаёт Caddy из app/,
 # поэтому свой Caddy здесь не запускается (порты 80/443 заняты), а инстансы Next.js
 # публикуются только на приватном адресе для app-Caddy (WEB_UPSTREAMS в app/.env).
+#
+# Сайт (SSR) упирается в CPU раньше API: один инстанс отдаёт ~35–60 страниц в секунду,
+# а в пик 5000 пользователей нужно 350–500. Поэтому здесь 6 инстансов по 1 CPU
+# (WEB_CPUS в edge/.env). Добавить ещё: web7 по образцу ниже, порт 3007 в WEB_UPSTREAMS
+# (app/.env) и в private_ports (ansible/group_vars/all.yml).
 services:
   caddy:
     profiles: [multi-server-only]
@@ -8,3 +13,15 @@ services:
     ports: ["${EDGE_PRIVATE_IP:?}:3001:3000"]
   web2:
     ports: ["${EDGE_PRIVATE_IP:?}:3002:3000"]
+  web3:
+    extends: {file: compose.yml, service: web1}
+    ports: ["${EDGE_PRIVATE_IP:?}:3003:3000"]
+  web4:
+    extends: {file: compose.yml, service: web1}
+    ports: ["${EDGE_PRIVATE_IP:?}:3004:3000"]
+  web5:
+    extends: {file: compose.yml, service: web1}
+    ports: ["${EDGE_PRIVATE_IP:?}:3005:3000"]
+  web6:
+    extends: {file: compose.yml, service: web1}
+    ports: ["${EDGE_PRIVATE_IP:?}:3006:3000"]

@@ -100,9 +100,9 @@ PAYME_PACKAGE_CODE=
 E
 if [[ "$topology" == single ]]; then
   cat >> "$out/app.env" <<E
-# Один сервер: этот Caddy отдаёт и сайт (инстансы web1/web2 из edge/, порты 3001/3002)
+# Один сервер: этот Caddy отдаёт и сайт (инстансы web1..web6 из edge/compose.single.yml)
 CADDY_SITES=single
-WEB_UPSTREAMS="$APP_IP:3001 $APP_IP:3002"
+WEB_UPSTREAMS="$APP_IP:3001 $APP_IP:3002 $APP_IP:3003 $APP_IP:3004 $APP_IP:3005 $APP_IP:3006"
 E
 fi
 
@@ -166,7 +166,7 @@ EDGE_PRIVATE_IP=$EDGE_IP
 # chat id группы/канала в Telegram (бот должен быть добавлен в группу). Заполнить!
 TELEGRAM_CHAT_ID=CHANGE-ME
 E
-[[ "$topology" == single ]] && echo "SINGLE_HOST=1" >> "$out/edge.env"
+[[ "$topology" == single ]] && printf 'SINGLE_HOST=1\n# 6 инстансов сайта по 1 CPU (edge/compose.single.yml)\nWEB_CPUS=1\nWEB_MEMORY=1g\n' >> "$out/edge.env"
 
 cat > "$out/github-variables.txt" <<E
 # Переменные окружения GitHub (Settings → Environments → $envname → Variables)
