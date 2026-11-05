@@ -20,6 +20,7 @@ import (
 	"github.com/boutique-market/backend/internal/httpx"
 	"github.com/boutique-market/backend/internal/media"
 	"github.com/boutique-market/backend/internal/platform/db"
+	"github.com/boutique-market/backend/internal/ratelimit"
 )
 
 type Handlers struct {
@@ -27,6 +28,7 @@ type Handlers struct {
 	Media      media.Storage // удаление фото при удалении/замене; nil — файлы не удаляются
 	PublicBase string        // базовый URL CDN для публичных картинок
 	Views      *ViewCounter
+	Limiter    *ratelimit.Limiter // лимит отметок просмотра; nil — без лимита (тесты)
 }
 
 type Product struct {
@@ -62,6 +64,28 @@ func (h *Handlers) PublicRoutes(r chi.Router) {
 	r.Get("/categories", h.categories)
 	r.Get("/products", h.list)
 	r.Get("/products/{id}", h.get)
+	r.Post("/products/{id}/view", h.view)
+}
+
+// Отметок просмотра с одного IP: обычный покупатель открывает не больше пары
+// карточек в минуту; лимит не даёт накрутить «Популярные» одним скриптом.
+var ruleView = ratelimit.Rule{Name: "product_view_ip", Limit: 60, Window: time.Minute}
+
+// view: POST /v1/products/{id}/view — браузер отмечает открытие карточки товара.
+// Просмотры не считаются в GET /v1/products/{id}: его вызывает серверный рендеринг
+// сайта, а его ответ кэшируется (одна загрузка на много просмотров).
+func (h *Handlers) view(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		httpx.Fail(w, r, httpx.ErrNotFound)
+		return
+	}
+	if h.Limiter != nil && !h.Limiter.Check(w, r, ruleView, httpx.ClientIP(r.Context())) {
+		return
+	}
+	// несуществующий id безопасен: при сбросе счётчиков UPDATE его просто не найдёт
+	h.Views.Hit(r.Context(), id)
+	httpx.NoContent(w)
 }
 
 func (h *Handlers) StoreRoutes(r chi.Router) {
@@ -196,6 +220,7 @@ func (h *Handlers) list(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, r, err)
 		return
 	}
+	defer rows.Close()
 	var items []Product
 	for rows.Next() {
 		var p Product
@@ -256,7 +281,6 @@ func (h *Handlers) get(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, r, err)
 		return
 	}
-	h.Views.Hit(r.Context(), p.ID)
 	w.Header().Set("Cache-Control", "public, max-age=30")
 	httpx.JSON(w, http.StatusOK, p)
 }
@@ -308,6 +332,7 @@ func (h *Handlers) storeList(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, r, err)
 		return
 	}
+	defer rows.Close()
 	items := []Product{}
 	for rows.Next() {
 		var it Product

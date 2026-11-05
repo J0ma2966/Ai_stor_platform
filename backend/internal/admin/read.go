@@ -240,6 +240,7 @@ func (h *Handlers) listStores(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, r, err)
 		return
 	}
+	defer rows.Close()
 	items, err := collect(rows, scanStore)
 	if err != nil {
 		httpx.Fail(w, r, err)
@@ -290,6 +291,7 @@ func (h *Handlers) getStore(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, r, err)
 		return
 	}
+	defer rows.Close()
 	if d.History, err = collect(rows, scanAudit); err != nil {
 		httpx.Fail(w, r, err)
 		return
@@ -371,6 +373,7 @@ func (h *Handlers) listUsers(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, r, err)
 		return
 	}
+	defer rows.Close()
 	items, err := collect(rows, scanUser)
 	if err != nil {
 		httpx.Fail(w, r, err)
@@ -436,6 +439,7 @@ func (h *Handlers) getUser(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, r, err)
 		return
 	}
+	defer rows.Close()
 	if d.History, err = collect(rows, scanAudit); err != nil {
 		httpx.Fail(w, r, err)
 		return
@@ -521,6 +525,7 @@ func (h *Handlers) listAudit(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, r, err)
 		return
 	}
+	defer rows.Close()
 	items, err := collect(rows, scanAudit)
 	if err != nil {
 		httpx.Fail(w, r, err)

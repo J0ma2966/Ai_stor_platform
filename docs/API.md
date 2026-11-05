@@ -85,6 +85,7 @@ SMS стоит денег, поэтому код нужен только для 
 | POST | `/v1/auth/password` | client |
 | POST | `/v1/auth/email/register`, `/v1/auth/email/login` (ВРЕМЕННО, при `EMAIL_AUTH_ENABLED`, см. docs/EMAIL_AUTH.md); GET `/v1/auth/email/status` | — |
 | GET | `/v1/categories`, `/v1/products`, `/v1/products/{id}` | — |
+| POST | `/v1/products/{id}/view` — браузер отмечает открытие карточки (204; 60/мин с IP). `GET /v1/products/{id}` просмотры не считает: его кэширует серверный рендеринг сайта | — |
 | GET | `/v1/me` | любая |
 | PATCH | `/v1/me` | client |
 | POST | `/v1/me/complete-registration` | client |

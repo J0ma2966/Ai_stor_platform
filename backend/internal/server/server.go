@@ -58,7 +58,7 @@ func New(d Deps) http.Handler {
 	authH := &auth.Handlers{Svc: authSvc, Limiter: limiter, AllowedPrefixes: d.Cfg.OTPAllowedPrefixes,
 		CookieDomain: d.Cfg.CookieDomain, CookieSecure: d.Cfg.CookieSecure}
 	usersH := &users.Handlers{DB: d.DB, Revoker: revoker, Purge: d.UserPurge}
-	productsH := &products.Handlers{DB: d.DB, PublicBase: d.Cfg.PublicMediaURL, Views: d.Views, Media: d.Storage}
+	productsH := &products.Handlers{DB: d.DB, PublicBase: d.Cfg.PublicMediaURL, Views: d.Views, Media: d.Storage, Limiter: limiter}
 	shopH := &shop.Handlers{DB: d.DB, PublicBase: d.Cfg.PublicMediaURL}
 	storesH := &stores.Handlers{DB: d.DB, PublicBase: d.Cfg.PublicMediaURL}
 	notifyH := &notify.Handlers{DB: d.DB}

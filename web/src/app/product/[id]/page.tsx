@@ -8,6 +8,7 @@ import { catName, fetchCategories, fetchProduct, fetchProducts, frontImage } fro
 import { formatSum } from "@/lib/money";
 import { alternates, siteUrl } from "@/lib/site";
 import { Gallery } from "@/components/Gallery";
+import { ProductView } from "@/components/ProductView";
 import { ProductActions } from "@/components/ProductActions";
 import { ProductGrid } from "@/components/ProductGrid";
 import { JsonLd } from "@/components/JsonLd";
@@ -74,6 +75,7 @@ export default async function ProductPage({ params }: { params: P }) {
           },
         }}
       />
+      <ProductView id={p.id} />
       <nav aria-label="breadcrumbs" className="crumbs small">
         <Link href="/catalog">{t("category")}</Link>
         {cat && <> / <Link href={`/catalog?category=${cat.id}`}>{catName(cat, locale)}</Link></>}

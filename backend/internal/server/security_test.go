@@ -33,6 +33,7 @@ var publicRoutes = map[string]bool{
 	"GET /v1/categories":               true,
 	"GET /v1/products":                 true,
 	"GET /v1/products/{id}":            true,
+	"POST /v1/products/{id}/view":      true, // отметка просмотра карточки (лимит по IP)
 	"GET /v1/products/{id}/reviews":    true, // видимые отзывы о товаре
 	"GET /v1/tariffs":                  true,
 	"POST /v1/fitting/adds":            true, // счётчик «В примерочную»: работает и без входа, лимит по IP + дедуп
