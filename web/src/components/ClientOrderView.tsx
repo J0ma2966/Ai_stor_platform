@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { formatDateTime, formatSum } from "@/lib/money";
-import { getOrder, type OrderDetail } from "@/lib/orders";
+import { cancelOrder, getOrder, type OrderDetail } from "@/lib/orders";
 import { ErrorBox } from "./ErrorBox";
 import { StatusBadge, StatusStepper } from "./Status";
 import { Items } from "./Items";
@@ -12,6 +12,10 @@ export function ClientOrderView({ id }: { id: string }) {
   const locale = useLocale();
   const [o, setO] = useState<OrderDetail | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const [asking, setAsking] = useState(false);
+  const [reason, setReason] = useState("");
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelErr, setCancelErr] = useState<unknown>(null);
 
   const load = useCallback(() => {
     setError(null);
@@ -23,6 +27,20 @@ export function ClientOrderView({ id }: { id: string }) {
     const timer = setInterval(() => document.visibilityState === "visible" && load(), 60000);
     return () => clearInterval(timer);
   }, [load]);
+
+  async function doCancel() {
+    setCancelBusy(true);
+    setCancelErr(null);
+    try {
+      setO(await cancelOrder(id, reason.trim()));
+      setAsking(false);
+    } catch (e) {
+      setCancelErr(e);
+      load(); // статус мог измениться — показываем актуальный
+    } finally {
+      setCancelBusy(false);
+    }
+  }
 
   if (error) return <ErrorBox error={error} onRetry={load} />;
   if (!o) return <p className="muted">{t("app.loading")}</p>;
@@ -45,6 +63,26 @@ export function ClientOrderView({ id }: { id: string }) {
         {(o.status === "rejected" || o.status === "cancelled") && o.rejection_reason && (
           <p>{t("orders.rejectedReason", { reason: o.rejection_reason })}</p>
         )}
+        {o.can_cancel && !asking && (
+          <div className="row wrap">
+            <button type="button" className="btn btn-danger" onClick={() => setAsking(true)}>{t("orders.cancel")}</button>
+            <span className="muted small">{t("orders.cancelHint")}</span>
+          </div>
+        )}
+        {o.can_cancel && asking && (
+          <div className="stack-sm" role="group" aria-label={t("orders.cancel")}>
+            <p><strong>{t("orders.cancelConfirm", { number: o.number })}</strong></p>
+            <div className="field">
+              <label htmlFor="cancel-reason">{t("orders.cancelReason")}</label>
+              <input id="cancel-reason" maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} />
+            </div>
+            <div className="row wrap">
+              <button type="button" className="btn btn-danger" disabled={cancelBusy} onClick={doCancel}>{t("orders.cancelYes")}</button>
+              <button type="button" className="btn" disabled={cancelBusy} onClick={() => setAsking(false)}>{t("orders.cancelNo")}</button>
+            </div>
+          </div>
+        )}
+        <ErrorBox error={cancelErr} />
       </section>
 
       <section className="card">

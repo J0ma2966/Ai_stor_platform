@@ -435,3 +435,12 @@ img.thumb { width: 48px; height: 48px; object-fit: cover; border-radius: 6px; fl
   .tile .num, .tile-value { font-size: 1.3rem; overflow-wrap: anywhere; }
 }
 .cat-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+/* Размеры товара */
+.btn-sm { padding: 6px 12px; min-height: 40px; }
+.sizes { border: 0; padding: 0; margin: 0; }
+.size-chip { min-width: 52px; position: relative; font-weight: 600; }
+.size-chip:disabled { text-decoration: line-through; }
+.size-low { color: var(--warn); margin-left: 4px; }
+.size-rows { display: grid; gap: 8px; }
+.size-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; align-items: end; }
+.tg-box { border-left: 4px solid var(--accent2); }

@@ -15,6 +15,8 @@ export type Product = {
   brand: string;
   price: number;
   in_stock: boolean;
+  // размеры: покупателю — наличие (low — осталось 1–2 шт.), кабинету магазина — точный остаток
+  sizes?: ProductSize[];
   status?: "draft" | "published" | "unpublished" | "blocked";
   moderation_reason?: string;
   images: Partial<Record<"front" | "side" | "back", string>>;
@@ -22,6 +24,7 @@ export type Product = {
   fitting_adds?: number;
   created_at: string;
 };
+export type ProductSize = { size: string; in_stock: boolean; low?: boolean; stock?: number };
 export type StoreContacts = { telegram?: string; instagram?: string; website?: string; email?: string; hours?: string };
 export type Store = {
   id: string;

@@ -53,3 +53,9 @@ export function parseImageName(name: string): { sku: string; angle: string } | n
   const angle = ANGLES[base.slice(i + 1).toLowerCase()];
   return angle ? { sku: base.slice(0, i).trim(), angle } : null;
 }
+
+// Telegram-бот магазина: уведомления о заказах.
+export type TelegramStatus = { available: boolean; connected: boolean; bot_username: string };
+export const getTelegram = () => api<TelegramStatus>("/v1/store/telegram");
+export const telegramLink = () => api<{ url: string; expires_at: string }>("/v1/store/telegram/link", { method: "POST" });
+export const telegramUnlink = () => api<void>("/v1/store/telegram", { method: "DELETE" });
