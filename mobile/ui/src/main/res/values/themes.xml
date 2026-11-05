@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="boutique_bg">#F3F2F7</color>
+    <color name="boutique_accent">#3F1F6E</color>
+    <!-- AppCompatActivity нужна для смены языка внутри приложения (AppCompatDelegate) и требует AppCompat-тему. -->
+    <style name="Theme.Boutique" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:windowBackground">@color/boutique_bg</item>
+        <item name="colorPrimary">@color/boutique_accent</item>
+        <item name="colorAccent">@color/boutique_accent</item>
+    </style>
+</resources>
