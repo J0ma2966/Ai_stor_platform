@@ -305,7 +305,13 @@
     "ctaBtn": "Kiyib ko‘rishni boshlash",
     "emptyCatalog": "Tez orada bu yerda mahsulotlar paydo bo‘ladi.",
     "heroTitleShop": "Toshkent butiklari bitta katalogda",
-    "heroTextShop": "Turli butiklardan kiyim, poyabzal va aksessuarlar: bitta qidiruv, bitta savat, do‘kondan yetkazib berish."
+    "heroTextShop": "Turli butiklardan kiyim, poyabzal va aksessuarlar: bitta qidiruv, bitta savat, do‘kondan yetkazib berish.",
+    "heroTag": "Toshkent butiklari onlayn",
+    "promoNew": "Haftaning yangiliklari",
+    "promoStores": "Shahardagi barcha butiklar",
+    "promoGo": "Ko‘rish",
+    "adv5": "Qabul qilganda to‘lov",
+    "adv5t": "Buyurtma qo‘lingizga yetganda to‘laysiz."
   },
   "catalog": {
     "title": "Katalog",
@@ -355,7 +361,11 @@
     "fittingNote": "AI-kiyib ko‘rish obrazni taxminan ko‘rsatadi va o‘lcham hamda yarashishni kafolatlamaydi.",
     "photo": "{total} tadan {n}-surat",
     "notFound": "Mahsulot topilmadi yoki sotuvdan olingan.",
-    "goStore": "Do‘konga o‘tish"
+    "goStore": "Do‘konga o‘tish",
+    "retry": "Qayta urinish",
+    "perkDelivery": "Butikdan qulay vaqtda yetkazib berish",
+    "perkPay": "Qabul qilganda to‘lov",
+    "perkSeller": "Sotuvchi: {store}"
   },
   "stores": {
     "title": "Butiklar",

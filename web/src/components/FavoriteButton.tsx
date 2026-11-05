@@ -4,6 +4,7 @@ import { useTranslations } from "next-intl";
 import { usePathname, useRouter } from "@/i18n/navigation";
 import { useSession } from "@/lib/session";
 import { addFavorite, removeFavorite } from "@/lib/shop";
+import { Icon } from "./Icon";
 
 export function FavoriteButton({ productId, className = "", withText = false }: { productId: string; className?: string; withText?: boolean }) {
   const t = useTranslations("product");
@@ -32,7 +33,7 @@ export function FavoriteButton({ productId, className = "", withText = false }: 
   const label = on ? t("inFavorites") : t("toFavorites");
   return (
     <button type="button" className={`fav-btn ${on ? "fav-on" : ""} ${className}`} aria-pressed={on} aria-label={label} title={label} disabled={busy} onClick={toggle}>
-      <span aria-hidden="true">{on ? "♥" : "♡"}</span>
+      <Icon name="heart" size={20} filled={on} />
       {withText && <span>{label}</span>}
     </button>
   );

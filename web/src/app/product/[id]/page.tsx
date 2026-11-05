@@ -11,6 +11,7 @@ import { Gallery } from "@/components/Gallery";
 import { ProductActions } from "@/components/ProductActions";
 import { ProductGrid } from "@/components/ProductGrid";
 import { JsonLd } from "@/components/JsonLd";
+import { Icon } from "@/components/Icon";
 
 type P = Promise<{ id: string }>;
 
@@ -71,14 +72,21 @@ export default async function ProductPage({ params }: { params: P }) {
       <div className="product-layout">
         <Gallery images={p.images} title={p.title} />
         <div className="stack product-info">
-          <p className="muted">{p.brand}</p>
-          <h1>{p.title}</h1>
-          <p className="price price-lg">{formatSum(p.price, locale)}</p>
-          <p>
-            <span className={`badge ${p.in_stock ? "badge-ok" : "badge-bad"}`}>{p.in_stock ? t("inStock") : t("outOfStock")}</span>
-          </p>
-          <ProductActions product={p} />
-          {TRYON_ENABLED && <p className="muted small">{t("fittingNote")}</p>}
+          <div className="buy-box">
+            <p className="muted product-brand">{p.brand}</p>
+            <h1>{p.title}</h1>
+            <div className="row wrap product-price-row">
+              <p className="price price-lg">{formatSum(p.price, locale)}</p>
+              <span className={`badge ${p.in_stock ? "badge-ok" : "badge-bad"}`}>{p.in_stock ? t("inStock") : t("outOfStock")}</span>
+            </div>
+            <ProductActions product={p} />
+            {TRYON_ENABLED && <p className="muted small">{t("fittingNote")}</p>}
+            <ul className="plain buy-perks">
+              <li><Icon name="truck" size={20} /><span>{t("perkDelivery")}</span></li>
+              <li><Icon name="wallet" size={20} /><span>{t("perkPay")}</span></li>
+              <li><Icon name="store" size={20} /><span>{t("perkSeller", { store: p.store_name })}</span></li>
+            </ul>
+          </div>
           <dl className="kv">
             <div><dt>{t("brand")}</dt><dd>{p.brand}</dd></div>
             {cat && <div><dt>{t("category")}</dt><dd>{catName(cat, locale)}</dd></div>}
@@ -94,9 +102,9 @@ export default async function ProductPage({ params }: { params: P }) {
       </div>
       {others.length > 0 && (
         <section>
-          <div className="row between">
+          <div className="section-head">
             <h2>{t("moreFromStore", { store: p.store_name })}</h2>
-            {p.store_slug && <Link href={`/stores/${p.store_slug}`}>{t("goStore")}</Link>}
+            {p.store_slug && <Link href={`/stores/${p.store_slug}`} className="see-all">{t("goStore")} <Icon name="arrow" size={18} /></Link>}
           </div>
           <ProductGrid items={others} />
         </section>
