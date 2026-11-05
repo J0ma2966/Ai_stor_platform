@@ -5,7 +5,7 @@ import { ApiError, api } from "@/lib/api";
 import { formatSum } from "@/lib/money";
 import {
   checkout, newIdempotencyKey, uploadDeliveryPhoto,
-  type CheckoutInput, type CheckoutResult,
+  itemKey, type CheckoutInput, type CheckoutItem, type CheckoutResult,
 } from "@/lib/orders";
 import { ErrorBox, useErrorText, useFieldError } from "./ErrorBox";
 import { Link } from "@/i18n/navigation";
@@ -24,7 +24,7 @@ const empty: Fields = {
   apartment: "", intercom: "", address_comment: "", customer_comment: "", delivery_time_comment: "",
 };
 
-export function CheckoutForm({ items }: { items: { product_id: string; qty: number }[] }) {
+export function CheckoutForm({ items }: { items: CheckoutItem[] }) {
   const t = useTranslations("checkout");
   const tf = useTranslations("fieldErrors");
   const locale = useLocale();
@@ -200,12 +200,13 @@ export function CheckoutForm({ items }: { items: { product_id: string; qty: numb
         <ul className="plain items">
           {items.map((it) => {
             const p = products[it.product_id];
-            const bad = unavailable[it.product_id];
+            const bad = unavailable[itemKey(it)] ?? unavailable[it.product_id];
             return (
-              <li key={it.product_id} className={bad ? "item item-bad" : "item"}>
+              <li key={itemKey(it)} className={bad ? "item item-bad" : "item"}>
                 {p?.images?.front && <img src={p.images.front} alt="" width={48} height={64} />}
                 <span className="grow">
                   {p ? `${p.brand} · ${p.title}` : it.product_id}
+                  {it.size && <span> · {t("size", { size: it.size })}</span>}
                   {p && <span className="muted small"> · {p.store_name}</span>}
                   {bad && <span className="field-error"> {tf(bad)}</span>}
                 </span>

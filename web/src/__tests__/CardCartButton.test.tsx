@@ -59,4 +59,16 @@ describe("кнопка «В корзину» в карточке", () => {
     const { container } = wrap();
     expect(container.querySelector("button")).toBeNull();
   });
+
+  it("товар с размерами ведёт в карточку выбрать размер", async () => {
+    me = { role: "client" };
+    render(
+      <NextIntlClientProvider locale="ru" messages={messages}>
+        <CardCartButton productId="p1" inStock hasSizes />
+      </NextIntlClientProvider>,
+    );
+    await userEvent.setup().click(screen.getByRole("button", { name: "Выберите размер" }));
+    expect(push).toHaveBeenCalledWith("/product/p1");
+    expect(putCart).not.toHaveBeenCalled();
+  });
 });

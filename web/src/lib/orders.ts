@@ -35,7 +35,10 @@ export type Delivery = {
   has_photo: boolean;
 };
 
-export type OrderItem = { product_id: string | null; title: string; brand: string; image_url?: string; unit_price: number; qty: number };
+export type OrderItem = { product_id: string | null; title: string; brand: string; image_url?: string; unit_price: number; qty: number; size?: string };
+export type CheckoutItem = { product_id: string; qty: number; size?: string };
+// Ключ позиции «товар + размер» (так же сервер называет поля в ошибке products_unavailable).
+export const itemKey = (it: { product_id: string; size?: string }) => (it.size ? `${it.product_id}:${it.size}` : it.product_id);
 export type HistoryEntry = { from_status: OrderStatus | null; to_status: OrderStatus; reason?: string; actor_role?: string; created_at: string };
 
 export type OrderDetail = OrderSummary & {
@@ -48,10 +51,11 @@ export type OrderDetail = OrderSummary & {
   history: HistoryEntry[];
   next_statuses?: OrderStatus[];
   copy_text?: string;
+  can_cancel?: boolean; // клиенту: можно отменить (до начала сборки)
 };
 
 export type CheckoutInput = {
-  items: { product_id: string; qty: number }[];
+  items: CheckoutItem[];
   customer_name: string;
   customer_phone?: string;
   customer_comment?: string;
@@ -107,17 +111,31 @@ export function setOrderStatus(scope: Exclude<Scope, "client">, id: string, stat
   return api<OrderDetail>(`${base(scope)}/${encodeURIComponent(id)}/status`, { method: "POST", body: { status, from, reason } });
 }
 
-// Разбор ?items=<uuid>:<qty>,<uuid>:<qty> (корзина передаёт выбранные позиции).
+// Разбор ?items=<uuid>:<qty>[:<размер>],… (корзина передаёт выбранные позиции; размер — encodeURIComponent).
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-export function parseItemsParam(s: string | null): { product_id: string; qty: number }[] {
+export function parseItemsParam(s: string | null): CheckoutItem[] {
   if (!s) return [];
-  const out: { product_id: string; qty: number }[] = [];
+  const out: CheckoutItem[] = [];
   for (const part of s.split(",").slice(0, 50)) {
-    const [id, q] = part.split(":");
+    const [id, q, rawSize] = part.split(":");
     const qty = Number.parseInt(q ?? "1", 10);
-    if (UUID.test(id ?? "") && qty >= 1 && qty <= 99 && !out.some((x) => x.product_id === id)) out.push({ product_id: id!, qty });
+    let size = "";
+    try {
+      size = rawSize ? decodeURIComponent(rawSize).trim().slice(0, 20) : "";
+    } catch {
+      continue;
+    }
+    const it: CheckoutItem = size ? { product_id: id!, qty, size } : { product_id: id!, qty };
+    if (UUID.test(id ?? "") && qty >= 1 && qty <= 99 && !out.some((x) => itemKey(x) === itemKey(it))) out.push(it);
   }
   return out;
+}
+
+export const itemsParam = (items: CheckoutItem[]) =>
+  items.map((i) => `${i.product_id}:${i.qty}${i.size ? `:${encodeURIComponent(i.size)}` : ""}`).join(",");
+
+export function cancelOrder(id: string, reason = "") {
+  return api<OrderDetail>(`/v1/orders/${encodeURIComponent(id)}/cancel`, { method: "POST", body: { reason } });
 }
 
 // Клиентская копия текста для курьера — на случай, если сервер её не вернул.

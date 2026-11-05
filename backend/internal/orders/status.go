@@ -72,6 +72,21 @@ func CheckTransition(role auth.Role, from, to Status, reason string) error {
 	return ErrInvalidTransition
 }
 
+// CheckClientCancel — клиент может только отменить заказ и только до начала сборки.
+// Причина необязательна.
+func CheckClientCancel(from, to Status) error {
+	if to != StatusCancelled {
+		return ErrForbidden
+	}
+	if from != StatusPending && from != StatusConfirmed {
+		return ErrInvalidTransition
+	}
+	return nil
+}
+
+// ClientCanCancel — показывать ли клиенту кнопку «Отменить заказ».
+func ClientCanCancel(s Status) bool { return CheckClientCancel(s, StatusCancelled) == nil }
+
 // CustomerStep maps a status to the customer-facing progress step (1..4),
 // 0 for rejected/cancelled/pending-before-confirmation.
 func CustomerStep(s Status) int {

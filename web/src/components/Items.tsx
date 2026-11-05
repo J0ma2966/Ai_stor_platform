@@ -1,5 +1,5 @@
 "use client";
-import { useLocale } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { formatSum } from "@/lib/money";
 import type { OrderItem } from "@/lib/orders";
@@ -7,13 +7,14 @@ import type { OrderItem } from "@/lib/orders";
 // reviewLabel — у доставленного заказа клиента: ссылка «Оценить товар» к блоку отзывов.
 export function Items({ items, reviewLabel }: { items: OrderItem[]; reviewLabel?: string }) {
   const locale = useLocale();
+  const t = useTranslations("checkout");
   return (
     <ul className="plain items">
       {items.map((it, i) => (
         <li key={i} className="item">
           {it.image_url && <img src={it.image_url} alt="" width={48} height={64} />}
           <span className="grow">
-            {it.brand} · {it.title}
+            {it.brand} · {it.title}{it.size && <strong> · {t("size", { size: it.size })}</strong>}
             {reviewLabel && it.product_id && <><br /><Link href={`/product/${it.product_id}#reviews`} className="small">{reviewLabel}</Link></>}
           </span>
           <span>×{it.qty}</span>

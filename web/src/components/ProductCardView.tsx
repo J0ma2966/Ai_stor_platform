@@ -28,7 +28,7 @@ export function ProductCardView({ p, locale, outOfStock, priority = false }: { p
         </div>
       </Link>
       <FavoriteButton productId={p.id} className="pcard-fav" />
-      <CardCartButton productId={p.id} inStock={p.in_stock} />
+      <CardCartButton productId={p.id} inStock={p.in_stock} hasSizes={p.has_sizes} />
     </article>
   );
 }

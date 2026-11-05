@@ -6,6 +6,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/boutique-market/backend/internal/products"
 )
 
 // Лимиты длины (в символах) совпадают с CHECK-ограничениями в 00001_init.sql.
@@ -101,14 +103,20 @@ func (in *checkoutReq) Normalize() map[string]string {
 		f["items"] = "max"
 	}
 	seen := map[string]bool{}
-	for i, it := range in.Items {
+	for i := range in.Items {
+		it := &in.Items[i]
+		it.Size = products.NormalizeSize(it.Size)
 		if it.Qty < 1 || it.Qty > MaxQty {
 			f[fmt.Sprintf("items[%d].qty", i)] = "range"
 		}
-		if seen[it.ProductID.String()] {
+		if utf8.RuneCountInString(it.Size) > products.MaxSizeLen {
+			f[fmt.Sprintf("items[%d].size", i)] = "max"
+		}
+		key := it.ProductID.String() + "|" + it.Size
+		if seen[key] {
 			f[fmt.Sprintf("items[%d].product_id", i)] = "duplicate"
 		}
-		seen[it.ProductID.String()] = true
+		seen[key] = true
 	}
 	if len(f) == 0 {
 		return nil

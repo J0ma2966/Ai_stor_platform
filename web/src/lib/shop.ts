@@ -12,16 +12,22 @@ export type CartItem = {
   zone: string;
   image_url?: string;
   in_stock: boolean;
+  has_sizes: boolean;
+  size?: string;
+  size_stock?: number;
   available: boolean;
-  unavailable_reason?: "out_of_stock" | "unavailable";
+  unavailable_reason?: "out_of_stock" | "not_enough_stock" | "size_required" | "unavailable";
   qty: number;
   added_at: string;
 };
 export type Cart = { items: CartItem[]; total_qty: number; total: number; can_checkout: boolean; has_unavailable: boolean };
 
 export const getCart = () => api<Cart>("/v1/me/cart");
-export const setCartQty = (productId: string, qty: number) => api<Cart>(`/v1/me/cart/${productId}`, { method: "PUT", body: { qty } });
-export const removeFromCart = (productId: string) => api<Cart>(`/v1/me/cart/${productId}`, { method: "DELETE" });
+const cartPath = (productId: string, size?: string) =>
+  `/v1/me/cart/${productId}${size ? `?size=${encodeURIComponent(size)}` : ""}`;
+export const setCartQty = (productId: string, qty: number, size?: string) =>
+  api<Cart>(cartPath(productId, size), { method: "PUT", body: { qty } });
+export const removeFromCart = (productId: string, size?: string) => api<Cart>(cartPath(productId, size), { method: "DELETE" });
 
 export const getFavorites = () => apiList<CartItem>("/v1/me/favorites");
 export const getFavoriteIds = () => api<string[]>("/v1/me/favorites/ids");
@@ -39,6 +45,7 @@ export function notificationHref(n: Notification, role: string): string | null {
   const d = n.data as Record<string, string>;
   switch (n.kind) {
     case "order_created":
+    case "order_cancelled":
       return d.order_id ? `/store/orders/${d.order_id}` : "/store/orders";
     case "order_status":
       return d.order_id ? `/account/orders/${d.order_id}` : "/account/orders";

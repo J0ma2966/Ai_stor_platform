@@ -7,6 +7,7 @@ import type { StoreContacts } from "@/lib/catalog";
 import { getStoreProfile, updateStoreProfile } from "@/lib/storeCab";
 import { ErrorBox, useFieldError } from "@/components/ErrorBox";
 import { ImagePicker } from "@/components/ImagePicker";
+import { TelegramConnect } from "@/components/TelegramConnect";
 
 type Form = { name: string; description: string; phone: string; address: string; lat: string; lng: string } & Required<StoreContacts>;
 const CONTACTS = ["telegram", "instagram", "website", "email", "hours"] as const;
@@ -75,6 +76,7 @@ export default function StoreProfile() {
         <h1>{t("title")}</h1>
         {slug && <Link href={`/stores/${slug}`}>{t("publicPage")} ↗</Link>}
       </div>
+      <TelegramConnect />
       <form className="stack" onSubmit={save}>
         <fieldset className="card stack" disabled={busy}>
           {input("name")}

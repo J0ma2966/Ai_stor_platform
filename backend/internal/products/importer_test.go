@@ -51,3 +51,15 @@ func TestParseBool(t *testing.T) {
 		t.Error("maybe accepted")
 	}
 }
+
+func TestParseSizeList(t *testing.T) {
+	got, ok := ParseSizeList("s:2; M=5, 42 : 0")
+	if !ok || len(got) != 3 || got[0].Size != "S" || got[0].Stock != 2 || got[2].Size != "42" || got[2].Stock != 0 {
+		t.Fatalf("got %v %v", got, ok)
+	}
+	for _, bad := range []string{"S", "S:x", "S:1; s:2", "S:-1", ";"} {
+		if _, ok := ParseSizeList(bad); ok {
+			t.Errorf("%q accepted", bad)
+		}
+	}
+}

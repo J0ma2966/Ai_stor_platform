@@ -42,6 +42,10 @@ func (h *Handlers) storeGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	it.Images = h.urls(it.imageKeys)
+	if it.Sizes, err = LoadSizes(r.Context(), h.DB, it.ID, true); err != nil {
+		httpx.Fail(w, r, err)
+		return
+	}
 	w.Header().Set("Cache-Control", "no-store")
 	httpx.JSON(w, http.StatusOK, it)
 }
@@ -55,6 +59,8 @@ type updateReq struct {
 	Price       *int64            `json:"price" validate:"omitempty,gt=0"`
 	InStock     *bool             `json:"in_stock"`
 	Images      map[string]string `json:"images" validate:"omitempty,max=3,dive,keys,oneof=front side back,endkeys,required"`
+	// nil — размеры не меняются, [] — убрать все размеры (наличие снова по флажку in_stock).
+	Sizes *[]SizeIn `json:"sizes"`
 }
 
 // storeUpdate — частичное редактирование. Заблокированный администратором товар
@@ -75,6 +81,14 @@ func (h *Handlers) storeUpdate(w http.ResponseWriter, r *http.Request) {
 	for angle, key := range req.Images {
 		if !media.OwnsKey(p.UserID, media.PurposeProductImage, key) {
 			httpx.Fail(w, r, &httpx.Error{Status: 422, Code: "validation_failed", Message: "image key not owned", Fields: map[string]string{"images." + angle: "not_owned"}})
+			return
+		}
+	}
+	var sizes []SizeIn
+	if req.Sizes != nil {
+		var fields map[string]string
+		if sizes, fields = NormalizeSizes(*req.Sizes); fields != nil {
+			httpx.Fail(w, r, &httpx.Error{Status: 422, Code: "validation_failed", Message: "invalid sizes", Fields: fields})
 			return
 		}
 	}
@@ -124,6 +138,9 @@ func (h *Handlers) storeUpdate(w http.ResponseWriter, r *http.Request) {
 				ON CONFLICT (product_id, angle) DO UPDATE SET key = EXCLUDED.key`, id, angle, key); err != nil {
 				return err
 			}
+		}
+		if req.Sizes != nil {
+			return ReplaceSizes(r.Context(), tx, id, sizes)
 		}
 		return nil
 	})

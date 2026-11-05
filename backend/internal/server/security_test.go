@@ -39,6 +39,7 @@ var publicRoutes = map[string]bool{
 	"POST /v1/payments/click/prepare":  true, // provider webhooks: authenticated by signature, not by user token
 	"POST /v1/payments/click/complete": true,
 	"POST /v1/payments/payme":          true,
+	"POST /v1/telegram/webhook":        true, // Telegram: secret header, 404 without it
 	"GET /v1/stores":                   true,
 	"GET /v1/stores/{slug}":            true,
 	"GET /v1/platform":                 true,

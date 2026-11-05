@@ -580,3 +580,13 @@ table.tbl { border-radius: var(--radius); }
 .rating-link:hover span:not(.muted) { color: var(--accent); }
 .pcard-rating { display: inline-flex; align-items: center; gap: 4px; font-weight: 700; }
 .review-reply { border-left: 0; background: var(--surface-2); border-radius: var(--radius-sm); padding: 12px 14px; }
+
+/* Размеры товара */
+.btn-sm { padding: 6px 12px; min-height: 40px; }
+.sizes { border: 0; padding: 0; margin: 0; }
+.size-chip { min-width: 52px; position: relative; font-weight: 600; }
+.size-chip:disabled { text-decoration: line-through; }
+.size-low { color: var(--warn); margin-left: 4px; }
+.size-rows { display: grid; gap: 8px; }
+.size-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; align-items: end; }
+.tg-box { border-left: 4px solid var(--accent2); }

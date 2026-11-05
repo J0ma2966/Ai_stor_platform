@@ -7,6 +7,7 @@ import { createProduct, setProductStatus, updateProduct } from "@/lib/storeCab";
 import { ApiError } from "@/lib/api";
 import { ErrorBox, useFieldError } from "./ErrorBox";
 import { ImagePicker } from "./ImagePicker";
+import { SizesEditor, type SizeRow } from "./SizesEditor";
 
 const ANGLES = ["front", "side", "back"] as const;
 type Angle = (typeof ANGLES)[number];
@@ -24,6 +25,7 @@ export function ProductForm({ product, onSaved }: { product?: Product; onSaved?:
     price: product ? String(Math.round(product.price / 100)) : "", brand: product?.brand ?? "", sku: product?.sku ?? "",
     in_stock: product?.in_stock ?? true,
   });
+  const [sizes, setSizes] = useState<SizeRow[]>((product?.sizes ?? []).map((s) => ({ size: s.size, stock: String(s.stock ?? 0) })));
   const [keys, setKeys] = useState<Partial<Record<Angle, string>>>({});
   const [urls, setUrls] = useState<Partial<Record<Angle, string>>>(product?.images ?? {});
   const [publish, setPublish] = useState(true);
@@ -47,7 +49,8 @@ export function ProductForm({ product, onSaved }: { product?: Product; onSaved?:
     try {
       // Пустой артикул у нового товара — сервер выдаст его автоматически.
       const sku = f.sku.trim();
-      const body = { ...f, price, sku, ...(Object.keys(keys).length ? { images: keys } : {}) };
+      const sizeList = sizes.map((s) => ({ size: s.size.trim(), stock: Math.max(0, Number.parseInt(s.stock, 10) || 0) }));
+      const body = { ...f, price, sku, sizes: sizeList, ...(Object.keys(keys).length ? { images: keys } : {}) };
       if (product) {
         await updateProduct(product.id, body);
         setOk(t("saved"));
@@ -100,7 +103,13 @@ export function ProductForm({ product, onSaved }: { product?: Product; onSaved?:
           {field("brand", 120)}
           {product ? field("sku", 64, t("skuHint")) : field("sku", 64, t("skuAutoHint"), true, t("skuAuto"))}
         </div>
-        <label className="row check"><input type="checkbox" checked={f.in_stock} onChange={(e) => setF((p) => ({ ...p, in_stock: e.target.checked }))} /><span>{t("inStock")}</span></label>
+        {sizes.length === 0 && (
+          <label className="row check"><input type="checkbox" checked={f.in_stock} onChange={(e) => setF((p) => ({ ...p, in_stock: e.target.checked }))} /><span>{t("inStock")}</span></label>
+        )}
+      </fieldset>
+      <fieldset className="card stack" disabled={locked || busy}>
+        <legend>{t("sizes")}</legend>
+        <SizesEditor rows={sizes} onChange={setSizes} errors={fields} />
       </fieldset>
       <fieldset className="card stack" disabled={locked || busy}>
         <legend>{t("photos")}</legend>

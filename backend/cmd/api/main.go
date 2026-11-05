@@ -15,6 +15,7 @@ import (
 	"net/http/pprof"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -30,12 +31,14 @@ import (
 	"github.com/boutique-market/backend/internal/media"
 	"github.com/boutique-market/backend/internal/notify"
 	"github.com/boutique-market/backend/internal/orders"
+	"github.com/boutique-market/backend/internal/outbox"
 	"github.com/boutique-market/backend/internal/payments"
 	"github.com/boutique-market/backend/internal/platform/cache"
 	"github.com/boutique-market/backend/internal/platform/db"
 	"github.com/boutique-market/backend/internal/products"
 	"github.com/boutique-market/backend/internal/server"
 	"github.com/boutique-market/backend/internal/sms"
+	"github.com/boutique-market/backend/internal/telegram"
 	"github.com/boutique-market/backend/internal/tryon"
 )
 
@@ -135,6 +138,46 @@ func run(log *slog.Logger, args []string) error {
 	log.Info("providers", slog.String("sms", cfg.SMSProvider), slog.Bool("click", cfg.ClickEnabled()),
 		slog.Bool("payme", cfg.PaymeEnabled()), slog.Bool("payme_test", cfg.PaymeTest), slog.String("tryon", cfg.TryOn.Provider))
 
+	// Telegram-бот магазинов и SMS клиентам о заказах — через очередь outbound_messages.
+	var bot *telegram.Bot
+	if cfg.TelegramBotToken != "" {
+		bot = &telegram.Bot{Token: cfg.TelegramBotToken}
+		if cfg.TelegramWebhookURL != "" {
+			if err := bot.SetWebhook(ctx, cfg.TelegramWebhookURL, cfg.TelegramWebhookSecret); err != nil {
+				log.Error("telegram setWebhook failed", slog.String("err", err.Error()))
+			}
+		}
+	}
+	ob := &outbox.Worker{DB: pool, Log: log,
+		OnPermanent: func(ctx context.Context, channel, recipient string) {
+			if id, err := strconv.ParseInt(recipient, 10, 64); err == nil && channel == outbox.ChannelTelegram {
+				_ = telegram.UnlinkChat(ctx, pool, id) // бот заблокирован — не шлём больше в этот чат
+			}
+		}}
+	if bot != nil {
+		ob.Telegram = bot
+	}
+	if cfg.OrderSMS {
+		if s, ok := smsSender.(outbox.SMSSender); ok {
+			ob.SMS = s
+		}
+	}
+	go ob.Run(ctx, 5*time.Second)
+	go func() {
+		t := time.NewTicker(time.Minute)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				if _, err := orders.RemindPending(ctx, pool, cfg.SiteURL, cfg.OrderRemindAfter, time.Now()); err != nil && ctx.Err() == nil {
+					log.Error("order reminders", slog.String("err", err.Error()))
+				}
+			}
+		}
+	}()
+
 	views := &products.ViewCounter{Redis: rdb, DB: pool, Log: log}
 	go views.Run(ctx, 30*time.Second)
 	fitting := &tryon.FittingCounter{Redis: rdb, DB: pool, Log: log,
@@ -169,7 +212,7 @@ func run(log *slog.Logger, args []string) error {
 
 	api := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           server.New(server.Deps{Cfg: cfg, Log: log, DB: pool, Redis: rdb, Storage: store, SMS: smsSender, Views: views, Fitting: fitting}),
+		Handler:           server.New(server.Deps{Cfg: cfg, Log: log, DB: pool, Redis: rdb, Storage: store, SMS: smsSender, Views: views, Fitting: fitting, Telegram: bot}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       60 * time.Second,
 		WriteTimeout:      75 * time.Second,

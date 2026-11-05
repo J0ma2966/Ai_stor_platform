@@ -15,6 +15,9 @@ export type Product = {
   brand: string;
   price: number;
   in_stock: boolean;
+  // размеры: покупателю — наличие (low — осталось 1–2 шт.), кабинету магазина — точный остаток
+  sizes?: ProductSize[];
+  has_sizes?: boolean; // каталог: у товара есть размеры (в корзину — через карточку)
   status?: "draft" | "published" | "unpublished" | "blocked";
   moderation_reason?: string;
   images: Partial<Record<"front" | "side" | "back", string>>;
@@ -25,6 +28,7 @@ export type Product = {
   rating_dist?: number[]; // только карточка товара: сколько отзывов на 1…5 звёзд
   created_at: string;
 };
+export type ProductSize = { size: string; in_stock: boolean; low?: boolean; stock?: number };
 export type StoreContacts = { telegram?: string; instagram?: string; website?: string; email?: string; hours?: string };
 export type Store = {
   id: string;

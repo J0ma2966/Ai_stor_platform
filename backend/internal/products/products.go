@@ -47,6 +47,8 @@ type Product struct {
 	Status      string            `json:"status,omitempty"`
 	Reason      *string           `json:"moderation_reason,omitempty"`
 	Images      map[string]string `json:"images"`
+	Sizes       []Size            `json:"sizes,omitempty"`       // карточка товара и кабинет магазина
+	HasSizes    bool              `json:"has_sizes,omitempty"`   // каталог: в корзину — только с выбором размера
 	RatingAvg   float64           `json:"rating_avg"`            // средняя оценка видимых отзывов, 0 — отзывов нет
 	RatingCount int               `json:"rating_count"`          // число видимых отзывов
 	RatingDist  []int             `json:"rating_dist,omitempty"` // только карточка: сколько отзывов на 1…5 звёзд
@@ -174,7 +176,8 @@ func (h *Handlers) list(w http.ResponseWriter, r *http.Request) {
 	sql := fmt.Sprintf(`
 		SELECT p.id, p.store_id, s.name, s.slug, p.category_id, c.zone::text, p.title, p.brand, p.price, p.in_stock, p.created_at, (%s)::text,
 		       p.rating_avg::float8, p.rating_count,
-		       COALESCE((SELECT jsonb_object_agg(angle, key) FROM product_images pi WHERE pi.product_id = p.id), '{}')
+		       COALESCE((SELECT jsonb_object_agg(angle, key) FROM product_images pi WHERE pi.product_id = p.id), '{}'),
+		       EXISTS (SELECT 1 FROM product_sizes ps WHERE ps.product_id = p.id)
 		FROM products p JOIN stores s ON s.id = p.store_id JOIN categories c ON c.id = p.category_id
 		WHERE %s ORDER BY %s %s, p.id %s LIMIT %d`,
 		srt.col, strings.Join(where, " AND "), srt.col, dir, dir, limit+1)
@@ -187,7 +190,7 @@ func (h *Handlers) list(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var p Product
 		if err := rows.Scan(&p.ID, &p.StoreID, &p.StoreName, &p.StoreSlug, &p.CategoryID, &p.Zone, &p.Title, &p.Brand, &p.Price, &p.InStock, &p.CreatedAt, &p.sortVal,
-			&p.RatingAvg, &p.RatingCount, &p.imageKeys); err != nil {
+			&p.RatingAvg, &p.RatingCount, &p.imageKeys, &p.HasSizes); err != nil {
 			httpx.Fail(w, r, err)
 			return
 		}
@@ -239,6 +242,10 @@ func (h *Handlers) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p.Images = h.urls(p.imageKeys)
+	if p.Sizes, err = LoadSizes(r.Context(), h.DB, p.ID, false); err != nil {
+		httpx.Fail(w, r, err)
+		return
+	}
 	h.Views.Hit(r.Context(), p.ID)
 	w.Header().Set("Cache-Control", "public, max-age=30")
 	httpx.JSON(w, http.StatusOK, p)
@@ -296,6 +303,7 @@ type createReq struct {
 	Price       int64             `json:"price" validate:"required,gt=0"`
 	InStock     *bool             `json:"in_stock" validate:"required"`
 	Images      map[string]string `json:"images" validate:"required,len=3,dive,keys,oneof=front side back,endkeys,required"`
+	Sizes       []SizeIn          `json:"sizes"` // необязательно; с размерами наличие считается по остаткам
 }
 
 func (h *Handlers) storeCreate(w http.ResponseWriter, r *http.Request) {
@@ -310,6 +318,11 @@ func (h *Handlers) storeCreate(w http.ResponseWriter, r *http.Request) {
 			httpx.Fail(w, r, &httpx.Error{Status: 422, Code: "validation_failed", Message: "image key not owned", Fields: map[string]string{"images." + angle: "not_owned"}})
 			return
 		}
+	}
+	sizes, fields := NormalizeSizes(req.Sizes)
+	if fields != nil {
+		httpx.Fail(w, r, &httpx.Error{Status: 422, Code: "validation_failed", Message: "invalid sizes", Fields: fields})
+		return
 	}
 	var id uuid.UUID
 	var sku string
@@ -329,7 +342,7 @@ func (h *Handlers) storeCreate(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 		}
-		return nil
+		return ReplaceSizes(r.Context(), tx, id, sizes)
 	})
 	if db.IsUniqueViolation(err, "products_store_id_sku_key") {
 		httpx.Fail(w, r, httpx.NewError(http.StatusConflict, "sku_taken", "product with this SKU already exists"))

@@ -63,6 +63,18 @@ type Config struct {
 	EskizFrom     string
 	SMSTemplate   string // одобренный в кабинете Eskiz текст, %s — код
 
+	// Адрес сайта для ссылок в Telegram и SMS, напр. https://shop.uz (без / в конце).
+	SiteURL string
+	// Telegram-бот магазинов (уведомления о заказах). Выключен, если токен пуст.
+	TelegramBotToken      string
+	TelegramBotUsername   string // без @
+	TelegramWebhookSecret string // заголовок X-Telegram-Bot-Api-Secret-Token
+	TelegramWebhookURL    string // если задан — API сам регистрирует вебхук при старте
+	// SMS клиенту о смене статуса заказа (тексты должны быть одобрены в Eskiz).
+	OrderSMS bool
+	// Через сколько напомнить магазину о неподтверждённом заказе.
+	OrderRemindAfter time.Duration
+
 	// Платежи. Провайдер включён, только если заданы его ключи.
 	PaymentReturnURL string // куда вернуть клиента после оплаты, напр. https://shop.uz/account/balance
 	ClickServiceID   string
@@ -209,19 +221,26 @@ func Load() (Config, error) {
 				ProdApproved: getBool("OPENAI_PROD_APPROVED", false),
 			},
 		},
-		SMSProvider:      get("SMS_PROVIDER", "log"),
-		EskizURL:         get("ESKIZ_URL", "https://notify.eskiz.uz/api"),
-		EskizEmail:       os.Getenv("ESKIZ_EMAIL"),
-		EskizPassword:    os.Getenv("ESKIZ_PASSWORD"),
-		EskizFrom:        get("ESKIZ_FROM", "4546"),
-		SMSTemplate:      get("SMS_OTP_TEMPLATE", "Kod dlya vhoda: %s"),
-		PaymentReturnURL: os.Getenv("PAYMENT_RETURN_URL"),
-		ClickServiceID:   os.Getenv("CLICK_SERVICE_ID"),
-		ClickMerchantID:  os.Getenv("CLICK_MERCHANT_ID"),
-		ClickSecretKey:   os.Getenv("CLICK_SECRET_KEY"),
-		ClickAllowedIPs:  splitList(os.Getenv("CLICK_ALLOWED_IPS")),
-		PaymeMerchantID:  os.Getenv("PAYME_MERCHANT_ID"),
-		PaymeKey:         os.Getenv("PAYME_KEY"),
+		SMSProvider:           get("SMS_PROVIDER", "log"),
+		EskizURL:              get("ESKIZ_URL", "https://notify.eskiz.uz/api"),
+		EskizEmail:            os.Getenv("ESKIZ_EMAIL"),
+		EskizPassword:         os.Getenv("ESKIZ_PASSWORD"),
+		EskizFrom:             get("ESKIZ_FROM", "4546"),
+		SMSTemplate:           get("SMS_OTP_TEMPLATE", "Kod dlya vhoda: %s"),
+		SiteURL:               strings.TrimRight(get("SITE_URL", "http://localhost:3000"), "/"),
+		TelegramBotToken:      os.Getenv("TELEGRAM_BOT_TOKEN"),
+		TelegramBotUsername:   strings.TrimPrefix(os.Getenv("TELEGRAM_BOT_USERNAME"), "@"),
+		TelegramWebhookSecret: os.Getenv("TELEGRAM_WEBHOOK_SECRET"),
+		TelegramWebhookURL:    os.Getenv("TELEGRAM_WEBHOOK_URL"),
+		OrderSMS:              getBool("ORDER_SMS_ENABLED", false),
+		OrderRemindAfter:      getDur("ORDER_REMIND_AFTER", 30*time.Minute),
+		PaymentReturnURL:      os.Getenv("PAYMENT_RETURN_URL"),
+		ClickServiceID:        os.Getenv("CLICK_SERVICE_ID"),
+		ClickMerchantID:       os.Getenv("CLICK_MERCHANT_ID"),
+		ClickSecretKey:        os.Getenv("CLICK_SECRET_KEY"),
+		ClickAllowedIPs:       splitList(os.Getenv("CLICK_ALLOWED_IPS")),
+		PaymeMerchantID:       os.Getenv("PAYME_MERCHANT_ID"),
+		PaymeKey:              os.Getenv("PAYME_KEY"),
 		// песочница по умолчанию только вне prod: забытая переменная не уведёт клиентов на test.paycom.uz
 		PaymeTest:        getBool("PAYME_TEST", get("APP_ENV", "dev") != "prod"),
 		PaymeAccountKey:  get("PAYME_ACCOUNT_KEY", "payment_id"),
@@ -244,6 +263,17 @@ func Load() (Config, error) {
 		errs = append(errs, errors.New("COOKIE_SECURE must be true in prod"))
 	}
 	errs = append(errs, c.validateTryOn()...)
+	if c.TelegramBotToken != "" {
+		if c.TelegramBotUsername == "" {
+			errs = append(errs, errors.New("TELEGRAM_BOT_USERNAME is required with TELEGRAM_BOT_TOKEN"))
+		}
+		if len(c.TelegramWebhookSecret) < 16 || strings.Trim(c.TelegramWebhookSecret, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-") != "" {
+			errs = append(errs, errors.New("TELEGRAM_WEBHOOK_SECRET must be 16+ chars of A-Z a-z 0-9 _ -"))
+		}
+	}
+	if c.OrderSMS && c.SMSProvider != "eskiz" && c.IsProd() {
+		errs = append(errs, errors.New("ORDER_SMS_ENABLED needs SMS_PROVIDER=eskiz"))
+	}
 	switch c.SMSProvider {
 	case "log":
 		if c.IsProd() {

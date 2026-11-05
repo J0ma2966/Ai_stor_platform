@@ -98,7 +98,8 @@ SMS стоит денег, поэтому код нужен только для 
 | GET | `/v1/admin/stores?status=&q=`, `/v1/admin/stores/{id}` (+ последние 20 записей журнала) | admin |
 | GET | `/v1/admin/users?role=client\|store\|admin&status=&q=`, `/v1/admin/users/{id}` (+ движение токенов и журнал) | admin |
 | GET | `/v1/admin/audit?action=&entity_type=&entity_id=&actor_id=` (`action=store.` — все действия с префиксом; курсор — id записи) | admin |
-| POST/GET | `/v1/orders`, `/v1/orders/{id}` | client |
+| POST/GET | `/v1/orders`, `/v1/orders/{id}` (позиция: `{"product_id","size","qty"}`; `size` обязателен у товара с размерами) | client |
+| POST | `/v1/orders/{id}/cancel` `{"reason"?}` — отмена клиентом в статусах pending/confirmed, иначе 409 `cannot_cancel`; остатки размеров возвращаются | client |
 | GET/POST | `/v1/store/orders`, `/v1/store/orders/{id}`, `/v1/store/orders/{id}/status` | store |
 | GET/POST | `/v1/admin/orders`, `/v1/admin/orders/{id}`, `/v1/admin/orders/{id}/status` | admin |
 | GET | `/v1/tariffs` | — |
@@ -109,12 +110,14 @@ SMS стоит денег, поэтому код нужен только для 
 | GET | `/v1/stores`, `/v1/stores/{slug}` | — (публичные бутики) |
 | GET | `/v1/platform` | — (стоимость генерации, контакты поддержки) |
 | DELETE | `/v1/me` `{"confirm":true}` | client (удаление аккаунта и ПД) |
-| GET/PUT/DELETE | `/v1/me/cart`, `/v1/me/cart/{product_id}` `{"qty"}` | client |
+| GET/PUT/DELETE | `/v1/me/cart`, `/v1/me/cart/{product_id}?size=M` `{"qty"}` (ошибки `size_required`, `size_unknown`, `out_of_stock`, `not_enough_stock`) | client |
 | GET/PUT/DELETE | `/v1/me/favorites`, `/v1/me/favorites/ids`, `/v1/me/favorites/{product_id}` | client |
 | GET/POST | `/v1/me/notifications`, `/v1/me/notifications/unread-count`, `/v1/me/notifications/read` `{"ids":[..]}` или `{"all":true}` | любая |
 | GET/PATCH | `/v1/store/profile` | store |
 | GET | `/v1/store/stats?from=YYYY-MM-DD&to=YYYY-MM-DD` | store |
-| GET/PATCH/DELETE | `/v1/store/products/{id}` | store |
+| GET/PATCH/DELETE | `/v1/store/products/{id}` (`"sizes":[{"size":"M","stock":3}]`, `[]` — убрать размеры; при создании тоже можно передать `sizes`) | store |
+| GET/POST/DELETE | `/v1/store/telegram`, `/v1/store/telegram/link` — статус, одноразовая ссылка t.me/<бот>?start=<код> (15 мин), отключение | store |
+| POST | `/v1/telegram/webhook` — обновления Telegram, заголовок `X-Telegram-Bot-Api-Secret-Token` | Telegram |
 | GET | `/v1/store/products/import/template` (xlsx) | store |
 | POST | `/v1/store/products/import` (тело — .xlsx, до 5 МБ, 2000 строк) | store |
 | POST | `/v1/store/products/images/bulk` `{"items":[{"filename":"SKU_front.jpg","key":"..."}]}` | store |

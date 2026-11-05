@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { parseItemsParam } from "@/lib/orders";
+import { itemsParam, parseItemsParam } from "@/lib/orders";
 import { safeNext } from "@/lib/safeNext";
 import { formatSum } from "@/lib/money";
 import { api, ApiError, currentRole, setOnAuthLost, setSession } from "@/lib/api";
@@ -10,6 +10,11 @@ describe("parseItemsParam", () => {
   it("accepts valid ids and qty, drops junk and duplicates", () => {
     expect(parseItemsParam(`${ID}:2,not-a-uuid:1,${ID}:3,${ID.replace("3f", "4f")}:0`)).toEqual([{ product_id: ID, qty: 2 }]);
     expect(parseItemsParam(null)).toEqual([]);
+  });
+  it("keeps size per item: same product in two sizes, round-trips through the URL", () => {
+    const items = [{ product_id: ID, qty: 1, size: "M" }, { product_id: ID, qty: 2, size: "38/40" }, { product_id: ID, qty: 1, size: "M" }];
+    expect(parseItemsParam(itemsParam(items))).toEqual(items.slice(0, 2));
+    expect(parseItemsParam(`${ID}:1:%E0%A4%A`)).toEqual([]);
   });
 });
 

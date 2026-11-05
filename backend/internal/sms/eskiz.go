@@ -55,6 +55,12 @@ func (e *Eskiz) SendOTP(ctx context.Context, phone, code string) error {
 	if strings.Contains(e.Template, "%s") {
 		msg = fmt.Sprintf(e.Template, code)
 	}
+	return e.SendText(ctx, phone, msg)
+}
+
+// SendText отправляет произвольный текст. Eskiz пропустит его, только если текст
+// совпадает с шаблоном, одобренным в кабинете (уведомления о заказах — docs/NOTIFICATIONS.md).
+func (e *Eskiz) SendText(ctx context.Context, phone, msg string) error {
 	tok, err := e.getToken(ctx, false)
 	if err != nil {
 		return err

@@ -76,7 +76,12 @@
     "current_password_required": "Joriy parolni kiriting.",
     "current_password_wrong": "Joriy parol noto‘g‘ri.",
     "review_not_allowed": "Sharhni ushbu mahsulot bilan buyurtmani olganingizdan keyin qoldirish mumkin.",
-    "review_hidden": "Sharh moderator tomonidan yashirilgan, uni o‘zgartirib bo‘lmaydi. Uni o‘chirish mumkin."
+    "review_hidden": "Sharh moderator tomonidan yashirilgan, uni o‘zgartirib bo‘lmaydi. Uni o‘chirish mumkin.",
+    "size_required": "O'lchamni tanlang.",
+    "size_unknown": "Bunday o'lcham yo'q. Sahifani yangilang.",
+    "not_enough_stock": "Bu o'lchamdan buncha mahsulot qolmagan.",
+    "cannot_cancel": "Do'kon buyurtmani yig'ishni boshlagan yoki jo'natgan, uni bekor qilib bo'lmaydi. Do'kon bilan bog'laning.",
+    "telegram_disabled": "Telegram-bot platformada hali ulanmagan."
   },
   "fieldErrors": {
     "required": "Majburiy maydon",
@@ -100,7 +105,10 @@
     "self": "O‘zini tanlab bo‘lmaydi",
     "oneof": "Ruxsat etilmagan qiymat",
     "zone_taken": "Bu zonada allaqachon kiyim bor",
-    "already_saved": "Foto allaqachon saqlangan"
+    "already_saved": "Foto allaqachon saqlangan",
+    "size_required": "O'lcham tanlanmagan",
+    "size_unknown": "O'lcham endi yo'q",
+    "not_enough_stock": "Yetarli emas"
   },
   "status": {
     "pending": "Tasdiqlanishi kutilmoqda",
@@ -199,7 +207,8 @@
     "successTitle": "Buyurtma qabul qilindi",
     "successSplit": "Turli butiklardagi mahsulotlar alohida buyurtmalar sifatida rasmiylashtirildi. Har bir butik o‘z buyurtmasini tasdiqlaydi.",
     "orderLine": "Buyurtma №{number} · {store} · {total}",
-    "toOrders": "Buyurtmalarimga o‘tish"
+    "toOrders": "Buyurtmalarimga o‘tish",
+    "size": "o'lcham {size}"
   },
   "orders": {
     "empty": "Hozircha buyurtmalar yo‘q.",
@@ -217,7 +226,14 @@
     "filterAll": "Hammasi",
     "filterNew": "Yangi",
     "filterActive": "Jarayonda",
-    "filterDone": "Yakunlangan"
+    "filterDone": "Yakunlangan",
+    "cancel": "Buyurtmani bekor qilish",
+    "cancelConfirm": "№{number} buyurtma bekor qilinsinmi? Do'konga xabar boradi.",
+    "cancelReason": "Sabab (ixtiyoriy)",
+    "cancelYes": "Ha, bekor qilish",
+    "cancelNo": "Yo'q",
+    "cancelled": "Buyurtma bekor qilindi",
+    "cancelHint": "Do'kon yig'ishni boshlamaguncha bekor qilish mumkin."
   },
   "window": {
     "title": "Buyurtma №{number} yetkazilishi",
@@ -368,7 +384,11 @@
     "retry": "Qayta urinish",
     "perkDelivery": "Butikdan qulay vaqtda yetkazib berish",
     "perkPay": "Qabul qilganda to‘lov",
-    "perkSeller": "Sotuvchi: {store}"
+    "perkSeller": "Sotuvchi: {store}",
+    "size": "O'lcham",
+    "chooseSize": "O'lchamni tanlang",
+    "sizeOut": "mavjud emas",
+    "sizeLow": "kam qoldi"
   },
   "stores": {
     "title": "Butiklar",
@@ -398,7 +418,10 @@
     "splitHint": "Buyurtma do‘konlar bo‘yicha bo‘linadi: har bir butik o‘z qismini tasdiqlaydi va yetkazadi.",
     "payHint": "To‘lov mahsulotni qabul qilganda.",
     "loginTitle": "Savatni ko‘rish uchun kiring",
-    "store": "«{store}» do‘koni"
+    "store": "«{store}» do‘koni",
+    "size": "O'lcham: {size}",
+    "notEnough": "Faqat {n} dona qoldi",
+    "sizeRequired": "Mahsulot sahifasida o'lchamni tanlang"
   },
   "account": {
     "title": "Shaxsiy kabinet",
@@ -471,7 +494,8 @@
       "review_created": "«{title}» mahsuloti haqida yangi sharh",
       "review_reply": "Do‘kon «{title}» haqidagi sharhingizga javob berdi",
       "review_hidden": "«{title}» haqidagi sharhingiz moderator tomonidan yashirildi",
-      "system": "Platforma xabari"
+      "system": "Platforma xabari",
+      "order_cancelled": "Mijoz №{number} buyurtmani bekor qildi"
     },
     "modStatus": {
       "unpublished": "nashrdan olindi",
@@ -559,13 +583,24 @@
     "saved": "O‘zgarishlar saqlandi",
     "created": "Mahsulot yaratildi",
     "needPhotos": "Uchala suratni yuklang.",
-    "publishNow": "Darhol nashr etish"
+    "publishNow": "Darhol nashr etish",
+    "sizes": "O'lchamlar va qoldiq",
+    "sizesHint": "Agar mahsulotning o'lchamlari bo'lsa, har biri bo'yicha sonini kiriting. Mavjudlik avtomatik hisoblanadi, buyurtmada qoldiq kamayadi.",
+    "noSizes": "O'lchamsiz (sumkalar, aksessuarlar)",
+    "sizeName": "O'lcham",
+    "stock": "Qoldiq, dona",
+    "addSize": "O'lcham qo'shish",
+    "removeSize": "{size} o'lchamini olib tashlash",
+    "presetLetters": "XS–XXL",
+    "presetRu": "42–54",
+    "presetShoes": "Poyabzal 36–45",
+    "totalStock": "Jami: {n} dona"
   },
   "import": {
     "title": "Mahsulotlarni import qilish",
     "excelTitle": "1. Mahsulotlar Excel fayli",
     "excelText": "Shablonni yuklab oling, har bir mahsulot uchun bir qator to‘ldiring va faylni yuklang. Yangi mahsulotlar qoralama sifatida yaratiladi, mavjudlari (artikul bo‘yicha) yangilanadi.",
-    "columns": "Ustunlar: sku (artikul; bo‘sh bo‘lsa — avtomatik beriladi), title, description, category (kategoriya kodi yoki nomi), brand, price (so‘mda), in_stock (ha/yo‘q).",
+    "columns": "Ustunlar: sku (artikul; bo‘sh bo‘lsa — avtomatik beriladi), title, description, category (kategoriya kodi yoki nomi), brand, price (so‘mda), in_stock (ha/yo‘q). Ixtiyoriy sizes ustuni — o'lchamlar va qoldiq, masalan «S:2; M:5; L:0».",
     "template": "Shablonni yuklab olish",
     "chooseFile": ".xlsx faylni tanlash",
     "uploading": "Yuklanmoqda…",
@@ -613,7 +648,16 @@
     "lat": "Kenglik",
     "lng": "Uzunlik",
     "removeImage": "Olib tashlash",
-    "publicPage": "Do‘kon sahifasini ochish"
+    "publicPage": "Do‘kon sahifasini ochish",
+    "tgTitle": "Telegram'da bildirishnomalar",
+    "tgText": "Yangi buyurtmalar Telegram'ga keladi, ularni bitta tugma bilan tasdiqlash mumkin. Buyurtma 30 daqiqada tasdiqlanmasa, bot eslatadi.",
+    "tgConnect": "Telegram'ni ulash",
+    "tgOpen": "Botni ochib «Start» ni bosing",
+    "tgLinkHint": "Havola 15 daqiqa amal qiladi. «Start» ni bosgandan keyin sahifani yangilang.",
+    "tgConnected": "Telegram ulangan",
+    "tgDisconnect": "O'chirish",
+    "tgRefresh": "Ulanishni tekshirish",
+    "tgUnavailable": "Bot platformada hali sozlanmagan. Administratorga murojaat qiling."
   },
   "adminCat": {
     "products": "Mahsulotlar moderatsiyasi",

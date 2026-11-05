@@ -29,6 +29,12 @@ func (s LogSender) SendOTP(_ context.Context, phone, code string) error {
 	return nil
 }
 
+// SendText — SMS-уведомление в лог (dev/test).
+func (s LogSender) SendText(_ context.Context, phone, text string) error {
+	s.Log.Info("DEV SMS (never in prod)", slog.String("phone_tail", tail(phone)), slog.String("text", text))
+	return nil
+}
+
 func tail(p string) string {
 	if len(p) <= 4 {
 		return p

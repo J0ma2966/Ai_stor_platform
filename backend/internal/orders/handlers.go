@@ -21,6 +21,7 @@ import (
 	"github.com/boutique-market/backend/internal/httpx"
 	"github.com/boutique-market/backend/internal/media"
 	"github.com/boutique-market/backend/internal/notify"
+	"github.com/boutique-market/backend/internal/outbox"
 	"github.com/boutique-market/backend/internal/platform/db"
 	"github.com/boutique-market/backend/internal/ratelimit"
 )
@@ -36,6 +37,10 @@ type Handlers struct {
 	Limiter *ratelimit.Limiter
 	// PublicBase — базовый URL CDN для публичных картинок товаров.
 	PublicBase string
+	// SiteURL — адрес сайта для ссылок в Telegram и SMS (https://example.uz).
+	SiteURL string
+	// OrderSMS — слать клиенту SMS о смене статуса (тексты должны быть одобрены в Eskiz).
+	OrderSMS bool
 }
 
 var ruleCheckout = ratelimit.Rule{Name: "checkout_user", Limit: 20, Window: time.Hour}
@@ -45,6 +50,7 @@ func (h *Handlers) ClientRoutes(r chi.Router) {
 	r.Post("/", h.checkout)
 	r.Get("/", h.listHandler)
 	r.Get("/{id}", h.get)
+	r.Post("/{id}/cancel", h.clientCancel)
 }
 
 // StoreRoutes монтируются под /v1/store/orders (только роль store).
@@ -65,6 +71,7 @@ func (h *Handlers) AdminRoutes(r chi.Router) {
 
 type checkoutItem struct {
 	ProductID uuid.UUID `json:"product_id"`
+	Size      string    `json:"size,omitempty"` // обязателен, если у товара есть размеры
 	Qty       int       `json:"qty"`
 }
 
@@ -237,14 +244,50 @@ func (h *Handlers) createOrders(ctx context.Context, tx pgx.Tx, p auth.Principal
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	// Остатки размеров блокируются до конца транзакции: два покупателя не купят последнюю вещь дважды.
+	rows, err = tx.Query(ctx, `SELECT product_id, size, stock FROM product_sizes WHERE product_id = ANY($1)
+		ORDER BY product_id, size FOR UPDATE`, ids)
+	if err != nil {
+		return nil, err
+	}
+	stock := map[uuid.UUID]map[string]int{}
+	for rows.Next() {
+		var pid uuid.UUID
+		var size string
+		var n int
+		if err := rows.Scan(&pid, &size, &n); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		if stock[pid] == nil {
+			stock[pid] = map[string]int{}
+		}
+		stock[pid][size] = n
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	unavailable := map[string]string{}
-	for _, id := range ids {
+	for _, it := range req.Items {
+		id := it.ProductID
 		pr, ok := byID[id]
+		sizes, hasSizes := stock[id]
+		left, sizeOK := sizes[it.Size]
+		key := id.String()
+		if it.Size != "" {
+			key += ":" + it.Size
+		}
 		switch {
 		case !ok || pr.status != "published" || pr.storeStatus != "active":
-			unavailable[id.String()] = "unavailable"
-		case !pr.inStock:
-			unavailable[id.String()] = "out_of_stock"
+			unavailable[key] = "unavailable"
+		case hasSizes && it.Size == "":
+			unavailable[key] = "size_required"
+		case hasSizes && !sizeOK, !hasSizes && it.Size != "":
+			unavailable[key] = "size_unknown"
+		case hasSizes && left == 0, !hasSizes && !pr.inStock:
+			unavailable[key] = "out_of_stock"
+		case hasSizes && left < it.Qty:
+			unavailable[key] = "not_enough_stock"
 		}
 	}
 	if len(unavailable) > 0 {
@@ -289,8 +332,11 @@ func (h *Handlers) createOrders(ctx context.Context, tx pgx.Tx, p auth.Principal
 		batch := &pgx.Batch{}
 		for _, it := range g.items {
 			pr := byID[it.ProductID]
-			batch.Queue(`INSERT INTO order_items (order_id, product_id, title, brand, image_key, unit_price, qty)
-				VALUES ($1, $2, $3, $4, $5, $6, $7)`, o.ID, pr.id, pr.title, pr.brand, pr.imageKey, pr.price, it.Qty)
+			batch.Queue(`INSERT INTO order_items (order_id, product_id, title, brand, image_key, unit_price, qty, size)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''))`, o.ID, pr.id, pr.title, pr.brand, pr.imageKey, pr.price, it.Qty, it.Size)
+			if it.Size != "" {
+				batch.Queue(`UPDATE product_sizes SET stock = stock - $3 WHERE product_id = $1 AND size = $2`, pr.id, it.Size, it.Qty)
+			}
 		}
 		batch.Queue(`INSERT INTO order_deliveries (order_id, street, house, entrance, floor, apartment, intercom,
 				address_comment, lat, lng, photo_key)
@@ -305,10 +351,23 @@ func (h *Handlers) createOrders(ctx context.Context, tx pgx.Tx, p auth.Principal
 			map[string]any{"order_id": o.ID, "number": o.Number}); err != nil {
 			return nil, err
 		}
+		lines := make([]msgLine, len(g.items))
+		for i, it := range g.items {
+			pr := byID[it.ProductID]
+			lines[i] = msgLine{title: pr.title, size: it.Size, qty: it.Qty, price: pr.price}
+		}
+		if err := outbox.ToStoreTelegram(ctx, tx, g.storeID, newOrderMessage(h.SiteURL, o.ID, o.Number, lines, g.total, req.DeliveryTimeComment)); err != nil {
+			return nil, err
+		}
 		resp.Orders = append(resp.Orders, o)
 	}
-	// Оформленные товары убираем из корзины.
-	if _, err := tx.Exec(ctx, `DELETE FROM cart_items WHERE user_id = $1 AND product_id = ANY($2)`, p.UserID, ids); err != nil {
+	// Оформленные позиции (товар + размер) убираем из корзины.
+	sizes := make([]string, len(req.Items))
+	for i, it := range req.Items {
+		sizes[i] = it.Size
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM cart_items ci USING unnest($2::uuid[], $3::text[]) AS x(pid, size)
+		WHERE ci.user_id = $1 AND ci.product_id = x.pid AND ci.size = x.size`, p.UserID, ids, sizes); err != nil {
 		return nil, err
 	}
 	return resp, nil
@@ -323,6 +382,7 @@ type Item struct {
 	ImageURL  string     `json:"image_url,omitempty"`
 	UnitPrice int64      `json:"unit_price"`
 	Qty       int        `json:"qty"`
+	Size      *string    `json:"size,omitempty"`
 	imageKey  *string
 }
 
@@ -361,6 +421,7 @@ type Detail struct {
 	History             []HistoryEntry `json:"history"`
 	NextStatuses        []Status       `json:"next_statuses,omitempty"` // только магазину/админу
 	CopyText            string         `json:"copy_text,omitempty"`     // только магазину/админу
+	CanCancel           bool           `json:"can_cancel,omitempty"`    // только клиенту: можно отменить
 }
 
 // scope — фильтр видимости. Каждый запрос к заказам обязан идти через него.
@@ -520,14 +581,14 @@ func (h *Handlers) load(ctx context.Context, q interface {
 	d.MapsURL = mapsURL(d.Lat, d.Lng)
 	o.Delivery = d
 
-	rows, err := q.Query(ctx, `SELECT product_id, title, brand, image_key, unit_price, qty
-		FROM order_items WHERE order_id = $1 ORDER BY title, id`, id)
+	rows, err := q.Query(ctx, `SELECT product_id, title, brand, image_key, unit_price, qty, size
+		FROM order_items WHERE order_id = $1 ORDER BY title, size, id`, id)
 	if err != nil {
 		return nil, err
 	}
 	o.Items, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (Item, error) {
 		var it Item
-		err := row.Scan(&it.ProductID, &it.Title, &it.Brand, &it.imageKey, &it.UnitPrice, &it.Qty)
+		err := row.Scan(&it.ProductID, &it.Title, &it.Brand, &it.imageKey, &it.UnitPrice, &it.Qty, &it.Size)
 		return it, err
 	})
 	if err != nil {
@@ -577,6 +638,7 @@ func (h *Handlers) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.sign(r.Context(), o)
+	o.CanCancel = p.Role == auth.RoleClient && ClientCanCancel(o.Status)
 	if p.Role == auth.RoleStore || p.Role == auth.RoleAdmin {
 		o.NextStatuses = NextStatuses(o.Status)
 		tc := ""
@@ -610,67 +672,56 @@ func (h *Handlers) setStatus(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, r, err)
 		return
 	}
-	req.Reason = clean(req.Reason, true)
-	if trimmedLen(req.Reason) > MaxReason {
-		httpx.Fail(w, r, validationErr(map[string]string{"reason": "max"}))
-		return
-	}
 	var out *Detail
 	err = db.Tx(r.Context(), h.DB, func(tx pgx.Tx) error {
-		where, scopeArg := scope(p)
-		var cur Status
-		var customerID uuid.UUID
-		var number int64
-		err := tx.QueryRow(r.Context(), `SELECT o.status::text, o.user_id, o.number FROM orders o WHERE `+where+` AND o.id = $2 FOR UPDATE`, scopeArg, id).Scan(&cur, &customerID, &number)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return httpx.ErrNotFound
-		}
-		if err != nil {
-			return err
-		}
-		if req.From != "" && req.From != cur {
-			return &httpx.Error{Status: http.StatusConflict, Code: "status_changed", Message: "order status was changed by someone else",
-				Fields: map[string]string{"current": string(cur)}}
-		}
-		switch err := CheckTransition(p.Role, cur, req.Status, req.Reason); {
-		case errors.Is(err, ErrForbidden):
-			return httpx.ErrForbidden
-		case errors.Is(err, ErrReasonRequired):
-			return validationErr(map[string]string{"reason": "required"})
-		case errors.Is(err, ErrInvalidTransition):
-			return &httpx.Error{Status: http.StatusConflict, Code: "invalid_transition",
-				Message: "transition " + string(cur) + " -> " + string(req.Status) + " is not allowed",
-				Fields:  map[string]string{"current": string(cur)}}
-		case err != nil:
-			return err
-		}
-		reason := req.Reason
-		if req.Status != StatusRejected && req.Status != StatusCancelled {
-			reason = ""
-		}
-		if _, err := tx.Exec(r.Context(), `UPDATE orders SET status = $2,
-				rejection_reason = COALESCE(NULLIF($3, ''), rejection_reason) WHERE id = $1`, id, string(req.Status), reason); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(r.Context(), `INSERT INTO order_status_history (order_id, from_status, to_status, actor_id, actor_role, reason)
-				VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''))`, id, string(cur), string(req.Status), p.UserID, string(p.Role), reason); err != nil {
-			return err
-		}
-		if err := audit.Log(r.Context(), tx, "order.status", "order", id.String(),
-			map[string]any{"from": cur, "to": req.Status}); err != nil {
-			return err
-		}
-		if err := notify.Send(r.Context(), tx, customerID, notify.OrderStatus,
-			map[string]any{"order_id": id, "number": number, "status": req.Status}); err != nil {
-			return err
-		}
-		out, err = h.load(r.Context(), tx, p, id)
+		var err error
+		out, err = h.ApplyStatus(r.Context(), tx, p, id, req)
 		return err
 	})
 	if err != nil {
 		httpx.Fail(w, r, err)
 		return
 	}
+	h.respondDetail(w, r, out)
+}
+
+type cancelReq struct {
+	Reason string `json:"reason"`
+}
+
+// clientCancel: POST /v1/orders/{id}/cancel — клиент отменяет свой заказ,
+// пока магазин не начал сборку (статусы pending и confirmed).
+func (h *Handlers) clientCancel(w http.ResponseWriter, r *http.Request) {
+	p := auth.MustFrom(r.Context())
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		httpx.Fail(w, r, httpx.ErrNotFound)
+		return
+	}
+	var req cancelReq
+	if r.ContentLength != 0 {
+		if err := httpx.Decode(w, r, &req); err != nil {
+			httpx.Fail(w, r, err)
+			return
+		}
+	}
+	var out *Detail
+	err = db.Tx(r.Context(), h.DB, func(tx pgx.Tx) error {
+		var err error
+		out, err = h.ApplyStatus(r.Context(), tx, p, id, statusReq{Status: StatusCancelled, Reason: req.Reason})
+		return err
+	})
+	if err != nil {
+		httpx.Fail(w, r, err)
+		return
+	}
+	h.sign(r.Context(), out)
+	out.CanCancel = ClientCanCancel(out.Status)
+	w.Header().Set("Cache-Control", "no-store")
+	httpx.JSON(w, http.StatusOK, out)
+}
+
+func (h *Handlers) respondDetail(w http.ResponseWriter, r *http.Request, out *Detail) {
 	h.sign(r.Context(), out)
 	out.NextStatuses = NextStatuses(out.Status)
 	tc := ""
@@ -680,4 +731,107 @@ func (h *Handlers) setStatus(w http.ResponseWriter, r *http.Request) {
 	out.CopyText = CopyText(out.Number, out.CustomerName, out.CustomerPhone, tc, out.Delivery)
 	w.Header().Set("Cache-Control", "no-store")
 	httpx.JSON(w, http.StatusOK, out)
+}
+
+// ApplyStatus меняет статус заказа в транзакции tx от имени p (магазин, админ,
+// клиент — только отмена). Используется API и Telegram-ботом магазина.
+// Побочные эффекты в той же транзакции: история, аудит, возврат остатков при
+// отказе/отмене, уведомления в кабинет, Telegram магазину и SMS клиенту.
+func (h *Handlers) ApplyStatus(ctx context.Context, tx pgx.Tx, p auth.Principal, id uuid.UUID, req statusReq) (*Detail, error) {
+	req.Reason = clean(req.Reason, true)
+	if trimmedLen(req.Reason) > MaxReason {
+		return nil, validationErr(map[string]string{"reason": "max"})
+	}
+	where, scopeArg := scope(p)
+	var cur Status
+	var customerID, storeID uuid.UUID
+	var number int64
+	var phone string
+	err := tx.QueryRow(ctx, `SELECT o.status::text, o.user_id, o.store_id, o.number, o.customer_phone FROM orders o
+		WHERE `+where+` AND o.id = $2 FOR UPDATE`, scopeArg, id).Scan(&cur, &customerID, &storeID, &number, &phone)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, httpx.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if req.From != "" && req.From != cur {
+		return nil, &httpx.Error{Status: http.StatusConflict, Code: "status_changed", Message: "order status was changed by someone else",
+			Fields: map[string]string{"current": string(cur)}}
+	}
+	check := CheckTransition(p.Role, cur, req.Status, req.Reason)
+	if p.Role == auth.RoleClient {
+		check = CheckClientCancel(cur, req.Status)
+	}
+	switch {
+	case errors.Is(check, ErrForbidden):
+		return nil, httpx.ErrForbidden
+	case errors.Is(check, ErrReasonRequired):
+		return nil, validationErr(map[string]string{"reason": "required"})
+	case errors.Is(check, ErrInvalidTransition):
+		code := "invalid_transition"
+		if p.Role == auth.RoleClient {
+			code = "cannot_cancel" // магазин уже собирает или отправил заказ
+		}
+		return nil, &httpx.Error{Status: http.StatusConflict, Code: code,
+			Message: "transition " + string(cur) + " -> " + string(req.Status) + " is not allowed",
+			Fields:  map[string]string{"current": string(cur)}}
+	case check != nil:
+		return nil, check
+	}
+	reason := req.Reason
+	if req.Status != StatusRejected && req.Status != StatusCancelled {
+		reason = ""
+	}
+	if _, err := tx.Exec(ctx, `UPDATE orders SET status = $2,
+			rejection_reason = COALESCE(NULLIF($3, ''), rejection_reason) WHERE id = $1`, id, string(req.Status), reason); err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO order_status_history (order_id, from_status, to_status, actor_id, actor_role, reason)
+			VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''))`, id, string(cur), string(req.Status), p.UserID, string(p.Role), reason); err != nil {
+		return nil, err
+	}
+	if err := audit.Log(ctx, tx, "order.status", "order", id.String(),
+		map[string]any{"from": cur, "to": req.Status}); err != nil {
+		return nil, err
+	}
+	if req.Status == StatusRejected || req.Status == StatusCancelled {
+		// вещи возвращаются в продажу (если размер ещё существует)
+		if _, err := tx.Exec(ctx, `UPDATE product_sizes ps SET stock = LEAST(ps.stock + oi.qty, 100000)
+			FROM order_items oi WHERE oi.order_id = $1 AND oi.size IS NOT NULL
+			  AND ps.product_id = oi.product_id AND ps.size = oi.size`, id); err != nil {
+			return nil, err
+		}
+	}
+	if p.Role == auth.RoleClient {
+		if err := notify.SendToStore(ctx, tx, storeID, notify.OrderCancelled,
+			map[string]any{"order_id": id, "number": number}); err != nil {
+			return nil, err
+		}
+		if err := outbox.ToStoreTelegram(ctx, tx, storeID, cancelledMessage(h.SiteURL, id, number, reason)); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := notify.Send(ctx, tx, customerID, notify.OrderStatus,
+			map[string]any{"order_id": id, "number": number, "status": req.Status}); err != nil {
+			return nil, err
+		}
+		if h.OrderSMS {
+			var lang string
+			if err := tx.QueryRow(ctx, `SELECT lang::text FROM users WHERE id = $1`, customerID).Scan(&lang); err != nil {
+				return nil, err
+			}
+			if err := outbox.ToSMS(ctx, tx, phone, statusSMS(number, req.Status, lang)); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return h.load(ctx, tx, p, id)
+}
+
+// ConfirmByStore подтверждает заказ от имени магазина (кнопка в Telegram).
+// Заказ должен быть в статусе pending, иначе — ошибка status_changed.
+func (h *Handlers) ConfirmByStore(ctx context.Context, tx pgx.Tx, p auth.Principal, id uuid.UUID) error {
+	_, err := h.ApplyStatus(ctx, tx, p, id, statusReq{Status: StatusConfirmed, From: StatusPending})
+	return err
 }

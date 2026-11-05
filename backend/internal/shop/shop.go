@@ -6,6 +6,7 @@ package shop
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -17,6 +18,7 @@ import (
 	"github.com/boutique-market/backend/internal/httpx"
 	"github.com/boutique-market/backend/internal/media"
 	"github.com/boutique-market/backend/internal/platform/db"
+	"github.com/boutique-market/backend/internal/products"
 )
 
 const (
@@ -33,6 +35,7 @@ type Handlers struct {
 // CartRoutes монтируются под /v1/me/cart (только клиент).
 func (h *Handlers) CartRoutes(r chi.Router) {
 	r.Get("/", h.cart)
+	// ?size=M — размер, если у товара есть размеры
 	r.Put("/{productID}", h.cartPut)
 	r.Delete("/{productID}", h.cartDelete)
 	r.Delete("/", h.cartClear)
@@ -59,24 +62,34 @@ type Card struct {
 	Zone        string    `json:"zone"`
 	ImageURL    string    `json:"image_url,omitempty"`
 	InStock     bool      `json:"in_stock"`
+	HasSizes    bool      `json:"has_sizes"`
+	Size        string    `json:"size,omitempty"`
+	SizeStock   *int      `json:"size_stock,omitempty"` // остаток выбранного размера (только если меньше количества)
 	Available   bool      `json:"available"`
-	Unavailable string    `json:"unavailable_reason,omitempty"` // out_of_stock | unavailable
+	Unavailable string    `json:"unavailable_reason,omitempty"` // out_of_stock | not_enough_stock | size_required | unavailable
 	Qty         int       `json:"qty,omitempty"`
 	AddedAt     time.Time `json:"added_at"`
 	imageKey    *string
 	status      string
 	storeStatus string
+	stock       *int // остаток размера из корзины (nil — размер не найден)
 }
 
 func (c *Card) finish(base string) {
 	if c.imageKey != nil {
 		c.ImageURL = media.PublicURL(base, *c.imageKey)
 	}
+	inCart := c.Qty > 0
 	switch {
 	case c.status != "published" || c.storeStatus != "active":
 		c.Unavailable = "unavailable"
-	case !c.InStock:
+	case inCart && c.HasSizes && c.stock == nil:
+		c.Unavailable = "size_required" // размер удалён магазином или не выбран
+	case inCart && c.HasSizes && *c.stock == 0, !c.HasSizes && !c.InStock, !inCart && !c.InStock:
 		c.Unavailable = "out_of_stock"
+	case inCart && c.HasSizes && *c.stock < c.Qty:
+		c.Unavailable = "not_enough_stock"
+		c.SizeStock = c.stock
 	default:
 		c.Available = true
 	}
@@ -84,11 +97,11 @@ func (c *Card) finish(base string) {
 
 const cardCols = `p.id, p.title, p.brand, p.price, p.store_id, s.name, p.category_id, c.zone::text,
 	(SELECT key FROM product_images pi WHERE pi.product_id = p.id AND pi.angle = 'front'),
-	p.in_stock, p.status::text, s.status::text`
+	p.in_stock, EXISTS (SELECT 1 FROM product_sizes ps WHERE ps.product_id = p.id), p.status::text, s.status::text`
 
 func scanCard(row pgx.Row, c *Card, extra ...any) error {
 	dst := append([]any{&c.ProductID, &c.Title, &c.Brand, &c.Price, &c.StoreID, &c.StoreName, &c.CategoryID, &c.Zone,
-		&c.imageKey, &c.InStock, &c.status, &c.storeStatus}, extra...)
+		&c.imageKey, &c.InStock, &c.HasSizes, &c.status, &c.storeStatus}, extra...)
 	return row.Scan(dst...)
 }
 
@@ -119,7 +132,7 @@ func (h *Handlers) loadCart(r *http.Request, uid uuid.UUID) (*CartView, error) {
 	v := &CartView{Items: []Card{}}
 	for rows.Next() {
 		var c Card
-		if err := scanCard(rows, &c, &c.Qty, &c.AddedAt); err != nil {
+		if err := scanCard(rows, &c, &c.Qty, &c.AddedAt, &c.Size, &c.stock); err != nil {
 			return nil, err
 		}
 		c.finish(h.PublicBase)
@@ -155,7 +168,8 @@ type qtyReq struct {
 var errLimit = errors.New("limit")
 
 // cartPut — добавить товар или задать количество. Добавить можно только
-// опубликованный товар активного магазина, который есть в наличии.
+// опубликованный товар активного магазина, который есть в наличии. Если у товара
+// есть размеры, размер обязателен (?size=M) и количество не больше остатка.
 func (h *Handlers) cartPut(w http.ResponseWriter, r *http.Request) {
 	pid, err := productID(r)
 	if err != nil {
@@ -167,18 +181,41 @@ func (h *Handlers) cartPut(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, r, err)
 		return
 	}
+	size := products.NormalizeSize(r.URL.Query().Get("size"))
 	uid := auth.MustFrom(r.Context()).UserID
 	err = db.Tx(r.Context(), h.DB, func(tx pgx.Tx) error {
-		var inStock bool
-		err := tx.QueryRow(r.Context(), `SELECT p.in_stock FROM products p JOIN stores s ON s.id = p.store_id
-			WHERE p.id = $1 AND p.status = 'published' AND s.status = 'active'`, pid).Scan(&inStock)
+		var inStock, hasSizes bool
+		err := tx.QueryRow(r.Context(), `SELECT p.in_stock, EXISTS (SELECT 1 FROM product_sizes ps WHERE ps.product_id = p.id)
+			FROM products p JOIN stores s ON s.id = p.store_id
+			WHERE p.id = $1 AND p.status = 'published' AND s.status = 'active'`, pid).Scan(&inStock, &hasSizes)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return httpx.ErrNotFound
 		}
 		if err != nil {
 			return err
 		}
-		if !inStock {
+		switch {
+		case hasSizes && size == "":
+			return &httpx.Error{Status: 422, Code: "size_required", Message: "choose a size", Fields: map[string]string{"size": "required"}}
+		case hasSizes:
+			var stock int
+			err := tx.QueryRow(r.Context(), `SELECT stock FROM product_sizes WHERE product_id = $1 AND size = $2`, pid, size).Scan(&stock)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return &httpx.Error{Status: 422, Code: "size_unknown", Message: "no such size", Fields: map[string]string{"size": "unknown"}}
+			}
+			if err != nil {
+				return err
+			}
+			if stock == 0 {
+				return httpx.NewError(http.StatusConflict, "out_of_stock", "size is out of stock")
+			}
+			if req.Qty > stock {
+				return &httpx.Error{Status: http.StatusConflict, Code: "not_enough_stock", Message: "not enough items of this size",
+					Fields: map[string]string{"available": strconv.Itoa(stock)}}
+			}
+		case size != "":
+			return &httpx.Error{Status: 422, Code: "size_unknown", Message: "product has no sizes", Fields: map[string]string{"size": "unknown"}}
+		case !inStock:
 			return httpx.NewError(http.StatusConflict, "out_of_stock", "product is out of stock")
 		}
 		// лимит позиций: блокируем строку пользователя, чтобы параллельные запросы не обошли его
@@ -186,14 +223,15 @@ func (h *Handlers) cartPut(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		var n int
-		if err := tx.QueryRow(r.Context(), `SELECT count(*) FROM cart_items WHERE user_id = $1 AND product_id <> $2`, uid, pid).Scan(&n); err != nil {
+		if err := tx.QueryRow(r.Context(), `SELECT count(*) FROM cart_items WHERE user_id = $1 AND NOT (product_id = $2 AND size = $3)`,
+			uid, pid, size).Scan(&n); err != nil {
 			return err
 		}
 		if n >= MaxCartItems {
 			return errLimit
 		}
-		_, err = tx.Exec(r.Context(), `INSERT INTO cart_items (user_id, product_id, qty) VALUES ($1, $2, $3)
-			ON CONFLICT (user_id, product_id) DO UPDATE SET qty = EXCLUDED.qty`, uid, pid, req.Qty)
+		_, err = tx.Exec(r.Context(), `INSERT INTO cart_items (user_id, product_id, size, qty) VALUES ($1, $2, $3, $4)
+			ON CONFLICT (user_id, product_id, size) DO UPDATE SET qty = EXCLUDED.qty`, uid, pid, size, req.Qty)
 		return err
 	})
 	if errors.Is(err, errLimit) {
@@ -213,8 +251,9 @@ func (h *Handlers) cartDelete(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, r, err)
 		return
 	}
-	if _, err := h.DB.Exec(r.Context(), `DELETE FROM cart_items WHERE user_id = $1 AND product_id = $2`,
-		auth.MustFrom(r.Context()).UserID, pid); err != nil {
+	size := products.NormalizeSize(r.URL.Query().Get("size"))
+	if _, err := h.DB.Exec(r.Context(), `DELETE FROM cart_items WHERE user_id = $1 AND product_id = $2 AND size = $3`,
+		auth.MustFrom(r.Context()).UserID, pid, size); err != nil {
 		httpx.Fail(w, r, err)
 		return
 	}
@@ -332,10 +371,11 @@ func (h *Handlers) favoriteDelete(w http.ResponseWriter, r *http.Request) {
 
 // Запросы собираются из констант на этапе компиляции.
 const (
-	cartSQL = `SELECT ` + cardCols + `, ci.qty, ci.added_at
+	cartSQL = `SELECT ` + cardCols + `, ci.qty, ci.added_at, ci.size, sz.stock
 		FROM cart_items ci JOIN products p ON p.id = ci.product_id JOIN stores s ON s.id = p.store_id
 		JOIN categories c ON c.id = p.category_id
-		WHERE ci.user_id = $1 ORDER BY s.name, ci.added_at`
+		LEFT JOIN product_sizes sz ON sz.product_id = ci.product_id AND sz.size = ci.size
+		WHERE ci.user_id = $1 ORDER BY s.name, ci.added_at, ci.size`
 	favoritesSQL = `SELECT ` + cardCols + `, f.created_at
 		FROM favorites f JOIN products p ON p.id = f.product_id JOIN stores s ON s.id = p.store_id
 		JOIN categories c ON c.id = p.category_id

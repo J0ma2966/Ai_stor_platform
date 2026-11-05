@@ -4,9 +4,11 @@ import { useTranslations } from "next-intl";
 import { usePathname, useRouter } from "@/i18n/navigation";
 import { useSession } from "@/lib/session";
 import { setCartQty } from "@/lib/shop";
+import { ApiError } from "@/lib/api";
 
 // Кнопка «В корзину» прямо в карточке каталога: не нужно открывать товар, чтобы его купить.
-export function CardCartButton({ productId, inStock }: { productId: string; inStock: boolean }) {
+// Товар с размерами кладётся в корзину только из карточки товара — там выбирают размер.
+export function CardCartButton({ productId, inStock, hasSizes = false }: { productId: string; inStock: boolean; hasSizes?: boolean }) {
   const t = useTranslations("product");
   const { me, setCartQty: setBadge } = useSession();
   const router = useRouter();
@@ -19,6 +21,10 @@ export function CardCartButton({ productId, inStock }: { productId: string; inSt
       router.push("/cart");
       return;
     }
+    if (hasSizes) {
+      router.push(`/product/${productId}`);
+      return;
+    }
     if (!me) {
       router.push(`/login?next=${encodeURIComponent(pathname)}`);
       return;
@@ -28,8 +34,10 @@ export function CardCartButton({ productId, inStock }: { productId: string; inSt
       const cart = await setCartQty(productId, 1);
       setBadge(cart.total_qty);
       setState("added");
-    } catch {
-      setState("error");
+    } catch (e) {
+      // размеры появились после загрузки каталога
+      if (e instanceof ApiError && e.code === "size_required") router.push(`/product/${productId}`);
+      else setState("error");
     }
   }
 
@@ -41,7 +49,7 @@ export function CardCartButton({ productId, inStock }: { productId: string; inSt
       aria-live="polite"
       onClick={add}
     >
-      {!inStock ? t("outOfStock") : state === "added" ? t("inCart") : state === "error" ? t("retry") : t("toCart")}
+      {!inStock ? t("outOfStock") : hasSizes ? t("chooseSize") : state === "added" ? t("inCart") : state === "error" ? t("retry") : t("toCart")}
     </button>
   );
 }
