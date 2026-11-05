@@ -98,6 +98,14 @@ type row struct {
 	attempts  int
 }
 
+// Переменные, а не константы, — чтобы тест мог ускорить время.
+var (
+	// leaseTTL — на сколько воркер «занимает» пачку сообщений.
+	leaseTTL = 2 * time.Minute
+	// sendTimeout — предел на отправку одного сообщения.
+	sendTimeout = 15 * time.Second
+)
+
 // Backoff — пауза перед повтором n (с 1): 10 с, 30 с, 1.5 мин, … не больше часа.
 func Backoff(n int) time.Duration {
 	d := 10 * time.Second
@@ -125,11 +133,12 @@ func (w *Worker) RunOnce(ctx context.Context) (int, error) {
 	// Аренда: сообщение «занимается» на 2 минуты коротким UPDATE, потом отправляется
 	// без открытой транзакции. Если процесс упал посреди отправки, через 2 минуты
 	// сообщение заберёт другой воркер (возможен редкий дубль — лучше, чем потеря).
-	rows, err := w.DB.Query(ctx, `UPDATE outbound_messages SET next_at = now() + interval '2 minutes'
+	leasedAt := time.Now()
+	rows, err := w.DB.Query(ctx, `UPDATE outbound_messages SET next_at = now() + make_interval(secs => $2)
 		WHERE id IN (SELECT id FROM outbound_messages
 			WHERE sent_at IS NULL AND failed_at IS NULL AND next_at <= now() AND channel = ANY($1)
 			ORDER BY next_at LIMIT 50 FOR UPDATE SKIP LOCKED)
-		RETURNING id, channel, recipient, payload, attempts`, channels)
+		RETURNING id, channel, recipient, payload, attempts`, channels, leaseTTL.Seconds())
 	if err != nil {
 		return 0, err
 	}
@@ -141,7 +150,21 @@ func (w *Worker) RunOnce(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	for _, m := range batch {
+	for i, m := range batch {
+		// Пачка не успевает уложиться в аренду (провайдер отвечает медленно, до
+		// sendTimeout на сообщение): остаток отдаём обратно, пока аренда не истекла,
+		// иначе его же заберёт воркер другого инстанса API и сообщения уйдут дважды.
+		if time.Since(leasedAt) > leaseTTL-2*sendTimeout {
+			rest := make([]int64, 0, len(batch)-i)
+			for _, r := range batch[i:] {
+				rest = append(rest, r.id)
+			}
+			if _, err := w.DB.Exec(ctx, `UPDATE outbound_messages SET next_at = now()
+				WHERE id = ANY($1) AND sent_at IS NULL AND failed_at IS NULL`, rest); err != nil {
+				return 0, err
+			}
+			return i, nil
+		}
 		sendErr := w.send(ctx, m)
 		attempts := m.attempts + 1
 		switch {
@@ -170,7 +193,7 @@ func (w *Worker) send(ctx context.Context, m row) error {
 	if err := json.Unmarshal(m.payload, &msg); err != nil {
 		return ErrPermanent
 	}
-	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, sendTimeout)
 	defer cancel()
 	switch m.channel {
 	case ChannelTelegram:

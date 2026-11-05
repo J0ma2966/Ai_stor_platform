@@ -86,6 +86,31 @@ func Tx(ctx context.Context, pool *pgxpool.Pool, fn func(pgx.Tx) error) (err err
 	return tx.Commit(ctx)
 }
 
+// IsRetryable — транзакцию отменил сам PostgreSQL из-за конкуренции
+// (40P01 deadlock_detected, 40001 serialization_failure); её можно повторить целиком.
+func IsRetryable(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && (pgErr.Code == "40P01" || pgErr.Code == "40001")
+}
+
+// TxRetry — Tx, который повторяет транзакцию (до 3 попыток), если PostgreSQL отменил
+// её из-за deadlock или конфликта сериализации. fn должна быть повторяемой: менять
+// только БД (откатывается вместе с транзакцией) и переприсваивать свои результаты.
+func TxRetry(ctx context.Context, pool *pgxpool.Pool, fn func(pgx.Tx) error) error {
+	var err error
+	for attempt := 1; ; attempt++ {
+		err = Tx(ctx, pool, fn)
+		if err == nil || attempt == 3 || !IsRetryable(err) || ctx.Err() != nil {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return err
+		case <-time.After(time.Duration(attempt*attempt) * 20 * time.Millisecond):
+		}
+	}
+}
+
 // IsUniqueViolation проверяет нарушение уникальности (опционально — по имени ограничения).
 func IsUniqueViolation(err error, constraint string) bool {
 	var pgErr *pgconn.PgError

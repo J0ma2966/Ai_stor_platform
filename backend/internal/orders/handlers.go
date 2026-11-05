@@ -159,7 +159,7 @@ func (h *Handlers) checkout(w http.ResponseWriter, r *http.Request) {
 
 	var status int
 	var body []byte
-	err := db.Tx(r.Context(), h.DB, func(tx pgx.Tx) error {
+	err := db.TxRetry(r.Context(), h.DB, func(tx pgx.Tx) error {
 		// Повторный запрос с тем же ключом получает сохранённый ответ.
 		// Параллельный дубль блокируется на INSERT до коммита первого.
 		tag, err := tx.Exec(r.Context(), `
@@ -220,14 +220,20 @@ func (h *Handlers) createOrders(ctx context.Context, tx pgx.Tx, p auth.Principal
 	for i, it := range req.Items {
 		ids[i] = it.ProductID
 	}
-	// FOR SHARE: товар не снимут с публикации посреди оформления.
+	// Порядок блокировок един для всех, кто меняет остатки (оформление, отмена,
+	// правка товара): сначала строки products по возрастанию id, потом product_sizes.
+	// FOR NO KEY UPDATE, а не FOR SHARE: при продаже последней штуки триггер
+	// product_sizes_sync обновляет products.in_stock, и два FOR SHARE на одном
+	// товаре взаимно блокировались (deadlock → 500 у покупателя). Магазин
+	// блокируется FOR SHARE — его не заблокируют посреди оформления.
 	rows, err := tx.Query(ctx, `
 		SELECT p.id, p.store_id, s.name, p.title, p.brand,
 		       (SELECT key FROM product_images pi WHERE pi.product_id = p.id AND pi.angle = 'front'),
 		       p.price, p.in_stock, p.status::text, s.status::text
 		FROM products p JOIN stores s ON s.id = p.store_id
 		WHERE p.id = ANY($1)
-		FOR SHARE OF p, s`, ids)
+		ORDER BY p.id
+		FOR NO KEY UPDATE OF p FOR SHARE OF s`, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -673,7 +679,7 @@ func (h *Handlers) setStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var out *Detail
-	err = db.Tx(r.Context(), h.DB, func(tx pgx.Tx) error {
+	err = db.TxRetry(r.Context(), h.DB, func(tx pgx.Tx) error {
 		var err error
 		out, err = h.ApplyStatus(r.Context(), tx, p, id, req)
 		return err
@@ -706,7 +712,7 @@ func (h *Handlers) clientCancel(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	var out *Detail
-	err = db.Tx(r.Context(), h.DB, func(tx pgx.Tx) error {
+	err = db.TxRetry(r.Context(), h.DB, func(tx pgx.Tx) error {
 		var err error
 		out, err = h.ApplyStatus(r.Context(), tx, p, id, statusReq{Status: StatusCancelled, Reason: req.Reason})
 		return err
@@ -796,7 +802,19 @@ func (h *Handlers) ApplyStatus(ctx context.Context, tx pgx.Tx, p auth.Principal,
 		return nil, err
 	}
 	if req.Status == StatusRejected || req.Status == StatusCancelled {
-		// вещи возвращаются в продажу (если размер ещё существует)
+		// Вещи возвращаются в продажу (если размер ещё существует). Блокировки —
+		// в том же порядке, что при оформлении (products, затем размеры, по id),
+		// иначе параллельные отмены и покупки тех же размеров ловят deadlock.
+		if _, err := tx.Exec(ctx, `SELECT 1 FROM products p
+			WHERE p.id IN (SELECT product_id FROM order_items WHERE order_id = $1 AND size IS NOT NULL)
+			ORDER BY p.id FOR NO KEY UPDATE`, id); err != nil {
+			return nil, err
+		}
+		if _, err := tx.Exec(ctx, `SELECT 1 FROM product_sizes ps JOIN order_items oi
+			ON ps.product_id = oi.product_id AND ps.size = oi.size
+			WHERE oi.order_id = $1 ORDER BY ps.product_id, ps.size FOR UPDATE OF ps`, id); err != nil {
+			return nil, err
+		}
 		if _, err := tx.Exec(ctx, `UPDATE product_sizes ps SET stock = LEAST(ps.stock + oi.qty, 100000)
 			FROM order_items oi WHERE oi.order_id = $1 AND oi.size IS NOT NULL
 			  AND ps.product_id = oi.product_id AND ps.size = oi.size`, id); err != nil {
