@@ -19,6 +19,7 @@ export type Me = {
   weight_kg: number | null;
   body_params: Record<string, number>;
   registration_complete: boolean;
+  has_password: boolean;
   pd_consent_at: string | null;
   created_at: string;
 };

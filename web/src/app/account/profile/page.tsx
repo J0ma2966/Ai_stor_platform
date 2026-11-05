@@ -129,6 +129,12 @@ export default function Profile() {
       </form>
 
       <section className="card stack-sm">
+        <h2>{t("passwordTitle")}</h2>
+        <p className="muted">{t("passwordText")}</p>
+        <p><Link href="/account/password">{t("passwordLink")}</Link></p>
+      </section>
+
+      <section className="card stack-sm">
         <h2>{t("privacy")}</h2>
         {me.pd_consent_at && <p>{t("consentGiven", { date: formatDateTime(me.pd_consent_at, locale) })}</p>}
         <p className="row wrap">

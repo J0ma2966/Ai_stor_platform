@@ -41,6 +41,25 @@
 5. При `401 token_invalid`: `POST /v1/auth/refresh` (cookie отправляется автоматически, `credentials: "include"`) → новый access-токен. Если и он 401 — на экран входа.
 6. `POST /v1/auth/logout`.
 
+### Пароль клиента (вход без SMS)
+
+SMS стоит денег, поэтому код нужен только для регистрации и восстановления пароля.
+
+- После регистрации по SMS клиент обязан задать пароль: `GET /v1/me` → `has_password: false`,
+  фронт ведёт на `/account/password` (после `/account/welcome`).
+- `POST /v1/auth/password {"password"}` (client) — первый пароль, 10–128 символов.
+  Смена: `{"password","current_password"}`; без текущего → `422 current_password_required`,
+  неверный → `422 current_password_wrong`. Лимит 10/15 мин на пользователя.
+- `POST /v1/auth/password/login {"phone","password"}` → сессия, как у `/otp/verify`.
+  Клиент без пароля, неизвестный номер и неверный пароль дают одинаковый `401 bad_credentials`.
+  Лимиты: 20/15 мин с IP, 10/15 мин на номер+IP, 50/15 мин на номер (если исчерпан — вход по SMS).
+- «Забыли пароль?»: `POST /v1/auth/otp/request`, затем
+  `POST /v1/auth/password/reset {"phone","code","password"}` → новая сессия. Неизвестный номер
+  при этом регистрируется (`is_new_user: true`), чтобы ответ не выдавал наличие аккаунта.
+- Смена и сброс пароля отзывают все refresh-токены клиента: другие устройства выходят,
+  когда истечёт их access-токен (≤ 15 мин). Текущее устройство получает новую сессию и cookie.
+- Удаление аккаунта стирает пароль.
+
 Магазин и админ: `POST /v1/auth/login {"login","password"}`.
 
 ## Идемпотентность
@@ -62,6 +81,8 @@
 |---|---|---|
 | GET | `/healthz`, `/readyz` | — |
 | POST | `/v1/auth/otp/request`, `/v1/auth/otp/verify`, `/v1/auth/login`, `/v1/auth/refresh`, `/v1/auth/logout` | — |
+| POST | `/v1/auth/password/login`, `/v1/auth/password/reset` | — |
+| POST | `/v1/auth/password` | client |
 | POST | `/v1/auth/email/register`, `/v1/auth/email/login` (ВРЕМЕННО, при `EMAIL_AUTH_ENABLED`, см. docs/EMAIL_AUTH.md); GET `/v1/auth/email/status` | — |
 | GET | `/v1/categories`, `/v1/products`, `/v1/products/{id}` | — |
 | GET | `/v1/me` | любая |

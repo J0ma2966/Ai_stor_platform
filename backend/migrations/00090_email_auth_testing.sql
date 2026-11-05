@@ -16,9 +16,10 @@ ALTER TABLE users ADD CONSTRAINT users_client_has_phone
 UPDATE users SET status = 'blocked', deleted_at = now(), gender = NULL, height_cm = NULL, weight_kg = NULL,
     body_params = '{}'::jsonb, pd_consent_at = NULL
     WHERE role = 'client' AND phone IS NULL AND deleted_at IS NULL;
-UPDATE users SET password_hash = NULL WHERE role = 'client';
+-- пароли клиентов с телефоном (вход по паролю, auth/phone_password.go) не трогаем
+UPDATE users SET password_hash = NULL WHERE role = 'client' AND phone IS NULL;
 UPDATE refresh_tokens SET revoked_at = now()
-    WHERE revoked_at IS NULL AND user_id IN (SELECT id FROM users WHERE role = 'client' AND email IS NOT NULL);
+    WHERE revoked_at IS NULL AND user_id IN (SELECT id FROM users WHERE role = 'client' AND email IS NOT NULL AND phone IS NULL);
 ALTER TABLE users DROP CONSTRAINT users_client_has_phone;
 ALTER TABLE users ADD CONSTRAINT users_client_has_phone CHECK (role <> 'client' OR phone IS NOT NULL OR deleted_at IS NOT NULL);
 DROP INDEX users_email_key;

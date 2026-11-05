@@ -5,10 +5,12 @@ import { useLocale, useTranslations } from "next-intl";
 import { Link, useRouter } from "@/i18n/navigation";
 import { api } from "@/lib/api";
 import { safeNext } from "@/lib/safeNext";
+import { clientNextStep } from "@/lib/onboarding";
 import { useSession, type Me } from "@/lib/session";
 import { ErrorBox } from "@/components/ErrorBox";
 
-// Завершение регистрации: пол (обязательно) + согласие на обработку ПД → приветственные токены.
+// Завершение регистрации: пол (обязательно) + согласие на обработку ПД → приветственные токены,
+// затем пароль (/account/password), если его ещё нет.
 export default function Welcome() {
   const t = useTranslations("welcome");
   const locale = useLocale();
@@ -20,7 +22,7 @@ export default function Welcome() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   useEffect(() => {
-    if (me?.registration_complete) router.replace(next);
+    if (me?.registration_complete) router.replace(clientNextStep(me, next));
   }, [me, next, router]);
 
   async function submit(e: FormEvent) {
@@ -31,7 +33,8 @@ export default function Welcome() {
     try {
       const m = await api<Me>("/v1/me/complete-registration", { method: "POST", body: { gender, pd_consent: true, lang: locale } });
       setMe(m);
-      router.replace(next);
+      // следующий шаг — пароль для входа без SMS
+      router.replace(clientNextStep(m, next));
     } catch (err) {
       setError(err);
     } finally {

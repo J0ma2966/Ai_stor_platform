@@ -67,3 +67,17 @@ describe("api client", () => {
     expect(currentRole()).toBeNull();
   });
 });
+
+import { clientNextStep } from "@/lib/onboarding";
+
+describe("clientNextStep", () => {
+  const base = { role: "client" as const, registration_complete: true, has_password: true };
+  it("ведёт нового клиента на завершение регистрации, затем на пароль", () => {
+    expect(clientNextStep({ ...base, registration_complete: false, has_password: false }, "/checkout")).toBe("/account/welcome?next=%2Fcheckout");
+    expect(clientNextStep({ ...base, has_password: false }, "/checkout")).toBe("/account/password?next=%2Fcheckout");
+    expect(clientNextStep(base, "/checkout")).toBe("/checkout");
+  });
+  it("не трогает сотрудников", () => {
+    expect(clientNextStep({ ...base, role: "store", has_password: false }, "/store")).toBe("/store");
+  });
+});
