@@ -13,6 +13,9 @@ x-web: &web
   restart: unless-stopped
   logging: *logging
   stop_grace_period: 20s
+  environment:
+    # секрет с API (app/.env): SSR-запросы не считаются в общий лимит по IP
+    INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-}
   deploy:
     resources:
       limits: {cpus: "${WEB_CPUS:-1.5}", memory: "${WEB_MEMORY:-1g}"}

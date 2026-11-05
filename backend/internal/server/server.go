@@ -3,6 +3,7 @@ package server
 
 import (
 	"context"
+	"crypto/subtle"
 	"log/slog"
 	"net/http"
 	"time"
@@ -111,7 +112,9 @@ func New(d Deps) http.Handler {
 			r.Post("/telegram/webhook", telegramH.Webhook)
 		})
 		r.Group(func(r chi.Router) {
-			r.Use(limiter.ByIP(ratelimit.Rule{Name: "global_ip", Limit: 600, Window: time.Minute}))
+			// Сайт рендерит страницы на сервере: все его запросы приходят с одного IP,
+			// поэтому с общим секретом общий лимит по IP к ним не применяется.
+			r.Use(limiter.ByIPExcept(ratelimit.Rule{Name: "global_ip", Limit: 600, Window: time.Minute}, internalRequest(d.Cfg.InternalAPIToken)))
 			r.Use(auth.Authenticate(signer, revoker))
 
 			// Загрузка файлов — отдельно: медленный мобильный интернет, свой таймаут 60 с.
@@ -201,6 +204,16 @@ func ready(d Deps) http.HandlerFunc {
 			checks["redis"], code = "fail", http.StatusServiceUnavailable
 		}
 		httpx.JSON(w, code, checks)
+	}
+}
+
+// InternalTokenHeader — заголовок с общим секретом сайта и API (config.InternalAPIToken).
+const InternalTokenHeader = "X-Internal-Token"
+
+func internalRequest(token string) func(*http.Request) bool {
+	return func(r *http.Request) bool {
+		got := r.Header.Get(InternalTokenHeader)
+		return token != "" && got != "" && subtle.ConstantTimeCompare([]byte(got), []byte(token)) == 1
 	}
 }
 

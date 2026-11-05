@@ -72,6 +72,10 @@ type Config struct {
 	TelegramWebhookURL    string // если задан — API сам регистрирует вебхук при старте
 	// SMS клиенту о смене статуса заказа (тексты должны быть одобрены в Eskiz).
 	OrderSMS bool
+	// Общий секрет сайта (Next.js) и API: серверный рендеринг шлёт его в X-Internal-Token
+	// и не попадает под общий лимит по IP (все SSR-запросы идут с одного адреса).
+	// Пусто — исключения нет.
+	InternalAPIToken string
 	// Через сколько напомнить магазину о неподтверждённом заказе.
 	OrderRemindAfter time.Duration
 
@@ -233,6 +237,7 @@ func Load() (Config, error) {
 		TelegramWebhookSecret: os.Getenv("TELEGRAM_WEBHOOK_SECRET"),
 		TelegramWebhookURL:    os.Getenv("TELEGRAM_WEBHOOK_URL"),
 		OrderSMS:              getBool("ORDER_SMS_ENABLED", false),
+		InternalAPIToken:      os.Getenv("INTERNAL_API_TOKEN"),
 		OrderRemindAfter:      getDur("ORDER_REMIND_AFTER", 30*time.Minute),
 		PaymentReturnURL:      os.Getenv("PAYMENT_RETURN_URL"),
 		ClickServiceID:        os.Getenv("CLICK_SERVICE_ID"),
@@ -258,6 +263,9 @@ func Load() (Config, error) {
 	}
 	if len(c.OTPPepper) < 16 {
 		errs = append(errs, errors.New("OTP_PEPPER must be at least 16 bytes"))
+	}
+	if c.InternalAPIToken != "" && len(c.InternalAPIToken) < 32 {
+		errs = append(errs, errors.New("INTERNAL_API_TOKEN must be at least 32 bytes"))
 	}
 	if c.IsProd() && !c.CookieSecure {
 		errs = append(errs, errors.New("COOKIE_SECURE must be true in prod"))

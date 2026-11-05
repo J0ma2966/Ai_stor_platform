@@ -28,7 +28,7 @@ func (h *Handlers) storeGet(w http.ResponseWriter, r *http.Request) {
 	err = h.DB.QueryRow(r.Context(), `
 		SELECT p.id, p.store_id, p.category_id, c.zone::text, p.sku, p.title, p.description, p.brand, p.price, p.in_stock,
 		       p.status, p.moderation_reason, p.created_at, p.views_count, p.fitting_adds,
-		       ` + imagesSQL + `
+		       `+imagesSQL+`
 		FROM products p JOIN categories c ON c.id = p.category_id
 		WHERE p.id = $1 AND p.store_id = $2`, id, p.StoreID).
 		Scan(&it.ID, &it.StoreID, &it.CategoryID, &it.Zone, &it.SKU, &it.Title, &it.Description, &it.Brand, &it.Price, &it.InStock,

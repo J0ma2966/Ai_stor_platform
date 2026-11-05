@@ -30,7 +30,7 @@ mkdir -p "$out"; umask 077
 rnd() { openssl rand -hex "${1:-24}"; }
 APP_DB_PASSWORD=$(rnd) OWNER_DB_PASSWORD=$(rnd) POSTGRES_PASSWORD=$(rnd) REPLICATOR_PASSWORD=$(rnd) MONITOR_PASSWORD=$(rnd)
 REDIS_PASSWORD=$(rnd) MINIO_ROOT_PASSWORD=$(rnd) MINIO_APP_ACCESS_KEY="app$(rnd 8)" MINIO_APP_SECRET_KEY=$(rnd)
-JWT_SECRET=$(rnd 32) OTP_PEPPER=$(rnd 24) WALG_LIBSODIUM_KEY=$(rnd 32) GRAFANA_ADMIN_PASSWORD=$(rnd 16)
+JWT_SECRET=$(rnd 32) OTP_PEPPER=$(rnd 24) INTERNAL_API_TOKEN=$(rnd 32) WALG_LIBSODIUM_KEY=$(rnd 32) GRAFANA_ADMIN_PASSWORD=$(rnd 16)
 age-keygen -o "$out/age-identity.txt" 2>/dev/null
 AGE_RECIPIENT=$(age-keygen -y "$out/age-identity.txt")
 
@@ -66,6 +66,8 @@ MINIO_APP_ACCESS_KEY=$MINIO_APP_ACCESS_KEY
 MINIO_APP_SECRET_KEY=$MINIO_APP_SECRET_KEY
 JWT_SECRET=$JWT_SECRET
 OTP_PEPPER=$OTP_PEPPER
+# общий секрет с сайтом (тот же в ENV_EDGE): серверный рендеринг не упирается в лимит по IP
+INTERNAL_API_TOKEN=$INTERNAL_API_TOKEN
 OTP_ALLOWED_PREFIXES=+998
 UPLOAD_CONCURRENCY=4
 # AI-примерка в первом релизе выключена: не нужны воркер, ключи Gemini/FASHN и биометрическое хранилище.
@@ -163,6 +165,8 @@ APP_PRIVATE_IP=$APP_IP
 DB_PRIVATE_IP=$DB_IP
 REPLICA_PRIVATE_IP=$REPLICA_IP
 EDGE_PRIVATE_IP=$EDGE_IP
+# тот же секрет, что в ENV_APP: заголовок X-Internal-Token в запросах серверного рендеринга
+INTERNAL_API_TOKEN=$INTERNAL_API_TOKEN
 # chat id группы/канала в Telegram (бот должен быть добавлен в группу). Заполнить!
 TELEGRAM_CHAT_ID=CHANGE-ME
 E

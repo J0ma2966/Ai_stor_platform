@@ -46,8 +46,8 @@ type Product struct {
 	InStock     bool              `json:"in_stock"`
 	Status      string            `json:"status,omitempty"`
 	Reason      *string           `json:"moderation_reason,omitempty"`
-	Images      map[string]string `json:"images"`           // большое фото (1600 px), пока копий нет — оригинал
-	Thumbs      map[string]string `json:"thumbs,omitempty"` // карточки и миниатюры (800 px), пока копий нет — оригинал
+	Images      map[string]string `json:"images"`                // большое фото (1600 px), пока копий нет — оригинал
+	Thumbs      map[string]string `json:"thumbs,omitempty"`      // карточки и миниатюры (800 px), пока копий нет — оригинал
 	Sizes       []Size            `json:"sizes,omitempty"`       // карточка товара и кабинет магазина
 	HasSizes    bool              `json:"has_sizes,omitempty"`   // каталог: в корзину — только с выбором размера
 	RatingAvg   float64           `json:"rating_avg"`            // средняя оценка видимых отзывов, 0 — отзывов нет
@@ -181,7 +181,7 @@ func (h *Handlers) list(w http.ResponseWriter, r *http.Request) {
 	sql := fmt.Sprintf(`
 		SELECT p.id, p.store_id, p.store_name, p.store_slug, p.category_id, c.zone::text, p.title, p.brand, p.price, p.in_stock, p.created_at, p.sort_val,
 		       p.rating_avg::float8, p.rating_count,
-		       ` + imagesSQL + `,
+		       `+imagesSQL+`,
 		       EXISTS (SELECT 1 FROM product_sizes ps WHERE ps.product_id = p.id)
 		FROM (
 			SELECT p.id, p.store_id, s.name AS store_name, s.slug AS store_slug, p.category_id, p.title, p.brand, p.price, p.in_stock,
@@ -238,7 +238,7 @@ func (h *Handlers) get(w http.ResponseWriter, r *http.Request) {
 		  ARRAY(SELECT count(r.id)::int FROM generate_series(1, 5) g
 		        LEFT JOIN product_reviews r ON r.product_id = p.id AND r.status = 'visible' AND r.rating = g
 		        GROUP BY g ORDER BY g),
-		  ` + imagesSQL + `
+		  `+imagesSQL+`
 		FROM products p JOIN stores s ON s.id = p.store_id JOIN categories c ON c.id = p.category_id
 		WHERE p.id = $1 AND p.status = 'published' AND s.status = 'active'`, id).
 		Scan(&p.ID, &p.StoreID, &p.StoreName, &p.StoreSlug, &p.CategoryID, &p.Zone, &p.Title, &p.Description, &p.Brand, &p.Price, &p.InStock, &p.CreatedAt,
@@ -302,7 +302,7 @@ func (h *Handlers) storeList(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.DB.Query(r.Context(), `
 		SELECT p.id, p.store_id, p.category_id, p.sku, p.title, p.brand, p.price, p.in_stock, p.status, p.moderation_reason, p.created_at,
 		       p.views_count, p.fitting_adds,
-		       ` + imagesSQL + `
+		       `+imagesSQL+`
 		FROM products p WHERE p.store_id = $1 ORDER BY p.created_at DESC LIMIT 2000`, p.StoreID)
 	if err != nil {
 		httpx.Fail(w, r, err)
