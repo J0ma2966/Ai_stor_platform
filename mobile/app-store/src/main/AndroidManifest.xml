@@ -11,7 +11,8 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Boutique"
         android:localeConfig="@xml/locales_config">
-        <activity
+        <!-- Экспорт обязателен для MAIN/LAUNCHER; других intent-filter и прав у активности нет. -->
+        <!-- nosemgrep --><activity
             android:name=".MainActivity"
             android:exported="true"
             android:windowSoftInputMode="adjustResize">
