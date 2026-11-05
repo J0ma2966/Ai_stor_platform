@@ -38,6 +38,8 @@
 4. Добавить новую миграцию с телом раздела Down из
    `backend/migrations/00090_email_auth_testing.sql`: аккаунты без телефона
    обезличиваются (как при удалении аккаунта), колонка `users.email` удаляется.
+   Колонку `users.password_hash` и пароли клиентов с телефоном **не трогать**: на них
+   работает постоянный вход по номеру и паролю (`auth/phone_password.go`).
 5. Удалить `web/src/components/EmailAuthForm.tsx`, `web/src/__tests__/EmailAuthForm.test.tsx`,
    подключение в `web/src/app/login/page.tsx`, ключи `emailAuth` и
    `errors.email_taken` в `web/messages/ru.json` и `uz.json`.

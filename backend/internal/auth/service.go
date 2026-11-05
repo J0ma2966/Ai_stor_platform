@@ -59,6 +59,20 @@ func (s *Service) VerifyOTP(ctx context.Context, phone, code string, meta Client
 	if err := s.OTP.Verify(ctx, phone, code); err != nil {
 		return nil, err
 	}
+	p, isNew, err := s.clientByPhone(ctx, phone)
+	if err != nil {
+		return nil, err
+	}
+	sess, err := s.newSession(ctx, p, uuid.New(), meta)
+	if err != nil {
+		return nil, err
+	}
+	sess.IsNew = isNew
+	return sess, nil
+}
+
+// clientByPhone находит клиента по уже подтверждённому телефону или создаёт нового.
+func (s *Service) clientByPhone(ctx context.Context, phone string) (Principal, bool, error) {
 	var (
 		p      = Principal{Role: RoleClient}
 		status string
@@ -86,17 +100,12 @@ func (s *Service) VerifyOTP(ctx context.Context, phone, code string, meta Client
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return p, false, err
 	}
 	if status != "active" {
-		return nil, ErrAccountBlocked
+		return p, false, ErrAccountBlocked
 	}
-	sess, err := s.newSession(ctx, p, uuid.New(), meta)
-	if err != nil {
-		return nil, err
-	}
-	sess.IsNew = isNew
-	return sess, nil
+	return p, isNew, nil
 }
 
 // Login — вход магазина или администратора по логину и паролю.

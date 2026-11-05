@@ -112,6 +112,7 @@ func New(d Deps) http.Handler {
 
 				r.Route("/auth", func(r chi.Router) {
 					authH.Routes(r)
+					r.Route("/password", authH.PasswordRoutes)                   // вход клиента по паролю, сброс через SMS
 					r.Route("/email", authH.EmailRoutes(d.Cfg.EmailAuthEnabled)) // ВРЕМЕННО, см. auth/email_temp.go
 				})
 				productsH.PublicRoutes(r)

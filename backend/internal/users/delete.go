@@ -22,7 +22,7 @@ type deleteReq struct {
 }
 
 // deleteAccount — удаление аккаунта клиентом (отзыв согласия на обработку ПД).
-// Телефон, пол, параметры тела, корзина, избранное, уведомления удаляются.
+// Телефон, пароль, пол, параметры тела, корзина, избранное, уведомления удаляются.
 // Строка users остаётся обезличенной: на неё ссылаются заказы и журнал токенов,
 // которые нужно хранить для учёта (в заказе остаются имя и телефон получателя —
 // это данные сделки, срок их хранения определяется политикой конфиденциальности).
@@ -36,7 +36,7 @@ func (h *Handlers) deleteAccount(w http.ResponseWriter, r *http.Request) {
 	uid := auth.MustFrom(r.Context()).UserID
 	err := db.Tx(r.Context(), h.DB, func(tx pgx.Tx) error {
 		tag, err := tx.Exec(r.Context(), `UPDATE users SET phone = NULL, gender = NULL, height_cm = NULL, weight_kg = NULL,
-			body_params = '{}'::jsonb, pd_consent_at = NULL, status = 'blocked', deleted_at = now()
+			body_params = '{}'::jsonb, pd_consent_at = NULL, password_hash = NULL, status = 'blocked', deleted_at = now()
 			WHERE id = $1 AND role = 'client' AND deleted_at IS NULL`, uid)
 		if err != nil {
 			return err

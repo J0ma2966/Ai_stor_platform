@@ -50,6 +50,7 @@ type Me struct {
 	WeightKG     *float64        `json:"weight_kg"`
 	BodyParams   json.RawMessage `json:"body_params"`
 	Registered   bool            `json:"registration_complete"`
+	HasPassword  bool            `json:"has_password"`
 	PDConsentAt  *time.Time      `json:"pd_consent_at"`
 	CreatedAt    time.Time       `json:"created_at"`
 }
@@ -57,9 +58,10 @@ type Me struct {
 func (h *Handlers) load(r *http.Request, id uuid.UUID) (*Me, error) {
 	var m Me
 	err := h.DB.QueryRow(r.Context(), `
-		SELECT id, role, phone, login, store_id, gender, lang, token_balance, height_cm, weight_kg::float8, body_params, pd_consent_at, created_at
+		SELECT id, role, phone, login, store_id, gender, lang, token_balance, height_cm, weight_kg::float8, body_params, pd_consent_at, created_at,
+		       password_hash IS NOT NULL
 		FROM users WHERE id = $1`, id).
-		Scan(&m.ID, &m.Role, &m.Phone, &m.Login, &m.StoreID, &m.Gender, &m.Lang, &m.TokenBalance, &m.HeightCM, &m.WeightKG, &m.BodyParams, &m.PDConsentAt, &m.CreatedAt)
+		Scan(&m.ID, &m.Role, &m.Phone, &m.Login, &m.StoreID, &m.Gender, &m.Lang, &m.TokenBalance, &m.HeightCM, &m.WeightKG, &m.BodyParams, &m.PDConsentAt, &m.CreatedAt, &m.HasPassword)
 	if err != nil {
 		return nil, db.NotFound(err)
 	}

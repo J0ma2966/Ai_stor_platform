@@ -150,6 +150,27 @@ export async function verifyOtp(phone: string, code: string) {
   setSession(s.access_token, s.user.role);
   return s;
 }
+// Пароль клиента: обычный вход без SMS; SMS нужна только для регистрации и сброса.
+export async function loginPassword(phone: string, password: string) {
+  const s = await api<SessionResp>("/v1/auth/password/login", { method: "POST", body: { phone, password } });
+  setSession(s.access_token, s.user.role);
+  return s;
+}
+export async function resetPassword(phone: string, code: string, password: string) {
+  const s = await api<SessionResp>("/v1/auth/password/reset", { method: "POST", body: { phone, code, password } });
+  setSession(s.access_token, s.user.role);
+  return s;
+}
+// Задать первый пароль или сменить (тогда нужен текущий). Сервер выдаёт новую сессию
+// и отзывает остальные устройства.
+export async function setPassword(password: string, currentPassword?: string) {
+  const s = await api<SessionResp>("/v1/auth/password", {
+    method: "POST",
+    body: { password, current_password: currentPassword || undefined },
+  });
+  setSession(s.access_token, s.user.role);
+  return s;
+}
 export async function loginStaff(login: string, password: string) {
   const s = await api<SessionResp>("/v1/auth/login", { method: "POST", body: { login, password } });
   setSession(s.access_token, s.user.role);

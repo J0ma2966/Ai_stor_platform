@@ -34,7 +34,7 @@
     "rate_limited": "Juda ko‘p urinish. Biroz kutib, qayta urinib ko‘ring.",
     "otp_cooldown": "Kod yuborilgan. Bir daqiqadan so‘ng qayta so‘rash mumkin.",
     "otp_invalid": "Kod noto‘g‘ri.",
-    "bad_credentials": "Login yoki parol noto‘g‘ri.",
+    "bad_credentials": "Raqam, login yoki parol noto‘g‘ri.",
     "store_not_active": "Do‘kon hali faollashtirilmagan.",
     "phone_not_allowed": "Faqat O‘zbekiston raqamlari (+998) qo‘llab-quvvatlanadi.",
     "products_unavailable": "Ba’zi mahsulotlar tugagan yoki sotuvdan olingan. Ularni buyurtmadan olib tashlang.",
@@ -72,7 +72,9 @@
     "generation_in_progress": "Kiyib ko‘rish hali bajarilmoqda, kuting.",
     "corrupt_image": "Tasvirni o‘qib bo‘lmadi. Boshqa fotoni sinab ko‘ring.",
     "tryon_transfer_consent_required": "Fotolarni tashqi AI-xizmatga yuborish uchun alohida rozilik kerak.",
-    "email_taken": "Bu pochta allaqachon ro‘yxatdan o‘tgan. Kiring."
+    "email_taken": "Bu pochta allaqachon ro‘yxatdan o‘tgan. Kiring.",
+    "current_password_required": "Joriy parolni kiriting.",
+    "current_password_wrong": "Joriy parol noto‘g‘ri."
   },
   "fieldErrors": {
     "required": "Majburiy maydon",
@@ -123,7 +125,32 @@
     "signIn": "Kirish",
     "storeTitle": "Do‘kon uchun kirish",
     "login": "Login",
-    "password": "Parol"
+    "password": "Parol",
+    "smsTitle": "SMS orqali kirish yoki ro‘yxatdan o‘tish",
+    "smsHint": "Yangi akkaunt SMS kodi orqali yaratiladi. Ro‘yxatdan o‘tgach parol o‘rnating — keyin raqam va parol bilan kirasiz.",
+    "resetTitle": "Parolni tiklash",
+    "resetHint": "Raqamingizga kod yuboramiz, so‘ng yangi parol o‘rnating.",
+    "resetSubmit": "Parolni saqlash va kirish",
+    "newPassword": "Yangi parol",
+    "passwordHint": "Kamida 10 ta belgi",
+    "toSms": "SMS orqali ro‘yxatdan o‘tish / kirish",
+    "toPassword": "Parol bilan kirish",
+    "forgot": "Parolni unutdingizmi?",
+    "noPasswordHint": "Hali parol o‘rnatmaganmisiz? SMS orqali kiring — kirgandan so‘ng sayt uni yaratishni so‘raydi."
+  },
+  "password": {
+    "setTitle": "Parol o‘ylab toping",
+    "setText": "Keyingi safar telefon raqami va parol bilan kirasiz. SMS kodi faqat parolni unutsangiz kerak bo‘ladi.",
+    "changeTitle": "Parolni o‘zgartirish",
+    "changeText": "Parol o‘zgargach, boshqa qurilmalarda qayta kirish kerak bo‘ladi.",
+    "current": "Joriy parol",
+    "new": "Yangi parol",
+    "repeat": "Parolni takrorlang",
+    "hint": "Kamida 10 ta belgi",
+    "mismatch": "Parollar mos kelmadi",
+    "setSubmit": "Parolni saqlash",
+    "changeSubmit": "Parolni o‘zgartirish",
+    "changed": "Parol o‘zgartirildi."
   },
   "emailAuth": {
     "loginTitle": "Pochta orqali kirish",
@@ -410,7 +437,10 @@
     "deleteText": "Telefon, tana o‘lchamlari, saqlangan suratlar va kiyib ko‘rish natijalari, savat, saralanganlar va bildirishnomalar o‘chiriladi. Ishlatilmagan tokenlar yo‘qoladi. Berilgan buyurtmalar profilingizga bog‘lanmagan holda hisob uchun saqlanadi.",
     "deleteConfirm": "Buni bekor qilib bo‘lmasligini tushunaman",
     "deleteBtn": "Akkauntni butunlay o‘chirish",
-    "deleted": "Akkaunt o‘chirildi."
+    "deleted": "Akkaunt o‘chirildi.",
+    "passwordTitle": "Parol",
+    "passwordText": "Parol SMSsiz telefon raqami bilan kirish uchun kerak.",
+    "passwordLink": "Parolni o‘zgartirish"
   },
   "notifications": {
     "title": "Bildirishnomalar",
