@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { apiBase, type Category, type Product, type Store } from "@/lib/catalog";
+import { apiBase, serverHeaders, type Category, type Product, type Store } from "@/lib/catalog";
 import { localeUrl } from "@/lib/site";
 
 export const revalidate = 3600;
@@ -7,7 +7,7 @@ const MAX_PRODUCTS = 45000; // лимит одного sitemap — 50 000 адр
 
 async function get<T>(path: string): Promise<{ data: T; next_cursor?: string } | null> {
   try {
-    const r = await fetch(apiBase() + path, { next: { revalidate } });
+    const r = await fetch(apiBase() + path, { headers: serverHeaders(), next: { revalidate } });
     return r.ok ? r.json() : null;
   } catch {
     return null;

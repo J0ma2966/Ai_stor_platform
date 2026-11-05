@@ -489,7 +489,10 @@ func TestViewsCountedInRedisAndFlushed(t *testing.T) {
 			t.Fatal("image URL changes between requests (not cacheable)")
 		}
 		first = img
+		// просмотр отмечает браузер отдельным запросом (GET кэшируется сайтом и не считается)
+		anon.must(204, "POST", "/v1/products/"+pid.String()+"/view", nil)
 	}
+	anon.must(404, "POST", "/v1/products/not-a-uuid/view", nil)
 	var n int64
 	_ = e.d.DB.QueryRow(ctx, `SELECT views_count FROM products WHERE id = $1`, pid).Scan(&n)
 	if n != 0 {

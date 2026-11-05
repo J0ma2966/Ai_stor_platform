@@ -489,6 +489,7 @@ func (h *Handlers) listFull(w http.ResponseWriter, r *http.Request, where []stri
 		httpx.Fail(w, r, err)
 		return
 	}
+	defer rows.Close()
 	items, err := h.scanFull(rows)
 	if err != nil {
 		httpx.Fail(w, r, err)

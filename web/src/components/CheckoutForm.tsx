@@ -10,7 +10,7 @@ import {
 import { ErrorBox, useErrorText, useFieldError } from "./ErrorBox";
 import { Link } from "@/i18n/navigation";
 
-type Product = { id: string; title: string; brand: string; price: number; in_stock: boolean; store_name: string; images: Record<string, string> };
+type Product = { id: string; title: string; brand: string; price: number; in_stock: boolean; store_name: string; images: Record<string, string>; thumbs?: Record<string, string> };
 
 // Лимиты совпадают с сервером (docs/ORDERS.md).
 const LIMITS = {
@@ -203,7 +203,7 @@ export function CheckoutForm({ items }: { items: CheckoutItem[] }) {
             const bad = unavailable[itemKey(it)] ?? unavailable[it.product_id];
             return (
               <li key={itemKey(it)} className={bad ? "item item-bad" : "item"}>
-                {p?.images?.front && <img src={p.images.front} alt="" width={48} height={64} />}
+                {p?.images?.front && <img src={p.thumbs?.front ?? p.images.front} alt="" width={48} height={64} />}
                 <span className="grow">
                   {p ? `${p.brand} · ${p.title}` : it.product_id}
                   {it.size && <span> · {t("size", { size: it.size })}</span>}

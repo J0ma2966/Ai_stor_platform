@@ -20,7 +20,8 @@ export type Product = {
   has_sizes?: boolean; // каталог: у товара есть размеры (в корзину — через карточку)
   status?: "draft" | "published" | "unpublished" | "blocked";
   moderation_reason?: string;
-  images: Partial<Record<"front" | "side" | "back", string>>;
+  images: Partial<Record<"front" | "side" | "back", string>>; // большое фото (1600 px)
+  thumbs?: Partial<Record<"front" | "side" | "back", string>>; // миниатюры и карточки (800 px)
   views?: number;
   fitting_adds?: number;
   rating_avg?: number; // средняя оценка видимых отзывов, 0 — отзывов нет
@@ -70,6 +71,16 @@ export function apiBase(): string {
   return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 }
 
+// Заголовки серверных запросов к API. X-Internal-Token (общий секрет сайта и API)
+// снимает с серверного рендеринга общий лимит по IP: все его запросы идут с одного
+// адреса. Переменная без NEXT_PUBLIC_ — в браузерный бандл не попадает.
+export function serverHeaders(): Record<string, string> {
+  const h: Record<string, string> = { Accept: "application/json" };
+  const token = typeof window === "undefined" ? process.env.INTERNAL_API_TOKEN : undefined;
+  if (token) h["X-Internal-Token"] = token;
+  return h;
+}
+
 export class FetchError extends Error {
   constructor(public status: number) {
     super(`api ${status}`);
@@ -77,7 +88,7 @@ export class FetchError extends Error {
 }
 
 async function get<T>(path: string, revalidate = 30): Promise<{ data: T; next_cursor?: string }> {
-  const init: RequestInit & { next?: { revalidate: number } } = { headers: { Accept: "application/json" } };
+  const init: RequestInit & { next?: { revalidate: number } } = { headers: serverHeaders() };
   if (typeof window === "undefined") init.next = { revalidate };
   const res = await fetch(apiBase() + path, init);
   if (!res.ok) throw new FetchError(res.status);
@@ -141,4 +152,10 @@ export function catName(c: Category | undefined, locale: string): string {
 
 export function frontImage(p: Pick<Product, "images">): string {
   return p.images.front ?? p.images.side ?? p.images.back ?? "";
+}
+
+// Фото для карточки и миниатюр: уменьшенная копия, если API её отдал (иначе большое фото).
+export function cardImage(p: Pick<Product, "images" | "thumbs">): string {
+  const t = p.thumbs ?? {};
+  return t.front ?? t.side ?? t.back ?? frontImage(p);
 }

@@ -28,7 +28,7 @@ func (h *Handlers) storeGet(w http.ResponseWriter, r *http.Request) {
 	err = h.DB.QueryRow(r.Context(), `
 		SELECT p.id, p.store_id, p.category_id, c.zone::text, p.sku, p.title, p.description, p.brand, p.price, p.in_stock,
 		       p.status, p.moderation_reason, p.created_at, p.views_count, p.fitting_adds,
-		       COALESCE((SELECT jsonb_object_agg(angle, key) FROM product_images pi WHERE pi.product_id = p.id), '{}')
+		       `+imagesSQL+`
 		FROM products p JOIN categories c ON c.id = p.category_id
 		WHERE p.id = $1 AND p.store_id = $2`, id, p.StoreID).
 		Scan(&it.ID, &it.StoreID, &it.CategoryID, &it.Zone, &it.SKU, &it.Title, &it.Description, &it.Brand, &it.Price, &it.InStock,
@@ -41,7 +41,7 @@ func (h *Handlers) storeGet(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, r, err)
 		return
 	}
-	it.Images = h.urls(it.imageKeys)
+	it.Images, it.Thumbs = h.urls(it.imageKeys)
 	if it.Sizes, err = LoadSizes(r.Context(), h.DB, it.ID, true); err != nil {
 		httpx.Fail(w, r, err)
 		return
@@ -217,8 +217,19 @@ func (h *Handlers) deleteUnreferenced(r *http.Request, keys []string) {
 		return
 	}
 	for _, k := range free {
-		if err := h.Media.Delete(r.Context(), k); err != nil {
-			httpx.LoggerFrom(r.Context()).Warn("product image delete failed")
+		// вместе с оригиналом — его уменьшенные копии (их могло и не быть: удаление идемпотентно)
+		for _, key := range append([]string{k}, variantKeys(k)...) {
+			if err := h.Media.Delete(r.Context(), key); err != nil {
+				httpx.LoggerFrom(r.Context()).Warn("product image delete failed")
+			}
 		}
 	}
+}
+
+func variantKeys(key string) []string {
+	out := make([]string, 0, len(media.ProductVariants))
+	for _, side := range media.ProductVariants {
+		out = append(out, media.VariantKey(key, side))
+	}
+	return out
 }

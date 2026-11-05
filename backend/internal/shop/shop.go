@@ -96,7 +96,7 @@ func (c *Card) finish(base string) {
 }
 
 const cardCols = `p.id, p.title, p.brand, p.price, p.store_id, s.name, p.category_id, c.zone::text,
-	(SELECT key FROM product_images pi WHERE pi.product_id = p.id AND pi.angle = 'front'),
+	` + products.CardImageSQL + `,
 	p.in_stock, EXISTS (SELECT 1 FROM product_sizes ps WHERE ps.product_id = p.id), p.status::text, s.status::text`
 
 func scanCard(row pgx.Row, c *Card, extra ...any) error {

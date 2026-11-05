@@ -178,6 +178,8 @@ func run(log *slog.Logger, args []string) error {
 		}
 	}()
 
+	// уменьшенные копии фото товаров для витрины (и для уже загруженных фото)
+	go (&products.Variants{DB: pool, Store: store, Log: log}).Run(ctx, 15*time.Second)
 	views := &products.ViewCounter{Redis: rdb, DB: pool, Log: log}
 	go views.Run(ctx, 30*time.Second)
 	fitting := &tryon.FittingCounter{Redis: rdb, DB: pool, Log: log,

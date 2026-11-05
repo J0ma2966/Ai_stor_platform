@@ -56,6 +56,22 @@ func (l *Limiter) ByIP(rule Rule) func(http.Handler) http.Handler {
 	}
 }
 
+// ByIPExcept — ByIP, но запросы, для которых skip вернул true, лимит не считают
+// (серверный рендеринг сайта, см. config.InternalAPIToken).
+func (l *Limiter) ByIPExcept(rule Rule, skip func(*http.Request) bool) func(http.Handler) http.Handler {
+	byIP := l.ByIP(rule)
+	return func(next http.Handler) http.Handler {
+		limited := byIP(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if skip(r) {
+				next.ServeHTTP(w, r)
+				return
+			}
+			limited.ServeHTTP(w, r)
+		})
+	}
+}
+
 // Check применяет правило; при превышении сам пишет 429 и возвращает false.
 func (l *Limiter) Check(w http.ResponseWriter, r *http.Request, rule Rule, subject string) bool {
 	ok, retry, err := l.Allow(r.Context(), rule, subject)
