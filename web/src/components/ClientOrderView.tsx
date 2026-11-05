@@ -95,7 +95,7 @@ export function ClientOrderView({ id }: { id: string }) {
       </section>
 
       <section className="card">
-        <Items items={o.items} />
+        <Items items={o.items} reviewLabel={o.status === "delivered" ? t("reviews.rateItem") : undefined} />
         <p className="total">{t("orders.total")}: {formatSum(o.items_total, locale)}</p>
       </section>
 

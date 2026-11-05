@@ -24,6 +24,7 @@ import (
 	"github.com/boutique-market/backend/internal/payments"
 	"github.com/boutique-market/backend/internal/products"
 	"github.com/boutique-market/backend/internal/ratelimit"
+	"github.com/boutique-market/backend/internal/reviews"
 	"github.com/boutique-market/backend/internal/shop"
 	"github.com/boutique-market/backend/internal/stores"
 	"github.com/boutique-market/backend/internal/telegram"
@@ -60,6 +61,7 @@ func New(d Deps) http.Handler {
 	shopH := &shop.Handlers{DB: d.DB, PublicBase: d.Cfg.PublicMediaURL}
 	storesH := &stores.Handlers{DB: d.DB, PublicBase: d.Cfg.PublicMediaURL}
 	notifyH := &notify.Handlers{DB: d.DB}
+	reviewsH := &reviews.Handlers{DB: d.DB, PublicBase: d.Cfg.PublicMediaURL}
 	catalogH := &catalogadmin.Handlers{DB: d.DB, PublicBase: d.Cfg.PublicMediaURL}
 	mediaH := &media.Handlers{Store: d.Storage, Limiter: limiter, Redis: d.Redis, PublicBase: d.Cfg.PublicMediaURL,
 		MaxBytes: int64(d.Cfg.MaxUploadMB) << 20, Sem: media.NewSem(max(d.Cfg.UploadConcurrency, 1))}
@@ -79,6 +81,8 @@ func New(d Deps) http.Handler {
 	})
 	// ВРЕМЕННО: тестовый вход по почте — удаление аккаунта стирает почту и пароль.
 	usersH.Purge = append(usersH.Purge, auth.PurgeEmail)
+	// Отзывы удалённого клиента убираются, средние оценки товаров пересчитываются.
+	usersH.Purge = append(usersH.Purge, reviews.PurgeUser)
 	if d.Cfg.EmailAuthEnabled && d.Cfg.IsProd() {
 		d.Log.Warn("EMAIL_AUTH_ENABLED=true in prod: temporary email sign-up without verification is open")
 	}
@@ -123,6 +127,7 @@ func New(d Deps) http.Handler {
 					r.Route("/email", authH.EmailRoutes(d.Cfg.EmailAuthEnabled)) // ВРЕМЕННО, см. auth/email_temp.go
 				})
 				productsH.PublicRoutes(r)
+				reviewsH.PublicRoutes(r)
 				storesH.PublicRoutes(r)
 				catalogH.PublicRoutes(r)
 				paymentsH.PublicRoutes(r)
@@ -142,6 +147,8 @@ func New(d Deps) http.Handler {
 					})
 					// Заказы клиента: оформление, список, статусы.
 					r.With(auth.RequireRole(auth.RoleClient)).Route("/orders", ordersH.ClientRoutes)
+					// Отзывы и оценки: только после доставки заказа с товаром.
+					r.With(auth.RequireRole(auth.RoleClient)).Route("/reviews", reviewsH.ClientRoutes)
 					// Покупка токенов: создание платежа и его статус.
 					r.With(auth.RequireRole(auth.RoleClient)).Group(paymentsH.ClientRoutes)
 					// AI-примерка: фото, генерации, сохранённые образы.
@@ -159,6 +166,7 @@ func New(d Deps) http.Handler {
 					// Окно доставки магазина: только заказы своего магазина.
 					r.Route("/orders", ordersH.StoreRoutes)
 					r.Route("/telegram", telegramH.StoreRoutes)
+					r.Route("/reviews", reviewsH.StoreRoutes)
 				})
 
 				r.Route("/admin", func(r chi.Router) {
@@ -168,6 +176,7 @@ func New(d Deps) http.Handler {
 					r.Route("/orders", ordersH.AdminRoutes)
 					paymentsH.AdminRoutes(r)
 					r.Route("/tryon", tryonH.AdminRoutes)
+					r.Route("/reviews", reviewsH.AdminRoutes)
 				})
 			})
 		})

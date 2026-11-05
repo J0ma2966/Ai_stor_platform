@@ -133,7 +133,7 @@ SMS стоит денег, поэтому код нужен только для 
 ## Корзина, избранное, уведомления
 
 - Корзина серверная: добавить можно только опубликованный товар активного магазина в наличии. Если товар потом закончился или снят, позиция остаётся с `available=false` и `unavailable_reason` (`out_of_stock` / `unavailable`), а `can_checkout=false`. После оформления заказа оформленные позиции удаляются из корзины.
-- Уведомления: `kind` + `data` (без ПД), тексты переводит фронт. Модули создают их через `notify.Send` / `notify.SendToStore` в своей транзакции. Виды: `order_created` (магазину), `order_status` (клиенту), `product_moderated` (магазину), `payment_paid`, `payment_failed`, `generation_succeeded`, `generation_failed`, `system`. Хранятся 180 дней.
+- Уведомления: `kind` + `data` (без ПД), тексты переводит фронт. Модули создают их через `notify.Send` / `notify.SendToStore` в своей транзакции. Виды: `order_created` (магазину), `order_status` (клиенту), `product_moderated` (магазину), `payment_paid`, `payment_failed`, `generation_succeeded`, `generation_failed`, `review_created` (магазину), `review_reply`, `review_hidden` (клиенту), `system`. Хранятся 180 дней.
 
 ## Товары магазина
 
@@ -145,7 +145,9 @@ SMS стоит денег, поэтому код нужен только для 
 - Массовые фото: файлы загружаются через `/v1/uploads?purpose=product`, затем ключи привязываются по имени `АРТИКУЛ_ракурс.jpg` (ракурс: `front|side|back`, `1|2|3`, `спереди|сбоку|сзади`).
 - Статистика: просмотры и добавления в примерочную по дням (`product_stats_daily`), примерки — успешные генерации с товарами магазина, заказы и выручка (доставленные) за период; топ-10 товаров.
 
-Фильтры каталога: `q`, `category`, `store`, `brand`, `price_min`, `price_max`, `in_stock=true`, `sort=new|price_asc|price_desc|popular`.
+Фильтры каталога: `q`, `category`, `store`, `brand`, `price_min`, `price_max`, `in_stock=true`, `sort=new|price_asc|price_desc|popular|rating`. В товаре есть `rating_avg` (0 — отзывов нет) и `rating_count`, в карточке ещё `rating_dist` (число отзывов на 1…5 звёзд).
+
+Отзывы и оценки: [REVIEWS.md](REVIEWS.md).
 
 ## Как добавить модуль
 

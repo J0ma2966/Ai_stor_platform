@@ -51,6 +51,11 @@ export function notificationHref(n: Notification, role: string): string | null {
       return d.order_id ? `/account/orders/${d.order_id}` : "/account/orders";
     case "product_moderated":
       return d.product_id ? `/store/products/${d.product_id}` : "/store/products";
+    case "review_created":
+      return d.product_id ? `/store/reviews?product=${d.product_id}` : "/store/reviews";
+    case "review_reply":
+    case "review_hidden":
+      return d.product_id ? `/product/${d.product_id}#reviews` : null;
     case "payment_paid":
     case "payment_failed":
       return "/account/balance";

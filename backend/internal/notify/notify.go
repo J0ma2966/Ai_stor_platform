@@ -32,6 +32,9 @@ const (
 	PaymentFailed       = "payment_failed"       // клиенту: оплата отклонена/отменена
 	GenerationSucceeded = "generation_succeeded" // клиенту: примерка готова
 	GenerationFailed    = "generation_failed"    // клиенту: ошибка генерации, токены возвращены
+	ReviewCreated       = "review_created"       // магазину: новый отзыв о товаре
+	ReviewReply         = "review_reply"         // клиенту: магазин ответил на отзыв
+	ReviewHidden        = "review_hidden"        // клиенту: отзыв скрыт модератором
 	System              = "system"               // системное сообщение
 )
 

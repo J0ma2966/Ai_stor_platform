@@ -47,7 +47,11 @@ type Product struct {
 	Status      string            `json:"status,omitempty"`
 	Reason      *string           `json:"moderation_reason,omitempty"`
 	Images      map[string]string `json:"images"`
-	Sizes       []Size            `json:"sizes,omitempty"` // карточка товара и кабинет магазина
+	Sizes       []Size            `json:"sizes,omitempty"`       // карточка товара и кабинет магазина
+	HasSizes    bool              `json:"has_sizes,omitempty"`   // каталог: в корзину — только с выбором размера
+	RatingAvg   float64           `json:"rating_avg"`            // средняя оценка видимых отзывов, 0 — отзывов нет
+	RatingCount int               `json:"rating_count"`          // число видимых отзывов
+	RatingDist  []int             `json:"rating_dist,omitempty"` // только карточка: сколько отзывов на 1…5 звёзд
 	CreatedAt   time.Time         `json:"created_at"`
 	sortVal     string
 	imageKeys   map[string]string
@@ -102,6 +106,7 @@ var sorts = map[string]struct {
 	"price_asc":  {"p.price", false, "bigint"},
 	"price_desc": {"p.price", true, "bigint"},
 	"popular":    {"p.views_count", true, "bigint"},
+	"rating":     {"p.rating_avg", true, "numeric"},
 }
 
 // list: GET /v1/products?q=&category=&store=&brand=&price_min=&price_max=&in_stock=&sort=&cursor=&limit=
@@ -113,7 +118,7 @@ func (h *Handlers) list(w http.ResponseWriter, r *http.Request) {
 	}
 	srt, ok := sorts[sortName]
 	if !ok {
-		httpx.Fail(w, r, httpx.NewError(400, "bad_sort", "sort must be one of new, price_asc, price_desc, popular"))
+		httpx.Fail(w, r, httpx.NewError(400, "bad_sort", "sort must be one of new, price_asc, price_desc, popular, rating"))
 		return
 	}
 	where := []string{"p.status = 'published'", "s.status = 'active'"}
@@ -170,7 +175,9 @@ func (h *Handlers) list(w http.ResponseWriter, r *http.Request) {
 	// nosemgrep: go.lang.security.injection.tainted-sql-string.tainted-sql-string
 	sql := fmt.Sprintf(`
 		SELECT p.id, p.store_id, s.name, s.slug, p.category_id, c.zone::text, p.title, p.brand, p.price, p.in_stock, p.created_at, (%s)::text,
-		       COALESCE((SELECT jsonb_object_agg(angle, key) FROM product_images pi WHERE pi.product_id = p.id), '{}')
+		       p.rating_avg::float8, p.rating_count,
+		       COALESCE((SELECT jsonb_object_agg(angle, key) FROM product_images pi WHERE pi.product_id = p.id), '{}'),
+		       EXISTS (SELECT 1 FROM product_sizes ps WHERE ps.product_id = p.id)
 		FROM products p JOIN stores s ON s.id = p.store_id JOIN categories c ON c.id = p.category_id
 		WHERE %s ORDER BY %s %s, p.id %s LIMIT %d`,
 		srt.col, strings.Join(where, " AND "), srt.col, dir, dir, limit+1)
@@ -182,7 +189,8 @@ func (h *Handlers) list(w http.ResponseWriter, r *http.Request) {
 	var items []Product
 	for rows.Next() {
 		var p Product
-		if err := rows.Scan(&p.ID, &p.StoreID, &p.StoreName, &p.StoreSlug, &p.CategoryID, &p.Zone, &p.Title, &p.Brand, &p.Price, &p.InStock, &p.CreatedAt, &p.sortVal, &p.imageKeys); err != nil {
+		if err := rows.Scan(&p.ID, &p.StoreID, &p.StoreName, &p.StoreSlug, &p.CategoryID, &p.Zone, &p.Title, &p.Brand, &p.Price, &p.InStock, &p.CreatedAt, &p.sortVal,
+			&p.RatingAvg, &p.RatingCount, &p.imageKeys, &p.HasSizes); err != nil {
 			httpx.Fail(w, r, err)
 			return
 		}
@@ -216,10 +224,15 @@ func (h *Handlers) get(w http.ResponseWriter, r *http.Request) {
 	var p Product
 	err = h.DB.QueryRow(r.Context(), `
 		SELECT p.id, p.store_id, s.name, s.slug, p.category_id, c.zone::text, p.title, p.description, p.brand, p.price, p.in_stock, p.created_at,
+		  p.rating_avg::float8, p.rating_count,
+		  ARRAY(SELECT count(r.id)::int FROM generate_series(1, 5) g
+		        LEFT JOIN product_reviews r ON r.product_id = p.id AND r.status = 'visible' AND r.rating = g
+		        GROUP BY g ORDER BY g),
 		  COALESCE((SELECT jsonb_object_agg(angle, key) FROM product_images pi WHERE pi.product_id = p.id), '{}')
 		FROM products p JOIN stores s ON s.id = p.store_id JOIN categories c ON c.id = p.category_id
 		WHERE p.id = $1 AND p.status = 'published' AND s.status = 'active'`, id).
-		Scan(&p.ID, &p.StoreID, &p.StoreName, &p.StoreSlug, &p.CategoryID, &p.Zone, &p.Title, &p.Description, &p.Brand, &p.Price, &p.InStock, &p.CreatedAt, &p.imageKeys)
+		Scan(&p.ID, &p.StoreID, &p.StoreName, &p.StoreSlug, &p.CategoryID, &p.Zone, &p.Title, &p.Description, &p.Brand, &p.Price, &p.InStock, &p.CreatedAt,
+			&p.RatingAvg, &p.RatingCount, &p.RatingDist, &p.imageKeys)
 	if errors.Is(err, pgx.ErrNoRows) {
 		httpx.Fail(w, r, httpx.ErrNotFound)
 		return

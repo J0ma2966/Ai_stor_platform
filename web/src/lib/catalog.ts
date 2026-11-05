@@ -17,11 +17,15 @@ export type Product = {
   in_stock: boolean;
   // размеры: покупателю — наличие (low — осталось 1–2 шт.), кабинету магазина — точный остаток
   sizes?: ProductSize[];
+  has_sizes?: boolean; // каталог: у товара есть размеры (в корзину — через карточку)
   status?: "draft" | "published" | "unpublished" | "blocked";
   moderation_reason?: string;
   images: Partial<Record<"front" | "side" | "back", string>>;
   views?: number;
   fitting_adds?: number;
+  rating_avg?: number; // средняя оценка видимых отзывов, 0 — отзывов нет
+  rating_count?: number;
+  rating_dist?: number[]; // только карточка товара: сколько отзывов на 1…5 звёзд
   created_at: string;
 };
 export type ProductSize = { size: string; in_stock: boolean; low?: boolean; stock?: number };
@@ -44,7 +48,7 @@ export type Store = {
 };
 export type PlatformSettings = { generation_cost?: number; support_phone?: string; support_email?: string; support_telegram?: string };
 
-export const SORTS = ["popular", "new", "price_asc", "price_desc"] as const;
+export const SORTS = ["popular", "rating", "new", "price_asc", "price_desc"] as const;
 export type Sort = (typeof SORTS)[number];
 
 export type CatalogFilters = {
