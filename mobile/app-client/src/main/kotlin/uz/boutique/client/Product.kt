@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import uz.boutique.core.api.AuthState
 import uz.boutique.core.model.Product
+import uz.boutique.core.tryon.FittingItem
 import uz.boutique.core.model.Review
 import uz.boutique.core.util.Dates
 import uz.boutique.ui.AppScaffold
@@ -67,6 +68,7 @@ fun ProductScreen(
     onNeedLogin: () -> Unit,
     onCart: () -> Unit,
     onStore: (slug: String, name: String) -> Unit,
+    onFitting: () -> Unit = {},
 ) {
     val api = LocalGraph.current.api
     val loader = rememberLoader(id) { api.catalog.product(id) }
@@ -77,7 +79,7 @@ fun ProductScreen(
         actions = { FavoriteButton(id, onNeedLogin) },
     ) { pad ->
         LoadContent(loader, Modifier.padding(pad)) { p ->
-            ProductContent(p, Modifier.padding(pad), onNeedLogin, onCart, onStore)
+            ProductContent(p, Modifier.padding(pad), onNeedLogin, onCart, onStore, onFitting)
         }
     }
 }
@@ -90,6 +92,7 @@ fun ProductContent(
     onNeedLogin: () -> Unit,
     onCart: () -> Unit,
     onStore: (slug: String, name: String) -> Unit,
+    onFitting: () -> Unit = {},
 ) {
     val api = LocalGraph.current.api
     val shop = LocalShop.current
@@ -159,6 +162,7 @@ fun ProductContent(
                     })
                 }
                 ErrorBanner(add.error)
+                if (tryonEnabled) FittingItem.of(p)?.let { FittingButton(it, onFitting) }
                 Text(stringResource(UiR.string.product_perks), style = MaterialTheme.typography.bodySmall, color = Brand.colors.muted)
                 if (!p.description.isNullOrBlank()) {
                     SectionTitle(stringResource(UiR.string.product_description))

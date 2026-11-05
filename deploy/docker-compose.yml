@@ -34,7 +34,7 @@ services:
     environment:
       MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minioadmin}
       MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-minioadmin-dev}
-    ports: ["127.0.0.1:${MINIO_HOST_PORT:-9000}:9000", "127.0.0.1:${MINIO_CONSOLE_HOST_PORT:-9001}:9001"]
+    ports: ["${DEV_BIND_ADDR:-127.0.0.1}:${MINIO_HOST_PORT:-9000}:9000", "127.0.0.1:${MINIO_CONSOLE_HOST_PORT:-9001}:9001"]
     volumes: [minio:/data]
 
   minio-init:
@@ -55,15 +55,15 @@ services:
       REDIS_URL: redis://redis:6379/0
       S3_ENDPOINT: minio:9000
       # ссылки на приватные фото/результаты открывает браузер: minio:9000 ему не виден
-      S3_PUBLIC_ENDPOINT: localhost:${MINIO_HOST_PORT:-9000}
+      S3_PUBLIC_ENDPOINT: ${DEV_PUBLIC_HOST:-localhost}:${MINIO_HOST_PORT:-9000}
       S3_USE_SSL: "false"
       INTERNAL_ADDR: 0.0.0.0:9090
       AUTO_MIGRATE: "true"
-      PUBLIC_MEDIA_URL: http://localhost:${MINIO_HOST_PORT:-9000}/boutique-media
+      PUBLIC_MEDIA_URL: http://${DEV_PUBLIC_HOST:-localhost}:${MINIO_HOST_PORT:-9000}/boutique-media
       # dev: воркер AI-примерки внутри API, демо-провайдер без ключей (docs/TRYON.md)
       TRYON_PROVIDER: ${TRYON_PROVIDER:-mock}
       TRYON_WORKER_INPROCESS: "true"
-    ports: ["127.0.0.1:${API_HOST_PORT:-8080}:8080", "127.0.0.1:${METRICS_HOST_PORT:-9090}:9090"]
+    ports: ["${DEV_BIND_ADDR:-127.0.0.1}:${API_HOST_PORT:-8080}:8080", "127.0.0.1:${METRICS_HOST_PORT:-9090}:9090"]
 
   backup:
     build: {context: .., dockerfile: deploy/backup/Dockerfile}

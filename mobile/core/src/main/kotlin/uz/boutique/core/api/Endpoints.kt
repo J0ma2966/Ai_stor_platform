@@ -236,6 +236,7 @@ class Api(val client: ApiClient, appRole: Role) {
     val notifications = NotificationsApi(client)
     val uploads = UploadsApi(client)
     val store = StoreApi(client)
+    val tryon = uz.boutique.core.tryon.TryonApi(client)
     val session: SessionManager get() = client.session
 }
 

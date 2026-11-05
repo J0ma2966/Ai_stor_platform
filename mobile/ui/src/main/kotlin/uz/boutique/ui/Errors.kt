@@ -51,6 +51,12 @@ fun errorRes(code: String, appRole: Role): Int? = when (code) {
     "registration_incomplete" -> R.string.err_registration_incomplete
     "corrupt_image" -> R.string.err_corrupt_image
     "read_file" -> R.string.err_read_file
+    "tryon_consent_required" -> R.string.err_tryon_consent_required
+    "tryon_transfer_consent_required" -> R.string.err_tryon_transfer_consent_required
+    "insufficient_tokens" -> R.string.err_insufficient_tokens
+    "too_many_active_generations" -> R.string.err_too_many_active_generations
+    "generation_in_progress" -> R.string.err_generation_in_progress
+    "tryon_disabled" -> R.string.err_tryon_disabled
     ApiException.WRONG_APP -> if (appRole == Role.STORE) R.string.err_wrong_app_store else R.string.err_wrong_app_client
     else -> null
 }

@@ -42,3 +42,21 @@ BOUTIQUE_IT_STORE_LOGIN=shop BOUTIQUE_IT_STORE_PASSWORD=... \
 ## Подпись release
 
 Переменные окружения `BOUTIQUE_KEYSTORE`, `BOUTIQUE_KEYSTORE_PASSWORD`, `BOUTIQUE_KEY_ALIAS`, `BOUTIQUE_KEY_PASSWORD`. Без них release собирается неподписанным.
+
+## Проверка с телефона на локальном сервере (Windows, Wi-Fi)
+
+1. Узнайте IP компьютера в Wi-Fi: `ipconfig` → «IPv4-адрес», например `192.168.1.50`. Телефон должен быть в той же сети.
+2. В корневом `.env`:
+   ```
+   DEV_BIND_ADDR=0.0.0.0          # API и фото доступны из локальной сети
+   DEV_PUBLIC_HOST=192.168.1.50   # IP из шага 1 — по нему телефон грузит фото
+   ```
+   Для примерки через OpenAI там же: `TRYON_PROVIDER=openai`, `OPENAI_API_KEY=sk-...` (без них работает демо-провайдер `mock`).
+3. `.\scripts\dev.ps1 up` (если уже запущено — `down`, затем `up`). При первом запуске Windows спросит доступ для Docker — разрешите для частных сетей. Если не спросил, в PowerShell от администратора:
+   `New-NetFirewallRule -DisplayName "Boutique dev" -Direction Inbound -Protocol TCP -LocalPort 8080,9000 -Action Allow -Profile Private`
+4. Проверка с телефона в браузере: `http://192.168.1.50:8080/healthz` должен ответить.
+5. В debug-APK на экране входа нажмите «Адрес сервера» и введите `http://192.168.1.50:8080`.
+6. Регистрация по SMS: код смотрите в `.\scripts\dev.ps1 otp`. Новый клиент получает 20 токенов — это одна примерка; добавить токены можно в админке сайта.
+7. Для примерки нужны опубликованные товары с тремя фото: магазин создаётся в админке сайта (`.\scripts\dev.ps1 admin root`, затем `.\scripts\dev.ps1 web`), товары — в приложении магазина или кабинете на сайте.
+
+Не держите `DEV_BIND_ADDR=0.0.0.0` в общественных сетях: dev-сервер без HTTPS.

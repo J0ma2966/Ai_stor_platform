@@ -44,6 +44,10 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import uz.boutique.core.api.Api
+import uz.boutique.core.api.KeyValueStore
+import uz.boutique.core.api.MemoryStore
+import uz.boutique.core.tryon.FittingItem
+import uz.boutique.core.tryon.FittingSelection
 import uz.boutique.core.api.AuthState
 import uz.boutique.core.api.RefreshOutcome
 import uz.boutique.core.model.CartItem
@@ -55,6 +59,7 @@ import uz.boutique.ui.CenterLoading
 import uz.boutique.ui.ErrorState
 import uz.boutique.ui.LocalGraph
 import uz.boutique.ui.NotificationsScreen
+import uz.boutique.ui.PrefsStore
 import uz.boutique.ui.R as UiR
 
 class ClientApp : Application() {
@@ -84,9 +89,32 @@ class MainActivity : AppCompatActivity() {
 
 /** Общее состояние покупателя: избранное (сердечки) и число товаров в корзине (значок). */
 @Stable
-class ShopState(private val api: Api) {
+class ShopState(private val api: Api, fittingStore: KeyValueStore = MemoryStore()) {
     var favIds by mutableStateOf(setOf<String>())
         private set
+
+    /** Примерочная: по одной вещи на зону, хранится на телефоне и работает без входа. */
+    private val fitting = FittingSelection(fittingStore)
+    var fittingItems by mutableStateOf(fitting.all)
+        private set
+
+    suspend fun addToFitting(item: FittingItem) {
+        val isNew = fitting.add(item)
+        fittingItems = fitting.all
+        if (isNew) api.tryon.countFittingAdd(item.id)
+    }
+
+    fun removeFromFitting(zone: String) {
+        fitting.remove(zone)
+        fittingItems = fitting.all
+    }
+
+    /** «Изменить образ» / «Повторить»: вещи прошлой примерки снова в примерочной. */
+    fun setFitting(items: List<FittingItem>) {
+        fitting.clear()
+        items.forEach { fitting.add(it) }
+        fittingItems = fitting.all
+    }
     var cartCount by mutableIntStateOf(0)
     /** Позиции, выбранные для оформления (корзина → оформление). */
     var checkoutItems: List<CartItem> = emptyList()
@@ -131,11 +159,17 @@ object Routes {
     const val ORDER = "order/{id}"
     const val CHECKOUT = "checkout"
     const val NOTIFICATIONS = "notifications"
+    const val FITTING = "fitting"
+    const val TRYON_NEW = "tryon/new"
+    const val GENERATION = "tryon/gen/{id}"
+    const val TRYON_HISTORY = "tryon/history"
+    const val TRYON_PHOTOS = "tryon/photos"
 
     fun sms(mode: String) = "sms/$mode"
     fun password(mode: String) = "password/$mode"
     fun product(id: String) = "product/$id"
     fun order(id: String) = "order/$id"
+    fun generation(id: String) = "tryon/gen/$id"
     fun store(slug: String, name: String) = "store/$slug?name=${android.net.Uri.encode(name)}"
 
     val TABS = listOf(CATALOG, FAVORITES, CART, ORDERS, PROFILE)
@@ -187,7 +221,8 @@ fun ClientRoot(onRestart: () -> Unit) {
         boot == RefreshOutcome.FAILED && auth == AuthState.Unknown ->
             ErrorState(uz.boutique.core.api.ApiException.network(), onRetry = { boot = null; bootTry++ })
         else -> {
-            val shop = remember(api) { ShopState(api) }
+            val context = LocalContext.current
+            val shop = remember(api) { ShopState(api, PrefsStore(context, "fitting")) }
             CompositionLocalProvider(LocalShop provides shop) {
                 ClientNav(onRestart)
             }
@@ -265,6 +300,7 @@ fun ClientNav(onRestart: () -> Unit) {
                     onProduct = { nav.navigate(Routes.product(it)) },
                     onBack = null,
                     onNeedLogin = { nav.navigate(Routes.LOGIN) },
+                    onFitting = { nav.navigate(Routes.FITTING) },
                 )
             }
             composable(
@@ -276,6 +312,7 @@ fun ClientNav(onRestart: () -> Unit) {
                     onProduct = { nav.navigate(Routes.product(it)) },
                     onBack = { nav.popBackStack() },
                     onNeedLogin = { nav.navigate(Routes.LOGIN) },
+                    onFitting = { nav.navigate(Routes.FITTING) },
                 )
             }
             composable(Routes.PRODUCT, arguments = listOf(navArgument("id") { type = NavType.StringType })) { e ->
@@ -285,6 +322,7 @@ fun ClientNav(onRestart: () -> Unit) {
                     onNeedLogin = { nav.navigate(Routes.LOGIN) },
                     onCart = { nav.navigate(Routes.CART) { launchSingleTop = true } },
                     onStore = { slug, name -> nav.navigate(Routes.store(slug, name)) },
+                    onFitting = { nav.navigate(Routes.FITTING) },
                 )
             }
             composable(Routes.FAVORITES) {
@@ -318,14 +356,53 @@ fun ClientNav(onRestart: () -> Unit) {
                     onLogin = { nav.navigate(Routes.LOGIN) },
                     onChangePassword = { nav.navigate(Routes.password("change")) },
                     onNotifications = { nav.navigate(Routes.NOTIFICATIONS) },
+                    onFitting = { nav.navigate(Routes.FITTING) },
+                    onTryonHistory = { nav.navigate(Routes.TRYON_HISTORY) },
+                    onTryonPhotos = { nav.navigate(Routes.TRYON_PHOTOS) },
                     onRestart = onRestart,
                 )
+            }
+            composable(Routes.FITTING) {
+                FittingRoomScreen(
+                    onBack = { nav.popBackStack() },
+                    onProduct = { nav.navigate(Routes.product(it)) },
+                    onStart = { if (loggedIn) nav.navigate(Routes.TRYON_NEW) else nav.navigate(Routes.LOGIN) },
+                    onHistory = { if (loggedIn) nav.navigate(Routes.TRYON_HISTORY) else nav.navigate(Routes.LOGIN) },
+                    onCatalog = { nav.navigate(Routes.CATALOG) { popUpTo(Routes.CATALOG) { inclusive = true } } },
+                )
+            }
+            composable(Routes.TRYON_NEW) {
+                TryonWizardScreen(
+                    onBack = { nav.popBackStack() },
+                    onStarted = { id -> nav.navigate(Routes.generation(id)) { popUpTo(Routes.TRYON_NEW) { inclusive = true } } },
+                    onCatalog = { nav.navigate(Routes.CATALOG) { popUpTo(Routes.CATALOG) { inclusive = true } } },
+                )
+            }
+            composable(Routes.GENERATION, arguments = listOf(navArgument("id") { type = NavType.StringType })) { e ->
+                GenerationScreen(
+                    id = e.arguments?.getString("id").orEmpty(),
+                    onBack = { nav.popBackStack() },
+                    onProduct = { nav.navigate(Routes.product(it)) },
+                    onFitting = { nav.navigate(Routes.FITTING) },
+                    onRepeat = { nav.navigate(Routes.TRYON_NEW) },
+                )
+            }
+            composable(Routes.TRYON_HISTORY) {
+                TryonHistoryScreen(
+                    onBack = { nav.popBackStack() },
+                    onGeneration = { nav.navigate(Routes.generation(it)) },
+                    onPhotos = { nav.navigate(Routes.TRYON_PHOTOS) },
+                )
+            }
+            composable(Routes.TRYON_PHOTOS) {
+                TryonPhotosScreen(onBack = { nav.popBackStack() })
             }
             composable(Routes.NOTIFICATIONS) {
                 NotificationsScreen(onBack = { nav.popBackStack() }) { t ->
                     when (t) {
                         is NotificationTarget.ClientOrder -> if (t.id != null) nav.navigate(Routes.order(t.id!!)) else nav.navigate(Routes.ORDERS)
                         is NotificationTarget.ProductPage -> nav.navigate(Routes.product(t.id))
+                        is NotificationTarget.TryonResult -> nav.navigate(Routes.generation(t.id))
                         else -> Unit
                     }
                 }

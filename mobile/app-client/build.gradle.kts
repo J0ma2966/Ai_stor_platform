@@ -40,6 +40,7 @@ android {
             applicationIdSuffix = ".debug"
             buildConfigField("String", "API_URL", "\"$debugApiUrl\"")
             buildConfigField("boolean", "SERVER_OVERRIDE", "true")
+            buildConfigField("boolean", "TRYON_ENABLED", "true")
         }
         release {
             isMinifyEnabled = true
@@ -47,6 +48,8 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             buildConfigField("String", "API_URL", "\"$apiUrl\"")
             buildConfigField("boolean", "SERVER_OVERRIDE", "false")
+            // В проде примерка выключена (как NEXT_PUBLIC_TRYON_ENABLED на сайте); включить: -Pboutique.tryonRelease=true
+            buildConfigField("boolean", "TRYON_ENABLED", providers.gradleProperty("boutique.tryonRelease").getOrElse("false"))
             signingConfigs.findByName("release")?.let { signingConfig = it }
         }
     }

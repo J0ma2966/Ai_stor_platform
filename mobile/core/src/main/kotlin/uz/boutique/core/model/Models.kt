@@ -37,6 +37,9 @@ data class Me(
     @SerialName("token_balance") val tokenBalance: Long = 0,
     @SerialName("registration_complete") val registrationComplete: Boolean = false,
     @SerialName("has_password") val hasPassword: Boolean = false,
+    @SerialName("height_cm") val heightCm: Int? = null,
+    @SerialName("weight_kg") val weightKg: Double? = null,
+    @SerialName("body_params") val bodyParams: Map<String, Double> = emptyMap(),
 )
 
 @Serializable
