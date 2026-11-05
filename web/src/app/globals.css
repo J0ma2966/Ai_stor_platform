@@ -435,3 +435,31 @@ img.thumb { width: 48px; height: 48px; object-fit: cover; border-radius: 6px; fl
   .tile .num, .tile-value { font-size: 1.3rem; overflow-wrap: anywhere; }
 }
 .cat-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+
+/* ---------- отзывы и оценки (минимально; общий дизайн — в отдельной задаче) ---------- */
+:root { --star: #e0a100; }
+.stars { position: relative; display: inline-block; width: max-content; align-self: flex-start; line-height: 1; letter-spacing: 1px; white-space: nowrap; vertical-align: middle; }
+.stars-sm { font-size: 14px; }
+.stars-lg { font-size: 22px; }
+.stars-bg { color: var(--border); }
+.stars-fg { position: absolute; inset: 0 auto 0 0; overflow: hidden; color: var(--star); }
+.star-input { border: 0; padding: 0; margin: 0; display: flex; gap: 2px; }
+.star-input legend { padding: 0; margin-bottom: 4px; font-size: 14px; }
+.star-input label { cursor: pointer; font-size: 30px; line-height: 1; color: var(--border); position: relative; }
+.star-input label.on { color: var(--star); }
+.star-input input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.star-input label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.pcard-rating { color: var(--text); }
+.pcard-rating > span[aria-hidden] { color: var(--star); }
+.rating-link { display: inline-flex; align-items: center; gap: 6px; color: inherit; text-decoration: none; }
+.rating-big { display: flex; align-items: center; gap: 10px; margin: 0; }
+.rating-big strong { font-size: 36px; line-height: 1; }
+.reviews-layout { display: grid; gap: 24px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 900px) { .reviews-layout { grid-template-columns: 300px minmax(0, 1fr); align-items: start; } }
+.dist-row { display: grid; grid-template-columns: 32px 1fr 32px; gap: 8px; align-items: center; width: 100%; background: none; border: 0; padding: 2px 0; font: inherit; color: inherit; cursor: pointer; text-align: left; }
+.dist-row:disabled { cursor: default; opacity: .6; }
+.dist-on { font-weight: 600; }
+.dist-bar { height: 8px; border-radius: 4px; background: var(--border); overflow: hidden; }
+.dist-bar > span { display: block; height: 100%; background: var(--star); }
+.review-reply { border-left: 3px solid var(--accent); padding-left: 12px; }
+.review p { margin: 0; }
