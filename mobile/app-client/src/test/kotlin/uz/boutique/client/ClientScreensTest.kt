@@ -120,6 +120,7 @@ class ClientScreensTest {
                 }
             }
         }
+        rule.onNodeWithTag("phone").performTextClearance()
         rule.onNodeWithTag("phone").performTextInput("901234567")
         rule.onNodeWithTag("password").performTextInput("secret-password")
         rule.onNodeWithTag("sign_in").performClick()
@@ -137,6 +138,7 @@ class ClientScreensTest {
                 }
             }
         }
+        rule.onNodeWithTag("phone").performTextClearance()
         rule.onNodeWithTag("phone").performTextInput("901234567")
         rule.onNodeWithTag("password").performTextInput("wrong-password")
         rule.onNodeWithTag("sign_in").performClick()

@@ -2,6 +2,7 @@ package uz.boutique.store
 
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -22,6 +23,7 @@ import uz.boutique.core.model.OrderDetail
 import uz.boutique.core.model.OrderItem
 import uz.boutique.core.model.OrderStatus
 import uz.boutique.core.model.Role
+import uz.boutique.core.util.Money
 import uz.boutique.ui.AppGraph
 import uz.boutique.ui.BoutiqueTheme
 import uz.boutique.ui.LocalGraph
@@ -83,7 +85,7 @@ class StoreOrderContentTest {
         rule.onNodeWithTag("copy").performScrollTo().performClick()
         assertTrue(copied.startsWith("Заказ №42"))
         rule.onNodeWithText("Навои, 5, кв. 12").assertExists()
-        rule.onNodeWithTag("order_total").performScrollTo().assertExists()
-        rule.onNodeWithText("1 500 000 сум", useUnmergedTree = true).assertExists()
+        // та же сумма есть и в строке товара, поэтому проверяем именно итог
+        rule.onNodeWithTag("order_total").performScrollTo().assertTextEquals(Money.format(150_000_000, "ru"))
     }
 }
