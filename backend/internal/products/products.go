@@ -173,14 +173,23 @@ func (h *Handlers) list(w http.ResponseWriter, r *http.Request) {
 	// В строку подставляются только константы из карты sorts и фрагменты WHERE с плейсхолдерами $N;
 	// все значения пользователя идут через args.
 	// nosemgrep: go.lang.security.injection.tainted-sql-string.tainted-sql-string
+	// Внутренний запрос выбирает страницу по индексу сортировки (00017), а фото и
+	// наличие размеров считаются снаружи — только для строк страницы. Если оставить
+	// подзапросы в одном SELECT с ORDER BY, PostgreSQL вычисляет их до сортировки
+	// для каждого подходящего товара.
 	sql := fmt.Sprintf(`
-		SELECT p.id, p.store_id, s.name, s.slug, p.category_id, c.zone::text, p.title, p.brand, p.price, p.in_stock, p.created_at, (%s)::text,
+		SELECT p.id, p.store_id, p.store_name, p.store_slug, p.category_id, c.zone::text, p.title, p.brand, p.price, p.in_stock, p.created_at, p.sort_val,
 		       p.rating_avg::float8, p.rating_count,
 		       COALESCE((SELECT jsonb_object_agg(angle, key) FROM product_images pi WHERE pi.product_id = p.id), '{}'),
 		       EXISTS (SELECT 1 FROM product_sizes ps WHERE ps.product_id = p.id)
-		FROM products p JOIN stores s ON s.id = p.store_id JOIN categories c ON c.id = p.category_id
-		WHERE %s ORDER BY %s %s, p.id %s LIMIT %d`,
-		srt.col, strings.Join(where, " AND "), srt.col, dir, dir, limit+1)
+		FROM (
+			SELECT p.id, p.store_id, s.name AS store_name, s.slug AS store_slug, p.category_id, p.title, p.brand, p.price, p.in_stock,
+			       p.created_at, p.rating_avg, p.rating_count, (%s)::text AS sort_val, %s AS sort_key
+			FROM products p JOIN stores s ON s.id = p.store_id
+			WHERE %s ORDER BY %s %s, p.id %s LIMIT %d
+		) p JOIN categories c ON c.id = p.category_id
+		ORDER BY p.sort_key %s, p.id %s`,
+		srt.col, srt.col, strings.Join(where, " AND "), srt.col, dir, dir, limit+1, dir, dir)
 	rows, err := h.DB.Query(r.Context(), sql, args...)
 	if err != nil {
 		httpx.Fail(w, r, err)
