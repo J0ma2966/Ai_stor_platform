@@ -9,6 +9,7 @@ import { Footer } from "@/components/Footer";
 import { StaleWorkerGuard } from "@/components/StaleWorkerGuard";
 import { SessionProvider } from "@/lib/session";
 import { alternates, siteUrl } from "@/lib/site";
+import "@fontsource-variable/manrope";
 import "./globals.css";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -24,7 +25,7 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#5b2a86" };
+export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#3f1f6e" };
 
 // Корневой layout общий для обоих языков: при смене языка он не пересоздаётся,
 // а только получает новые сообщения (см. src/i18n/switch.tsx).
