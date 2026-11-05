@@ -322,12 +322,22 @@ func (h *Handlers) remove(w http.ResponseWriter, r *http.Request) {
 		if _, _, err := lockProduct(r.Context(), tx, pid, false); err != nil {
 			return err
 		}
-		tag, err := tx.Exec(r.Context(), `DELETE FROM product_reviews WHERE user_id = $1 AND product_id = $2`, uid, pid)
+		// Скрытый модератором отзыв не удаляется, а теряет текст: иначе клиент удалил бы
+		// его и сразу оставил новый видимый отзыв — обход модерации. Строка остаётся
+		// (upsert отвечает review_hidden), а при удалении аккаунта уходит через PurgeUser.
+		tag, err := tx.Exec(r.Context(), `UPDATE product_reviews SET body = ''
+			WHERE user_id = $1 AND product_id = $2 AND status = 'hidden'`, uid, pid)
 		if err != nil {
 			return err
 		}
 		if tag.RowsAffected() == 0 {
-			return httpx.ErrNotFound
+			tag, err = tx.Exec(r.Context(), `DELETE FROM product_reviews WHERE user_id = $1 AND product_id = $2`, uid, pid)
+			if err != nil {
+				return err
+			}
+			if tag.RowsAffected() == 0 {
+				return httpx.ErrNotFound
+			}
 		}
 		return Refresh(r.Context(), tx, pid)
 	})
@@ -412,7 +422,7 @@ func cleanText(s string) string {
 		if r == '\n' || r == '\t' {
 			return r
 		}
-		if unicode.IsControl(r) {
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) { // в т.ч. bidi-override U+202E
 			return -1
 		}
 		return r

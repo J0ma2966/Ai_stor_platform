@@ -166,11 +166,12 @@ function MyReviewBox({ productId, onChanged }: { productId: string; onChanged: (
         {r.body && <p className="pre small">{r.body}</p>}
         <div className="row wrap">
           {r.status !== "hidden" && <button type="button" className="btn btn-secondary" onClick={() => setEditing(true)}>{t("edit")}</button>}
-          <DeleteButton onDelete={async () => {
+          {/* скрытый модератором отзыв удаляется только текстом: новый отзыв на товар оставить нельзя */}
+          {(r.status !== "hidden" || r.body) && <DeleteButton onDelete={async () => {
             await deleteReview(productId);
-            setMine({ ...mine, review: null });
+            setMine({ ...mine, review: r.status === "hidden" ? { ...r, body: "" } : null });
             onChanged(r.status === "visible" ? r.rating : null, null);
-          }} />
+          }} />}
         </div>
       </div>
     );

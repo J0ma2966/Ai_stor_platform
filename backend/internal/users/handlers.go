@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -138,7 +140,7 @@ func (h *Handlers) update(w http.ResponseWriter, r *http.Request) {
 	var body any
 	if req.BodyParams != nil {
 		var m map[string]float64 // только числовые параметры, не больше 20
-		if err := json.Unmarshal(*req.BodyParams, &m); err != nil || len(m) > 20 {
+		if err := json.Unmarshal(*req.BodyParams, &m); err != nil || len(m) > 20 || !validBodyParams(m) {
 			httpx.Fail(w, r, &httpx.Error{Status: 422, Code: "validation_failed", Message: "body_params must be an object of numbers", Fields: map[string]string{"body_params": "invalid"}})
 			return
 		}
@@ -200,4 +202,21 @@ func (h *Handlers) tokenHistory(w http.ResponseWriter, r *http.Request) {
 		next = strconv.FormatInt(items[limit-1].ID, 10)
 	}
 	httpx.List(w, items, next)
+}
+
+// validBodyParams — те же ограничения, что у параметров тела в примерке (tryon.bodyReq):
+// имя 1..32 символа (буквы, цифры, _), значение 1..400.
+func validBodyParams(m map[string]float64) bool {
+	for k, v := range m {
+		n := utf8.RuneCountInString(k)
+		if n < 1 || n > 32 || v < 1 || v > 400 {
+			return false
+		}
+		for _, r := range k {
+			if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' {
+				return false
+			}
+		}
+	}
+	return true
 }

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -192,6 +193,10 @@ func (h *Handlers) updateProfile(w http.ResponseWriter, r *http.Request) {
 			httpx.Fail(w, r, err)
 			return
 		}
+		// validate:"url" пропускает javascript: и data: — на витрине это ссылка.
+		if site := req.Contacts.Website; site != "" && !webURL(site) {
+			fields["contacts.website"] = "url"
+		}
 	}
 	if len(fields) > 0 {
 		httpx.Fail(w, r, &httpx.Error{Status: 422, Code: "validation_failed", Message: "invalid profile", Fields: fields})
@@ -246,3 +251,9 @@ const (
 	storeBySlugSQL = `SELECT ` + storeCols + ` FROM stores s WHERE s.slug = $1 AND s.status = 'active'`
 	storeByIDSQL   = `SELECT ` + storeCols + ` FROM stores s WHERE s.id = $1`
 )
+
+// webURL — только абсолютные http(s)-ссылки с хостом.
+func webURL(s string) bool {
+	u, err := url.Parse(s)
+	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != "" && u.User == nil
+}
