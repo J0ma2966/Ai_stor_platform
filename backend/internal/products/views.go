@@ -1,16 +1,21 @@
 package products
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"log/slog"
+	"sort"
 	"strconv"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+
+	"github.com/boutique-market/backend/internal/platform/db"
 )
 
 // ViewCounter считает просмотры в Redis (HINCRBY, без блокировок строк в PostgreSQL)
@@ -75,12 +80,13 @@ func (v *ViewCounter) Flush(ctx context.Context) error {
 		}
 	}
 	// Общий счётчик и дневная статистика (для отчёта магазина за период) — одним запросом.
-	_, err = v.DB.Exec(ctx, flushViewsSQL, ids, counts)
+	err = applyCounts(ctx, v.DB, flushViewsSQL, ids, counts)
 	if err != nil {
 		pipe := v.Redis.TxPipeline()
 		for i, id := range ids {
 			pipe.HIncrBy(ctx, viewsKey, id.String(), counts[i])
 		}
+		pipe.Del(ctx, tmp) // иначе временный ключ остаётся в Redis навсегда
 		_, _ = pipe.Exec(ctx)
 		return err
 	}
@@ -128,15 +134,36 @@ const (
 
 // RecordFittingAdds — батчевая версия RecordFittingAdd: счётчик примерочной копится
 // в Redis и сбрасывается сюда пачкой (ids[i] получил counts[i] добавлений).
-func RecordFittingAdds(ctx context.Context, q interface {
-	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
-}, ids []uuid.UUID, counts []int64) error {
+func RecordFittingAdds(ctx context.Context, pool *pgxpool.Pool, ids []uuid.UUID, counts []int64) error {
 	if len(ids) != len(counts) {
 		return errors.New("RecordFittingAdds: ids and counts length mismatch")
 	}
+	return applyCounts(ctx, pool, fittingAddsSQL, ids, counts)
+}
+
+// applyCounts пишет пачку счётчиков (stmt с параметрами $1 ids, $2 counts).
+// Строки products блокируются заранее по возрастанию id — в том же порядке, что
+// при оформлении заказа. Иначе UPDATE … FROM unnest берёт блокировки в случайном
+// порядке (ids приходят из map), и сбросы с трёх инстансов API и покупки тех же
+// товаров взаимно блокируются (deadlock).
+func applyCounts(ctx context.Context, pool *pgxpool.Pool, stmt string, ids []uuid.UUID, counts []int64) error {
 	if len(ids) == 0 {
 		return nil
 	}
-	_, err := q.Exec(ctx, fittingAddsSQL, ids, counts)
-	return err
+	idx := make([]int, len(ids))
+	for i := range idx {
+		idx[i] = i
+	}
+	sort.Slice(idx, func(a, b int) bool { return bytes.Compare(ids[idx[a]][:], ids[idx[b]][:]) < 0 })
+	sIDs, sCounts := make([]uuid.UUID, len(ids)), make([]int64, len(ids))
+	for i, j := range idx {
+		sIDs[i], sCounts[i] = ids[j], counts[j]
+	}
+	return db.TxRetry(ctx, pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `SELECT 1 FROM products WHERE id = ANY($1) ORDER BY id FOR NO KEY UPDATE`, sIDs); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, stmt, sIDs, sCounts)
+		return err
+	})
 }

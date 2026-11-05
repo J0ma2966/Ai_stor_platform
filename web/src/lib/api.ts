@@ -42,6 +42,18 @@ type SessionResp = { access_token: string; user: { id: string; role: Role }; is_
 // рабочей, поэтому выходить из аккаунта и отправлять на экран входа нельзя.
 export type RefreshResult = { ok: true } | { ok: false; error?: ApiError };
 
+// Refresh-токен одноразовый, а сервер при повторном предъявлении уже
+// использованного токена отзывает всю сессию (защита от кражи). Несколько вкладок
+// открываются одновременно и обновляют токен с одной и той же cookie — без общей
+// блокировки вторая вкладка предъявляет уже использованный токен и пользователя
+// выбрасывает из аккаунта на всех вкладках. Web Locks API выстраивает вкладки
+// в очередь: следующая отправит уже новую cookie. Без поддержки — как раньше.
+export function withRefreshLock<T>(fn: () => Promise<T>): Promise<T> {
+  const locks = typeof navigator !== "undefined" ? navigator.locks : undefined;
+  if (!locks?.request) return fn();
+  return locks.request("boutique-auth-refresh", fn) as Promise<T>;
+}
+
 // refresh: параллельные запросы делят один вызов /auth/refresh.
 let refreshing: Promise<RefreshResult> | null = null;
 
@@ -49,7 +61,9 @@ export function refreshSessionResult(): Promise<RefreshResult> {
   if (!refreshing) {
     refreshing = (async (): Promise<RefreshResult> => {
       try {
-        const res = await fetch(`${API_URL}/v1/auth/refresh`, { method: "POST", credentials: "include" });
+        const res = await withRefreshLock(() =>
+          fetch(`${API_URL}/v1/auth/refresh`, { method: "POST", credentials: "include" }),
+        );
         if (!res.ok) {
           if (res.status === 401 || res.status === 403) {
             setSession(null);

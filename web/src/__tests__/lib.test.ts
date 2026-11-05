@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { itemsParam, parseItemsParam } from "@/lib/orders";
 import { safeNext } from "@/lib/safeNext";
 import { formatSum } from "@/lib/money";
-import { api, ApiError, currentRole, setOnAuthLost, setSession } from "@/lib/api";
+import { api, ApiError, currentRole, setOnAuthLost, setSession, withRefreshLock } from "@/lib/api";
 
 const ID = "3f1c2a9e-1b2c-4d5e-8f90-123456789abc";
 
@@ -58,6 +58,35 @@ describe("api client", () => {
     expect(calls).toHaveLength(3);
     expect(calls[2]).toContain("Bearer new");
     expect(currentRole()).toBe("client");
+  });
+
+  it("serializes refresh across tabs with the Web Locks API", async () => {
+    // очередь блокировки, общая для «вкладок»
+    let tail = Promise.resolve();
+    const request = vi.fn((_name: string, cb: () => Promise<unknown>) => {
+      const run = tail.then(cb);
+      tail = run.then(() => undefined, () => undefined);
+      return run;
+    });
+    vi.stubGlobal("navigator", { locks: { request } });
+    let active = 0;
+    let maxActive = 0;
+    const order: string[] = [];
+    const tab = (name: string) =>
+      withRefreshLock(async () => {
+        active++;
+        maxActive = Math.max(maxActive, active);
+        order.push(`${name}:start`);
+        await new Promise((r) => setTimeout(r, 5));
+        order.push(`${name}:end`);
+        active--;
+      });
+    await Promise.all([tab("a"), tab("b")]);
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(request.mock.calls[0][0]).toBe("boutique-auth-refresh");
+    expect(maxActive).toBe(1);
+    expect(order).toEqual(["a:start", "a:end", "b:start", "b:end"]);
+    vi.unstubAllGlobals();
   });
 
   it("logs out on token_revoked and exposes request_id", async () => {
