@@ -2,3 +2,5 @@
 # в коммите 3493686 (значением засчитана следующая строка). Исправлено в 91f69dc.
 349368630299f7c8e89e3fe6c18473c6a18789c1:.env.example:generic-api-key:23
 349368630299f7c8e89e3fe6c18473c6a18789c1:.env.example:generic-api-key:39
+# Тестовый секрет вебхука Telegram в sizes_test.go (не настоящий ключ), коммит ae0677e.
+ae0677ebaa88f7bda828469b172803a9d6a39c32:backend/internal/server/sizes_test.go:generic-api-key:176
