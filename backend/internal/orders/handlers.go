@@ -41,6 +41,8 @@ type Handlers struct {
 	SiteURL string
 	// OrderSMS — слать клиенту SMS о смене статуса (тексты должны быть одобрены в Eskiz).
 	OrderSMS bool
+	// AllowedPrefixes — страны номера получателя (OTP_ALLOWED_PREFIXES); пусто — любые.
+	AllowedPrefixes []string
 }
 
 var ruleCheckout = ratelimit.Rule{Name: "checkout_user", Limit: 20, Window: time.Hour}
@@ -148,6 +150,11 @@ func (h *Handlers) checkout(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.CustomerPhone != "" && !httpx.IsE164(req.CustomerPhone) {
 		httpx.Fail(w, r, validationErr(map[string]string{"customer_phone": "e164"}))
+		return
+	}
+	// На этот номер уходят SMS о статусе заказа — только страны, куда разрешены SMS (как для OTP).
+	if req.CustomerPhone != "" && !phoneAllowed(h.AllowedPrefixes, req.CustomerPhone) {
+		httpx.Fail(w, r, validationErr(map[string]string{"customer_phone": "country"}))
 		return
 	}
 	if req.Delivery.PhotoKey != "" && !media.OwnsKey(p.UserID, media.PurposeDeliveryPhoto, req.Delivery.PhotoKey) {
@@ -834,4 +841,16 @@ func (h *Handlers) ApplyStatus(ctx context.Context, tx pgx.Tx, p auth.Principal,
 func (h *Handlers) ConfirmByStore(ctx context.Context, tx pgx.Tx, p auth.Principal, id uuid.UUID) error {
 	_, err := h.ApplyStatus(ctx, tx, p, id, statusReq{Status: StatusConfirmed, From: StatusPending})
 	return err
+}
+
+func phoneAllowed(prefixes []string, phone string) bool {
+	if len(prefixes) == 0 {
+		return true
+	}
+	for _, p := range prefixes {
+		if strings.HasPrefix(phone, p) {
+			return true
+		}
+	}
+	return false
 }

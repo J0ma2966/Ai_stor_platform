@@ -163,6 +163,9 @@ func (h *Handlers) list(w http.ResponseWriter, r *http.Request) {
 	}
 	if c := q.Get("cursor"); c != "" {
 		val, id, err := decodeCursor(c)
+		if err == nil {
+			err = checkCursorVal(val, srt.cast)
+		}
 		if err != nil {
 			httpx.Fail(w, r, httpx.NewError(400, "bad_cursor", "invalid cursor"))
 			return
@@ -432,4 +435,23 @@ func decodeCursor(c string) (string, uuid.UUID, error) {
 
 func escapeLike(s string) string {
 	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s)
+}
+
+// checkCursorVal: значение курсора приводится в SQL к типу сортировки; мусор
+// в курсоре должен давать 400 bad_cursor, а не ошибку Postgres (500).
+func checkCursorVal(val, cast string) error {
+	var err error
+	switch cast {
+	case "bigint":
+		_, err = strconv.ParseInt(val, 10, 64)
+	case "numeric":
+		_, err = strconv.ParseFloat(val, 64)
+	case "timestamptz": // timestamptz::text: «2026-11-05 18:49:35.090945+00»
+		for _, layout := range []string{"2006-01-02 15:04:05.999999999-07", "2006-01-02 15:04:05.999999999-07:00", time.RFC3339Nano} {
+			if _, err = time.Parse(layout, val); err == nil {
+				break
+			}
+		}
+	}
+	return err
 }

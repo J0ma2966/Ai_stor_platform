@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"runtime"
 	"strings"
 
 	"golang.org/x/crypto/argon2"
@@ -30,7 +31,7 @@ func HashPassword(pw string) (string, error) {
 	if _, err := rand.Read(salt); err != nil {
 		return "", err
 	}
-	key := argon2.IDKey([]byte(pw), salt, argonTime, argonMemory, argonThreads, argonKeyLen)
+	key := idKey([]byte(pw), salt, argonTime, argonMemory, argonThreads, argonKeyLen)
 	return fmt.Sprintf("$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s", argon2.Version, argonMemory, argonTime, argonThreads,
 		base64.RawStdEncoding.EncodeToString(salt), base64.RawStdEncoding.EncodeToString(key)), nil
 }
@@ -58,9 +59,20 @@ func VerifyPassword(pw, encoded string) (bool, error) {
 	if len(want) < 16 || len(want) > 64 || m > 1<<21 || t > 16 {
 		return false, errBadHash
 	}
-	got := argon2.IDKey([]byte(pw), salt, t, m, p, uint32(len(want))) // #nosec G115 -- len checked above
+	got := idKey([]byte(pw), salt, t, m, p, uint32(len(want))) // #nosec G115 -- len checked above
 	return subtle.ConstantTimeCompare(got, want) == 1, nil
 }
 
 // dummyHash используется, когда логин не найден, чтобы время ответа не выдавало существование аккаунта.
 var dummyHash, _ = HashPassword("dummy-password-for-timing")
+
+// argonSem ограничивает одновременные вычисления argon2id на инстанс: каждое берёт
+// 64 МБ памяти, и сотня параллельных входов (ботнет обходит лимиты по IP) съела бы
+// 6+ ГБ и уронила API по OOM. Лишние запросы ждут очереди, а не выделяют память.
+var argonSem = make(chan struct{}, max(2, runtime.NumCPU()))
+
+func idKey(pw, salt []byte, t, m uint32, p uint8, n uint32) []byte {
+	argonSem <- struct{}{}
+	defer func() { <-argonSem }()
+	return argon2.IDKey(pw, salt, t, m, p, n)
+}

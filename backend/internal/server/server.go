@@ -70,7 +70,7 @@ func New(d Deps) http.Handler {
 	}
 	adminH := &admin.Handlers{DB: d.DB, Revoker: revoker}
 	ordersH := &orders.Handlers{DB: d.DB, Media: d.Storage, Limiter: limiter, PublicBase: d.Cfg.PublicMediaURL,
-		SiteURL: d.Cfg.SiteURL, OrderSMS: d.Cfg.OrderSMS}
+		SiteURL: d.Cfg.SiteURL, OrderSMS: d.Cfg.OrderSMS, AllowedPrefixes: d.Cfg.OTPAllowedPrefixes}
 	telegramH := &telegram.Handlers{DB: d.DB, Bot: d.Telegram, BotUsername: d.Cfg.TelegramBotUsername,
 		Secret: d.Cfg.TelegramWebhookSecret, Orders: ordersH}
 	tryonH := &tryon.Handlers{DB: d.DB, Store: d.Storage, Limiter: limiter, Redis: d.Redis, PublicBase: d.Cfg.PublicMediaURL,
