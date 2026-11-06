@@ -368,13 +368,18 @@ private fun TryonWizard(data: WizardData, items: List<FittingItem>, modifier: Mo
                         color = Brand.colors.muted,
                     )
                 }
+                PhotoGuideCard(defaultOpen = !Angles.ALL.all { slots[it]?.saved == true })
                 Angles.ALL.forEach { a ->
                     val s = slots[a]
                     SectionCard(Modifier.testTag("slot_$a")) {
                         Text(angleLabel(a), style = MaterialTheme.typography.titleSmall)
                         Text(angleHint(a), style = MaterialTheme.typography.bodySmall, color = Brand.colors.muted)
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            ProductImage(s?.url, angleLabel(a), Modifier.size(width = 72.dp, height = 96.dp))
+                            if (s == null) {
+                                PoseFigure(Modifier.size(width = 72.dp, height = 96.dp).testTag("pose_$a"), pose = a, ghost = true)
+                            } else {
+                                ProductImage(s.url, angleLabel(a), Modifier.size(width = 72.dp, height = 96.dp))
+                            }
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 if (s?.saved == true) Pill(stringResource(UiR.string.tryon_saved_photo), Brand.colors.info)
                                 if (uploadingAngle == a) {

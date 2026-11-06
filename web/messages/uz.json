@@ -780,6 +780,21 @@
       "rule3": "Oddiy, tanaga yopishib turadigan kiyim; tana sumka yoki boshqa narsalar bilan yopilmagan.",
       "rule4": "Uchala fotoda ham bir xil odam."
     },
+    "photoGuide": {
+      "title": "Foto namunalari",
+      "good": "Mana bunday — mos",
+      "goodHint": "Boshdan oyoqqacha to‘liq bo‘y, bir xil rangli devor, tekis yorug‘lik, tanaga yopishib turadigan kiyim. Uch tomondan kerak: old, yon va orqa.",
+      "bad": "Bunday — mos emas",
+      "flaw": {
+        "cropped": "Oyoq yoki bosh kesilgan",
+        "dark": "Qorong‘i yoki yorug‘likka qarshi",
+        "baggy": "Keng kiyim qomatni yashiradi",
+        "crowd": "Boshqa odamlar va rang-barang fon",
+        "selfie": "Ko‘zgudagi selfi, telefon yuzni yopadi",
+        "covered": "Sumka yoki qo‘llar tanani yopadi"
+      },
+      "tip": "Kimdandir sizni 2–3 metrdan, telefonni vertikal holda bel balandligida ushlab suratga olishni so‘rang. Derazaga orqa emas, yuz bilan turing."
+    },
     "privacy": "Fotolar faqat kiyib ko‘rish uchun ishlatiladi va O‘zbekistondagi serverlarda saqlanadi. Generatsiya uchun AI xizmatiga uzatiladi va unda saqlanmaydi. Saqlanmagan fotolar {hours} soatdan keyin, saqlanganlari {days} kun ishlatilmasa, natijalar esa obraz saqlanmasa {results} kundan keyin o‘chiriladi.",
     "angle": {
       "front": "Old tomondan",

@@ -93,6 +93,10 @@ class TryonScreensTest {
         show(g, shop) { TryonWizardScreen(onBack = {}, onStarted = { started = it }, onCatalog = {}) }
 
         rule.waitUntil(5_000) { rule.onAllNodes(hasTestTag("next_photos")).fetchSemanticsNodes().isNotEmpty() }
+        // все три фото уже сохранены — примеры свёрнуты, но открываются по нажатию
+        rule.onNodeWithText("Так — не подойдёт").assertDoesNotExist()
+        rule.onNodeWithTag("photo_guide_toggle").performScrollTo().performClick()
+        rule.onNodeWithText("Обрезаны ноги или голова").assertExists()
         rule.onNodeWithTag("next_photos").performScrollTo().assertIsNotEnabled() // нет согласий
         rule.onNodeWithTag("consent").performScrollTo().performClick()
         rule.onNodeWithTag("next_photos").assertIsNotEnabled() // нет согласия на передачу в OpenAI

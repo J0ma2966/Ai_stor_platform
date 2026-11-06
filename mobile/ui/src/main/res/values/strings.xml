@@ -99,6 +99,17 @@
 • Хорошее освещение, в кадре только вы.
 • Простая облегающая одежда, тело не закрыто сумкой или другими предметами.
 • На всех трёх фото один и тот же человек.</string>
+    <string name="tryon_guide_title">Примеры фото</string>
+    <string name="tryon_guide_good">Так — подходит</string>
+    <string name="tryon_guide_good_hint">Полный рост от макушки до ступней, однотонная стена, ровный свет, облегающая одежда. Нужны три ракурса: спереди, сбоку и сзади.</string>
+    <string name="tryon_guide_bad">Так — не подойдёт</string>
+    <string name="tryon_guide_cropped">Обрезаны ноги или голова</string>
+    <string name="tryon_guide_dark">Темно или против света</string>
+    <string name="tryon_guide_baggy">Объёмная одежда скрывает фигуру</string>
+    <string name="tryon_guide_crowd">Другие люди и пёстрый фон</string>
+    <string name="tryon_guide_selfie">Селфи в зеркале, телефон закрывает лицо</string>
+    <string name="tryon_guide_covered">Сумка или руки закрывают тело</string>
+    <string name="tryon_guide_tip">Попросите кого-нибудь снять вас с 2–3 метров, держа телефон вертикально на уровне пояса. Встаньте лицом к окну, а не спиной.</string>
     <string name="tryon_privacy">Фото используются только для примерки и хранятся на серверах в Узбекистане. Несохранённые фото удаляются через %1$d ч после примерки, сохранённые — через %2$d дн. без использования, результаты — через %3$d дн., если образ не сохранён.</string>
     <string name="tryon_angle_front">Спереди</string>
     <string name="tryon_angle_side">Сбоку</string>
