@@ -81,7 +81,11 @@
     "size_unknown": "Bunday o'lcham yo'q. Sahifani yangilang.",
     "not_enough_stock": "Bu o'lchamdan buncha mahsulot qolmagan.",
     "cannot_cancel": "Do'kon buyurtmani yig'ishni boshlagan yoki jo'natgan, uni bekor qilib bo'lmaydi. Do'kon bilan bog'laning.",
-    "telegram_disabled": "Telegram-bot platformada hali ulanmagan."
+    "telegram_disabled": "Telegram-bot platformada hali ulanmagan.",
+    "promotion_exists": "Mahsulotda allaqachon reklama arizasi yoki faol reklama bor.",
+    "promotion_decided": "Ariza allaqachon ko‘rib chiqilgan — uni o‘zgartirib bo‘lmaydi.",
+    "promotion_not_running": "Bu reklama hozir ko‘rsatilmayapti.",
+    "product_not_published": "Faqat e’lon qilingan mahsulotni reklama qilish mumkin."
   },
   "fieldErrors": {
     "required": "Majburiy maydon",
@@ -496,7 +500,10 @@
       "review_reply": "Do‘kon «{title}» haqidagi sharhingizga javob berdi",
       "review_hidden": "«{title}» haqidagi sharhingiz moderator tomonidan yashirildi",
       "system": "Platforma xabari",
-      "order_cancelled": "Mijoz №{number} buyurtmani bekor qildi"
+      "order_cancelled": "Mijoz №{number} buyurtmani bekor qildi",
+      "promotion_approved": "«{title}» mahsuloti reklamasi tasdiqlandi",
+      "promotion_rejected": "«{title}» mahsuloti reklamasi arizasi rad etildi",
+      "promotion_stopped": "«{title}» mahsuloti reklamasi to‘xtatildi"
     },
     "modStatus": {
       "unpublished": "nashrdan olindi",
@@ -534,7 +541,8 @@
     "topEmpty": "Bu davr uchun ma’lumot yo‘q.",
     "ordered": "Buyurtma qilingan",
     "daily": "Kunlar bo‘yicha ko‘rishlar",
-    "onlyOwn": "Bu yerda faqat do‘koningiz statistikasi."
+    "onlyOwn": "Bu yerda faqat do‘koningiz statistikasi.",
+    "promotions": "Reklama"
   },
   "storeProducts": {
     "title": "Mahsulotlar",
@@ -945,5 +953,50 @@
     "st_hidden": "Yashirilgan",
     "hide": "Sharhni yashirish",
     "restore": "Sharhni qaytarish"
+  },
+  "promo": {
+    "label": "Reklama",
+    "title": "Do‘konlar takliflari",
+    "carousel": "karusel",
+    "slide": "slayd",
+    "position": "{n} / {total}",
+    "prev": "Oldingi mahsulot",
+    "next": "Keyingi mahsulot",
+    "pause": "Aylantirishni to‘xtatish",
+    "play": "Aylantirishni boshlash",
+    "reducedMotion": "Avtomatik aylantirish o‘chirilgan: tizimda «Harakatni kamaytirish» yoqilgan",
+    "choose": "Mahsulotni tanlash",
+    "goTo": "{n}-mahsulotni ko‘rsatish",
+    "open": "Ko‘rish",
+    "st_pending": "Ko‘rib chiqilmoqda",
+    "st_scheduled": "Rejalashtirilgan",
+    "st_active": "Ko‘rsatilmoqda",
+    "st_ended": "Tugagan",
+    "st_rejected": "Rad etilgan",
+    "st_stopped": "To‘xtatilgan",
+    "allStates": "Barchasi",
+    "period": "Ko‘rsatish: {from} — {to}",
+    "requested": "So‘ralgan: {n} kun",
+    "daysN": "{n} kun",
+    "reason": "Sabab: {reason}",
+    "note": "Do‘kon izohi: {note}"
+  },
+  "storePromo": {
+    "title": "Mahsulotlar reklamasi",
+    "hint": "Mahsulot va muddatni tanlang. Platforma administratori tasdiqlagach, mahsulot sayt va ilovaning bosh sahifasidagi «Reklama» karuselida paydo bo‘ladi.",
+    "payNote": "Reklama narxi va to‘lovini administrator siz bilan alohida kelishadi.",
+    "newTitle": "Yangi ariza",
+    "product": "Mahsulot",
+    "productPh": "E’lon qilingan mahsulotni tanlang",
+    "noPublished": "E’lon qilingan mahsulotlar yo‘q. Avval mahsulotni e’lon qiling.",
+    "days": "Ko‘rsatish muddati",
+    "note": "Administrator uchun izoh",
+    "notePh": "Masalan: yangi kolleksiya, oy oxirigacha chegirma",
+    "send": "Ariza yuborish",
+    "sent": "Ariza yuborildi. Qaror haqida bildirishnoma keladi.",
+    "listTitle": "Mening arizalarim",
+    "empty": "Hozircha arizalar yo‘q.",
+    "cancel": "Arizani qaytarib olish",
+    "promote": "Reklama"
   }
 }

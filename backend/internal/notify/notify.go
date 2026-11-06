@@ -35,6 +35,9 @@ const (
 	ReviewCreated       = "review_created"       // магазину: новый отзыв о товаре
 	ReviewReply         = "review_reply"         // клиенту: магазин ответил на отзыв
 	ReviewHidden        = "review_hidden"        // клиенту: отзыв скрыт модератором
+	PromotionApproved   = "promotion_approved"   // магазину: реклама товара одобрена / запущена
+	PromotionRejected   = "promotion_rejected"   // магазину: заявка на рекламу отклонена
+	PromotionStopped    = "promotion_stopped"    // магазину: реклама остановлена администратором
 	System              = "system"               // системное сообщение
 )
 

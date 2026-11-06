@@ -11,6 +11,7 @@ export const ADMIN_SECTIONS = [
   ["/admin/orders", "navOrders"],
   ["/admin/products", "navProducts"],
   ["/admin/reviews", "navReviews"],
+  ["/admin/promotions", "navPromotions"],
   ["/admin/categories", "navCategories"],
   ["/admin/tariffs", "navTariffs"],
   ["/admin/payments", "navPayments"],

@@ -24,6 +24,7 @@ import (
 	"github.com/boutique-market/backend/internal/orders"
 	"github.com/boutique-market/backend/internal/payments"
 	"github.com/boutique-market/backend/internal/products"
+	"github.com/boutique-market/backend/internal/promotions"
 	"github.com/boutique-market/backend/internal/ratelimit"
 	"github.com/boutique-market/backend/internal/reviews"
 	"github.com/boutique-market/backend/internal/shop"
@@ -63,6 +64,7 @@ func New(d Deps) http.Handler {
 	storesH := &stores.Handlers{DB: d.DB, PublicBase: d.Cfg.PublicMediaURL}
 	notifyH := &notify.Handlers{DB: d.DB}
 	reviewsH := &reviews.Handlers{DB: d.DB, PublicBase: d.Cfg.PublicMediaURL}
+	promoH := &promotions.Handlers{DB: d.DB, PublicBase: d.Cfg.PublicMediaURL}
 	catalogH := &catalogadmin.Handlers{DB: d.DB, PublicBase: d.Cfg.PublicMediaURL}
 	mediaH := &media.Handlers{Store: d.Storage, Limiter: limiter, Redis: d.Redis, PublicBase: d.Cfg.PublicMediaURL,
 		MaxBytes: int64(d.Cfg.MaxUploadMB) << 20, Sem: media.NewSem(max(d.Cfg.UploadConcurrency, 1))}
@@ -170,6 +172,8 @@ func New(d Deps) http.Handler {
 					r.Route("/orders", ordersH.StoreRoutes)
 					r.Route("/telegram", telegramH.StoreRoutes)
 					r.Route("/reviews", reviewsH.StoreRoutes)
+					// Заявки на рекламу своих товаров.
+					r.Route("/promotions", promoH.StoreRoutes)
 				})
 
 				r.Route("/admin", func(r chi.Router) {
@@ -180,6 +184,7 @@ func New(d Deps) http.Handler {
 					paymentsH.AdminRoutes(r)
 					r.Route("/tryon", tryonH.AdminRoutes)
 					r.Route("/reviews", reviewsH.AdminRoutes)
+					r.Route("/promotions", promoH.AdminRoutes)
 				})
 			})
 		})

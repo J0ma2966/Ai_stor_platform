@@ -18,6 +18,11 @@ const paths = {
   bottom: "M7 3h10l1 18h-4l-2-11-2 11H6z",
   shoes: "M3 16v-5l5-1 3 3 9 2v3H3zM3 18h18",
   hanger: "M12 7a2 2 0 1 1 2-2M12 7v2l9 6v2H3v-2l9-6",
+  chevronLeft: "M15 5l-7 7 7 7",
+  chevronRight: "M9 5l7 7-7 7",
+  pause: "M9 5v14M15 5v14",
+  play: "M8 5l11 7-11 7z",
+  megaphone: "M4 10v4h3l6 4V6L7 10zM16 9a4 4 0 0 1 0 6M7 14l1 5h2l-1-5",
 } as const;
 
 export type IconName = keyof typeof paths;

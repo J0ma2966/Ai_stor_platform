@@ -76,6 +76,20 @@ class ApiClientTest {
         assertTrue("price_min=100000" in path && "in_stock=true" in path && "sort=new" in path && "limit=24" in path, path)
     }
 
+    @Test fun promotedCarouselAndStoreRequest() = runBlocking {
+        handler = { r ->
+            if (r.path == "/v1/promotions") json("""{"data":[{"id":"p1","title":"Платье","store_name":"Lola","price":15000000}]}""")
+            else MockResponse().setResponseCode(201).setHeader("Content-Type", "application/json").setBody("""{"data":{"id":"x"}}""")
+        }
+        val promoted = api().catalog.promoted()
+        assertEquals(listOf("Lola"), promoted.map { it.storeName })
+        api(Role.STORE).store.requestPromotion("p1", 7, "Новинка")
+        val req = requests.last()
+        assertEquals("POST", req.method)
+        assertEquals("/v1/store/promotions", req.path)
+        assertEquals("""{"product_id":"p1","days":7,"note":"Новинка"}""", req.body.readUtf8())
+    }
+
     @Test fun errorsAreParsed() = runBlocking {
         handler = { json("""{"error":{"code":"validation_failed","message":"bad","fields":{"phone":"e164"}},"request_id":"r-1"}""", 422) }
         val e = assertFailsWith<ApiException> { api().auth.requestOtp("x") }

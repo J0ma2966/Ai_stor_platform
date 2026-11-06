@@ -206,6 +206,7 @@ private fun ProductForm(
     var catMenu by remember { mutableStateOf(false) }
     var localErrors by remember { mutableStateOf(mapOf<String, String>()) }
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
+    var promoDialog by rememberSaveable { mutableStateOf(false) }
     var pickAngle by rememberSaveable { mutableStateOf<String?>(null) }
     val save = rememberAction()
     val upload = rememberAction()
@@ -369,6 +370,7 @@ private fun ProductForm(
                 SecondaryButton(stringResource(UiR.string.prod_unpublish), enabled = !status.busy, onClick = {
                     status.run { api.store.setStatus(p.id, "draft"); onSaved(api.store.product(p.id)) }
                 })
+                SecondaryButton(stringResource(UiR.string.promo_request), modifier = Modifier.testTag("promo_request"), onClick = { promoDialog = true })
             } else {
                 SecondaryButton(stringResource(UiR.string.prod_publish), enabled = !status.busy, modifier = Modifier.testTag("publish"), onClick = {
                     status.run { api.store.setStatus(p.id, "published"); onSaved(api.store.product(p.id)) }
@@ -376,6 +378,9 @@ private fun ProductForm(
             }
             TextButton(onClick = { confirmDelete = true }) { Text(stringResource(UiR.string.prod_delete), color = Brand.colors.bad) }
         }
+    }
+    if (promoDialog && p != null) {
+        PromotionRequestDialog(p.id, onDismiss = { promoDialog = false })
     }
     if (confirmDelete && p != null) {
         ConfirmDialog(

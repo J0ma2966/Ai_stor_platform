@@ -66,6 +66,7 @@ func (h *Handlers) PublicRoutes(r chi.Router) {
 	r.Get("/products", h.list)
 	r.Get("/products/{id}", h.get)
 	r.Post("/products/{id}/view", h.view)
+	r.Get("/promotions", h.promoted)
 }
 
 // Отметок просмотра с одного IP: обычный покупатель открывает не больше пары

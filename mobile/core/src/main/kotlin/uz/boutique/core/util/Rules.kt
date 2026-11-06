@@ -92,7 +92,7 @@ sealed interface NotificationTarget {
             return when (n.kind) {
                 "order_created", "order_cancelled" -> StoreOrder(s("order_id"))
                 "order_status" -> ClientOrder(s("order_id"))
-                "product_moderated" -> StoreProduct(s("product_id"))
+                "product_moderated", "promotion_approved", "promotion_rejected", "promotion_stopped" -> StoreProduct(s("product_id"))
                 "review_created" -> StoreReviews
                 "review_reply", "review_hidden" -> s("product_id")?.let { ProductPage(it) } ?: None
                 "generation_succeeded", "generation_failed" -> s("generation_id")?.let { TryonResult(it) } ?: None

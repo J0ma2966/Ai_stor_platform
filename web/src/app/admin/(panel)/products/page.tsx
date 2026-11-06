@@ -14,6 +14,7 @@ export default function AdminProducts() {
   const t = useTranslations("adminCat");
   const ts = useTranslations("storeProducts");
   const ta = useTranslations("app");
+  const ta2 = useTranslations("admin");
   const locale = useLocale();
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
@@ -99,6 +100,9 @@ export default function AdminProducts() {
                         {p.status !== "unpublished" && p.status !== "blocked" && <button type="button" className="btn btn-secondary" onClick={() => { setActing({ id: p.id, status: "unpublished" }); setReason(""); }}>{t("unpublish")}</button>}
                         {p.status !== "blocked" && <button type="button" className="btn btn-danger" onClick={() => { setActing({ id: p.id, status: "blocked" }); setReason(""); }}>{t("block")}</button>}
                         {(p.status === "unpublished" || p.status === "blocked") && <button type="button" className="btn" disabled={busy} onClick={() => act(p.id, "draft", "")}>{t("restore")}</button>}
+                        {p.status === "published" && (
+                          <Link href={`/admin/promotions?product=${p.id}&title=${encodeURIComponent(p.title)}`} className="btn btn-secondary">{ta2("navPromotions")}</Link>
+                        )}
                       </div>
                     )}
                   </td>
