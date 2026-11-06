@@ -98,8 +98,8 @@ private fun DrawScope.limb(c: Color, vararg p: Float) {
 }
 
 /** Фигура в полный рост; cx — центр по горизонтали (как Person в PhotoGuide.tsx). */
-private fun DrawScope.person(k: PgColors, pose: String, cx: Float = 50f, silhouette: Boolean = false, arms: Boolean = true) {
-    fun c(x: Color) = if (silhouette) Silhouette else x
+private fun DrawScope.person(k: PgColors, pose: String, cx: Float = 50f, silhouette: Boolean = false, arms: Boolean = true, tint: Color? = null) {
+    fun c(x: Color) = tint ?: if (silhouette) Silhouette else x
     withTransform({ translate(cx - 50f, 0f) }) {
         if (pose == "side") {
             poly(c(k.bottom), 44f, 76f, 56f, 76f, 55f, 133f, 46f, 133f)
@@ -130,14 +130,19 @@ private fun DrawScope.person(k: PgColors, pose: String, cx: Float = 50f, silhoue
 /**
  * Карточка-пример. [mark]: true — зелёная галочка, false — красный крестик, null — без значка.
  * [ghost] — бледный контур для пустого слота загрузки.
+ * [overlay] — только белая фигура без фона: контур поверх видоискателя камеры.
  */
 @Composable
-fun PoseFigure(modifier: Modifier = Modifier, pose: String = "front", flaw: PhotoFlaw? = null, mark: Boolean? = null, ghost: Boolean = false) {
+fun PoseFigure(modifier: Modifier = Modifier, pose: String = "front", flaw: PhotoFlaw? = null, mark: Boolean? = null, ghost: Boolean = false, overlay: Boolean = false) {
     val k = pgColors()
     Canvas(modifier.alpha(if (ghost) 0.45f else 1f).clearAndSetSemantics {}) {
         val s = min(size.width / 100f, size.height / 150f)
         val dx = (size.width - 100f * s) / 2f
         val dy = (size.height - 150f * s) / 2f
+        if (overlay) {
+            withTransform({ translate(dx, dy); scale(s, s, Offset.Zero) }) { person(k, pose, tint = Color.White) }
+            return@Canvas
+        }
         withTransform({ translate(dx, dy); scale(s, s, Offset.Zero) }) {
             val frame = Path().apply { addRoundRect(RoundRect(0f, 0f, 100f, 150f, CornerRadius(10f))) }
             clipPath(frame) {
