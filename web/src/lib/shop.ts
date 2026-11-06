@@ -10,6 +10,7 @@ export type CartItem = {
   store_name: string;
   category_id: string;
   zone: string;
+  is_set?: boolean; // комплект: верх и низ на одном фото
   image_url?: string;
   in_stock: boolean;
   has_sizes: boolean;

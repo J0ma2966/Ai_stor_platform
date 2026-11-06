@@ -90,6 +90,12 @@
     <string name="tryon_add">Kiyib ko‘rish xonasiga</string>
     <string name="tryon_added">Kiyib ko‘rish xonasida — ochish</string>
     <string name="tryon_to_catalog">Katalogga</string>
+    <string name="tryon_from_cart">Savatingizdagi kiyimlar</string>
+    <string name="tryon_cart_login">Savatdagi kiyimlarni kiyib ko‘rish mumkin. Uni ko‘rish uchun kiring.</string>
+    <string name="tryon_cart_empty">Savat bo‘sh — kiyib ko‘rmoqchi bo‘lgan kiyimlarni unga qo‘shing.</string>
+    <string name="tryon_pick">Tanlash</string>
+    <string name="tryon_replace">Almashtirish</string>
+    <string name="tryon_chosen">Tanlangan</string>
     <string name="tryon_registration_required">Ro‘yxatdan o‘tishni yakunlang: jinsni tanlang va ma’lumotlarni qayta ishlashga rozilik bering.</string>
     <string name="tryon_step_photos">Foto</string>
     <string name="tryon_step_body">Parametrlar</string>

@@ -143,6 +143,9 @@ data class CartItem(
     @SerialName("store_id") val storeId: String = "",
     @SerialName("store_name") val storeName: String = "",
     @SerialName("image_url") val imageUrl: String? = null,
+    /** Зона манекена (из категории) и признак комплекта — для примерочной из корзины. */
+    val zone: String = "",
+    @SerialName("is_set") val isSet: Boolean = false,
     @SerialName("in_stock") val inStock: Boolean = false,
     @SerialName("has_sizes") val hasSizes: Boolean = false,
     val size: String? = null,

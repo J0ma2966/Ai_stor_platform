@@ -231,6 +231,7 @@ fun FittingRoomScreen(
                     }
                 }
             }
+            CartPicker(loggedIn, items)
             val q = quote.value?.getOrNull()
             val unsupported = TryonRules.unsupported(items, q)
             if (unsupported.isNotEmpty()) {
@@ -247,6 +248,55 @@ fun FittingRoomScreen(
                     onClick = onStart,
                     modifier = Modifier.testTag("tryon_generate"),
                 )
+            }
+        }
+    }
+}
+
+/**
+ * Выбор вещей — только из корзины покупателя (как на сайте), не весь каталог.
+ * Подстраивается под выбор: если выбран комплект (верх и низ на одном фото), низ
+ * из корзины не предлагается; обычный верх возвращает его.
+ */
+@Composable
+private fun CartPicker(loggedIn: Boolean, chosen: List<FittingItem>) {
+    val api = LocalGraph.current.api
+    val shop = LocalShop.current
+    val scope = rememberCoroutineScope()
+    SectionTitle(stringResource(UiR.string.tryon_from_cart))
+    if (!loggedIn) {
+        Text(stringResource(UiR.string.tryon_cart_login), color = Brand.colors.muted, modifier = Modifier.testTag("cart_login"))
+        return
+    }
+    val cart = rememberLoader(shop.cartCount) { api.shop.cart() }
+    when (val s = cart.state) {
+        is Load.Loading -> CenterLoading()
+        is Load.Failed -> ErrorBanner(s.error)
+        is Load.Ok -> {
+            val zones = FittingSelection.visibleZones(chosen)
+            val offer = FittingItem.fromCart(s.value.items).filter { it.zone in zones }
+            if (s.value.items.isEmpty()) {
+                Text(stringResource(UiR.string.tryon_cart_empty), color = Brand.colors.muted, modifier = Modifier.testTag("cart_empty"))
+            }
+            offer.forEach { c ->
+                val inZone = chosen.firstOrNull { it.zone == c.zone }
+                val picked = inZone?.id == c.id
+                SectionCard(Modifier.testTag("cart_${c.id}")) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        ProductImage(c.imageUrl, null, Modifier.size(56.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(c.title, fontWeight = FontWeight.Bold, maxLines = 2)
+                            Text(zoneLabel(c.zone) + " · " + money(c.price), color = Brand.colors.muted, style = MaterialTheme.typography.bodySmall)
+                        }
+                        TextButton(
+                            onClick = { scope.launch { shop.addToFitting(c) } },
+                            enabled = !picked,
+                            modifier = Modifier.testTag("pick_${c.id}"),
+                        ) {
+                            Text(stringResource(if (picked) UiR.string.tryon_chosen else if (inZone != null) UiR.string.tryon_replace else UiR.string.tryon_pick))
+                        }
+                    }
+                }
             }
         }
     }

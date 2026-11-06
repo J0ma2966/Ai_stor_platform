@@ -97,6 +97,13 @@ func TestTryOnTwoPieceSet(t *testing.T) {
 		t.Fatalf("generation: %v", g)
 	}
 
+	// корзина отдаёт флаг комплекта (примерочная выбирает вещи из корзины)
+	f.cli.must(200, "PUT", "/v1/me/cart/"+set, map[string]any{"qty": 1})
+	items := f.cli.must(200, "GET", "/v1/me/cart", nil).data()["items"].([]any)
+	if len(items) != 1 || items[0].(map[string]any)["is_set"] != true || items[0].(map[string]any)["zone"] != "top" {
+		t.Fatalf("cart item: %v", items)
+	}
+
 	// перенос в категорию «низ» сбрасывает флаг
 	var bottomsCat string
 	_ = f.e.d.DB.QueryRow(ctx, `SELECT id::text FROM categories WHERE zone = 'bottom' LIMIT 1`).Scan(&bottomsCat)

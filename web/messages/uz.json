@@ -763,9 +763,7 @@
     "history": "Kiyib ko‘rishlar tarixi",
     "myPhotos": "Kiyib ko‘rish uchun fotolarim",
     "pickTitle": "Mahsulot tanlash",
-    "search": "Nomi yoki brend bo‘yicha qidirish",
     "loading": "Yuklanmoqda…",
-    "noProducts": "Mahsulot topilmadi.",
     "add": "Kiyib ko‘rish xonasiga",
     "added": "Tanlangan",
     "replace": "Almashtirish",
@@ -882,7 +880,12 @@
     "toCatalog": "Katalogga",
     "transferConsent": "Suratlarimni kiyib ko'rish uchun {recipient} ga yuborishga roziman. Suratlar O'zbekistondan tashqarida qayta ishlanadi; provayder ularni suiiste'mollarni nazorat qilish uchun 30 kungacha saqlashi mumkin va o'qitish uchun ishlatmaydi.",
     "openFull": "To'liq o'lchamda ochish",
-    "download": "Yuklab olish"
+    "download": "Yuklab olish",
+    "fromCart": "Savatingizdagi kiyimlar",
+    "cartLogin": "Savatdagi kiyimlarni kiyib ko‘rish mumkin.",
+    "login": "Kirish",
+    "cartEmpty": "Savat bo‘sh — kiyib ko‘rmoqchi bo‘lgan kiyimlarni unga qo‘shing.",
+    "cartZoneEmpty": "Savatda bu toifadagi kiyim yo‘q."
   },
   "reviews": {
     "title": "Sharhlar",

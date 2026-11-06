@@ -90,6 +90,12 @@
     <string name="tryon_add">В примерочную</string>
     <string name="tryon_added">В примерочной — открыть</string>
     <string name="tryon_to_catalog">В каталог</string>
+    <string name="tryon_from_cart">Вещи из вашей корзины</string>
+    <string name="tryon_cart_login">Примерить можно вещи из корзины. Войдите, чтобы увидеть её.</string>
+    <string name="tryon_cart_empty">Корзина пуста — добавьте в неё вещи, которые хотите примерить.</string>
+    <string name="tryon_pick">Выбрать</string>
+    <string name="tryon_replace">Заменить</string>
+    <string name="tryon_chosen">Выбрано</string>
     <string name="tryon_registration_required">Завершите регистрацию: выберите пол и подтвердите согласие на обработку данных.</string>
     <string name="tryon_step_photos">Фото</string>
     <string name="tryon_step_body">Параметры</string>
