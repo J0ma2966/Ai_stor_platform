@@ -26,12 +26,12 @@ func (h *Handlers) storeGet(w http.ResponseWriter, r *http.Request) {
 	}
 	var it Product
 	err = h.DB.QueryRow(r.Context(), `
-		SELECT p.id, p.store_id, p.category_id, c.zone::text, p.sku, p.title, p.description, p.brand, p.price, p.in_stock,
+		SELECT p.id, p.store_id, p.category_id, c.zone::text, p.sku, p.title, p.description, p.brand, p.price, p.in_stock, p.is_set,
 		       p.status, p.moderation_reason, p.created_at, p.views_count, p.fitting_adds,
 		       `+imagesSQL+`
 		FROM products p JOIN categories c ON c.id = p.category_id
 		WHERE p.id = $1 AND p.store_id = $2`, id, p.StoreID).
-		Scan(&it.ID, &it.StoreID, &it.CategoryID, &it.Zone, &it.SKU, &it.Title, &it.Description, &it.Brand, &it.Price, &it.InStock,
+		Scan(&it.ID, &it.StoreID, &it.CategoryID, &it.Zone, &it.SKU, &it.Title, &it.Description, &it.Brand, &it.Price, &it.InStock, &it.IsSet,
 			&it.Status, &it.Reason, &it.CreatedAt, &it.Views, &it.FittingAdds, &it.imageKeys)
 	if errors.Is(err, pgx.ErrNoRows) {
 		httpx.Fail(w, r, httpx.ErrNotFound)
@@ -58,6 +58,7 @@ type updateReq struct {
 	Brand       *string           `json:"brand" validate:"omitempty,min=1,max=120"`
 	Price       *int64            `json:"price" validate:"omitempty,gt=0"`
 	InStock     *bool             `json:"in_stock"`
+	IsSet       *bool             `json:"is_set"` // «двойка»; только для категорий зоны top
 	Images      map[string]string `json:"images" validate:"omitempty,max=3,dive,keys,oneof=front side back,endkeys,required"`
 	// nil — размеры не меняются, [] — убрать все размеры (наличие снова по флажку in_stock).
 	Sizes *[]SizeIn `json:"sizes"`
@@ -112,6 +113,18 @@ func (h *Handlers) storeUpdate(w http.ResponseWriter, r *http.Request) {
 		if status == "blocked" {
 			return httpx.NewError(http.StatusConflict, "product_blocked", "product is blocked by moderation")
 		}
+		if req.IsSet != nil && *req.IsSet {
+			var cat uuid.UUID
+			if req.CategoryID != nil {
+				cat = *req.CategoryID
+			} else if err := tx.QueryRow(r.Context(), `SELECT category_id FROM products WHERE id = $1`, id).Scan(&cat); err != nil {
+				return err
+			}
+			if err := checkSetCategory(r.Context(), tx, cat); err != nil {
+				return err
+			}
+		}
+		// is_set: новое значение (или прежнее) — но только если итоговая категория зоны top.
 		if _, err := tx.Exec(r.Context(), `UPDATE products SET
 				category_id = COALESCE($3, category_id),
 				sku         = COALESCE($4, sku),
@@ -120,9 +133,11 @@ func (h *Handlers) storeUpdate(w http.ResponseWriter, r *http.Request) {
 				brand       = COALESCE($7, brand),
 				price       = COALESCE($8, price),
 				in_stock    = COALESCE($9, in_stock),
+				is_set      = COALESCE($10, is_set) AND COALESCE((SELECT c.zone = 'top' FROM categories c
+				                WHERE c.id = COALESCE($3, products.category_id)), false),
 				status      = CASE WHEN status = 'unpublished' THEN 'draft'::product_status ELSE status END
 			WHERE id = $1 AND store_id = $2`,
-			id, p.StoreID, req.CategoryID, trim(req.SKU), trim(req.Title), trim(req.Description), trim(req.Brand), req.Price, req.InStock); err != nil {
+			id, p.StoreID, req.CategoryID, trim(req.SKU), trim(req.Title), trim(req.Description), trim(req.Brand), req.Price, req.InStock, req.IsSet); err != nil {
 			return err
 		}
 		for angle, key := range req.Images {

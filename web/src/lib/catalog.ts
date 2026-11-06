@@ -15,6 +15,7 @@ export type Product = {
   brand: string;
   price: number;
   in_stock: boolean;
+  is_set?: boolean; // «двойка»: верх и низ на одном фото (только категории зоны «верх»)
   // размеры: покупателю — наличие (low — осталось 1–2 шт.), кабинету магазина — точный остаток
   sizes?: ProductSize[];
   has_sizes?: boolean; // каталог: у товара есть размеры (в корзину — через карточку)

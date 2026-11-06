@@ -29,6 +29,14 @@ var zoneText = map[string]string{
 	ZoneHeadwear: "headwear", ZoneTop: "top / outerwear", ZoneBottom: "trousers / skirt", ZoneShoes: "shoes",
 }
 
+// garmentText — подпись вещи; «двойка» надевается целиком (верх и низ с одного фото).
+func garmentText(g Garment) string {
+	if g.Set && g.Zone == ZoneTop {
+		return "two-piece set: matching top and trousers/skirt shown together, put on both pieces"
+	}
+	return zoneText[g.Zone]
+}
+
 // Prompt — инструкция модели. Экспортирована для тестов и подбора формулировок.
 func Prompt(req Request) string {
 	var b strings.Builder
@@ -79,7 +87,7 @@ func (g *Gemini) Generate(ctx context.Context, req Request) ([]byte, error) {
 	parts := []gemPart{{Text: Prompt(req)}, {InlineData: &gemInline{"image/jpeg", b64(req.Person)}}}
 	for i, it := range req.Garments {
 		parts = append(parts,
-			gemPart{Text: fmt.Sprintf("Product %d (%s):", i+1, zoneText[it.Zone])},
+			gemPart{Text: fmt.Sprintf("Product %d (%s):", i+1, garmentText(it))},
 			gemPart{InlineData: &gemInline{"image/jpeg", b64(it.Image)}})
 	}
 	in := map[string]any{

@@ -35,7 +35,7 @@ export type Generation = {
   result_expires_at: string | null;
   photos: { angle: Angle; key: string; url: string }[];
   products: {
-    id: string; title: string; brand: string; price: number; zone: Zone;
+    id: string; title: string; brand: string; price: number; zone: Zone; is_set?: boolean;
     image_url: string; store_name: string; store_slug: string; available: boolean;
   }[];
   body: { height_cm?: number; weight_kg?: number; params?: Record<string, number> };

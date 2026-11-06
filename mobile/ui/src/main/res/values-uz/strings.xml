@@ -80,6 +80,9 @@
     <string name="tryon_zone_bottom">Pastki kiyim</string>
     <string name="tryon_zone_shoes">Poyabzal</string>
     <string name="tryon_empty_zone">Tanlanmagan</string>
+    <string name="tryon_zone_set">Ikkilik (ustki + pastki)</string>
+    <string name="tryon_set_hint">Ikkilik — bitta to‘plamning ustki va pastki kiyimi bitta suratda, shuning uchun pastki kiyim alohida tanlanmaydi.</string>
+    <string name="product_set_badge">Ikkilik: ustki + pastki</string>
     <string name="tryon_remove_item">Olib tashlash</string>
     <string name="tryon_unsupported">Joriy AI modeli quyidagilarni kiydira olmaydi: %1$s. Ular fotodagidek qoladi.</string>
     <string name="tryon_disclaimer">Natija — AI vizualizatsiyasi. U fotosuratlaringiz va mahsulot fotolariga bog‘liq, aniq o‘lcham yoki o‘tirishni kafolatlamaydi.</string>
@@ -177,6 +180,7 @@
     <string name="field_invalid">Noto‘g‘ri qiymat</string>
     <string name="field_gt">Noldan katta bo‘lishi kerak</string>
     <string name="field_range">1 dan 99 gacha</string>
+    <string name="field_top_only">Ikkilik faqat «Ustki kiyim» toifasida bo‘lishi mumkin</string>
     <string name="status_pending">Tasdiqlanishi kutilmoqda</string>
     <string name="status_confirmed">Tasdiqlandi</string>
     <string name="status_rejected">Rad etildi</string>
@@ -410,6 +414,8 @@
     <string name="prod_sku_hint">Bo‘sh qoldiring — raqam avtomatik beriladi</string>
     <string name="prod_category">Kategoriya</string>
     <string name="prod_in_stock">Mavjud</string>
+    <string name="prod_is_set">Ikkilik: ustki va pastki kiyim bitta suratda</string>
+    <string name="prod_is_set_hint">Suratda to‘plam bo‘lsa belgilang. Kiyinish xonasida xaridor unga alohida pastki kiyim tanlamaydi.</string>
     <string name="prod_sizes">O‘lchamlar va qoldiqlar</string>
     <string name="prod_sizes_hint">O‘lchamlar ko‘rsatilsa, mavjudlik qoldiqlar bo‘yicha hisoblanadi.</string>
     <string name="prod_size_name">O‘lcham</string>

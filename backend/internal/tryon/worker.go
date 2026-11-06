@@ -164,12 +164,13 @@ func (w *Worker) claim(ctx context.Context) (*job, error) {
 
 type productInput struct {
 	zone, title, brand string
+	set                bool
 	keys               map[string]string // angle → key
 }
 
 func (w *Worker) loadProducts(ctx context.Context, ids []uuid.UUID) ([]productInput, error) {
 	rows, err := w.DB.Query(ctx, `
-		SELECT c.zone::text, p.title, p.brand,
+		SELECT c.zone::text, p.title, p.brand, p.is_set,
 		       COALESCE((SELECT jsonb_object_agg(pi.angle, pi.key) FROM product_images pi WHERE pi.product_id = p.id), '{}')
 		FROM products p JOIN categories c ON c.id = p.category_id
 		WHERE p.id = ANY($1)`, ids)
@@ -181,7 +182,7 @@ func (w *Worker) loadProducts(ctx context.Context, ids []uuid.UUID) ([]productIn
 	for rows.Next() {
 		var p productInput
 		var keys []byte
-		if err := rows.Scan(&p.zone, &p.title, &p.brand, &keys); err != nil {
+		if err := rows.Scan(&p.zone, &p.title, &p.brand, &p.set, &keys); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal(keys, &p.keys)
@@ -232,7 +233,7 @@ func (w *Worker) process(ctx context.Context, j *job) ([]byte, error) {
 				}
 				imgCache[key] = img
 			}
-			gs = append(gs, Garment{Zone: p.zone, Title: p.title, Brand: p.brand, Image: img})
+			gs = append(gs, Garment{Zone: p.zone, Title: p.title, Brand: p.brand, Image: img, Set: p.set})
 		}
 		return gs, nil
 	}
@@ -324,7 +325,7 @@ func (w *Worker) processComposite(ctx context.Context, j *job, cp CompositeProvi
 		if err != nil {
 			return nil, err
 		}
-		req.Garments = append(req.Garments, Garment{Zone: p.zone, Title: p.title, Brand: p.brand, Image: img})
+		req.Garments = append(req.Garments, Garment{Zone: p.zone, Title: p.title, Brand: p.brand, Image: img, Set: p.set})
 	}
 	return cp.GenerateComposite(ctx, req)
 }

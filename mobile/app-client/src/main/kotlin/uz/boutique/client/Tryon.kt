@@ -64,6 +64,7 @@ import uz.boutique.core.model.Me
 import uz.boutique.core.tryon.Angles
 import uz.boutique.core.tryon.CreateGeneration
 import uz.boutique.core.tryon.FittingItem
+import uz.boutique.core.tryon.FittingSelection
 import uz.boutique.core.tryon.GenStatus
 import uz.boutique.core.tryon.Generation
 import uz.boutique.core.tryon.Photos
@@ -205,10 +206,11 @@ fun FittingRoomScreen(
             Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Zones.ALL.forEach { zone ->
+            // «Двойка» в зоне «верх» занимает и «низ»: карточка низа скрыта.
+            FittingSelection.visibleZones(items).forEach { zone ->
                 val item = items.firstOrNull { it.zone == zone }
                 SectionCard(Modifier.testTag("zone_$zone")) {
-                    Text(zoneLabel(zone), style = MaterialTheme.typography.labelLarge, color = Brand.colors.muted)
+                    Text(if (item?.isSet == true) stringResource(UiR.string.tryon_zone_set) else zoneLabel(zone), style = MaterialTheme.typography.labelLarge, color = Brand.colors.muted)
                     if (item == null) {
                         Text(stringResource(UiR.string.tryon_empty_zone), color = Brand.colors.muted)
                     } else {
@@ -224,6 +226,9 @@ fun FittingRoomScreen(
                         }
                     }
                 }
+            }
+            if (items.any { it.isSet }) {
+                Text(stringResource(UiR.string.tryon_set_hint), style = MaterialTheme.typography.bodySmall, color = Brand.colors.muted, modifier = Modifier.testTag("set_hint"))
             }
             val q = quote.value?.getOrNull()
             val unsupported = TryonRules.unsupported(items, q)
@@ -463,7 +468,7 @@ private fun TryonWizard(data: WizardData, items: List<FittingItem>, modifier: Mo
                     items.forEach { i ->
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             ProductImage(i.imageUrl, null, Modifier.size(44.dp))
-                            Text(zoneLabel(i.zone) + ": " + i.title, modifier = Modifier.weight(1f), maxLines = 2)
+                            Text((if (i.isSet) stringResource(UiR.string.tryon_zone_set) else zoneLabel(i.zone)) + ": " + i.title, modifier = Modifier.weight(1f), maxLines = 2)
                             Text(money(i.price), color = Brand.colors.muted, style = MaterialTheme.typography.bodySmall)
                         }
                     }
@@ -570,7 +575,7 @@ fun GenerationContent(
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
 
     fun toFitting() = shop.setFitting(g.products.filter { it.zone in Zones.ALL }.map {
-        FittingItem(it.id, it.title, it.brand, it.price, it.imageUrl, it.zone, it.storeName)
+        FittingItem(it.id, it.title, it.brand, it.price, it.imageUrl, it.zone, it.storeName, it.isSet && it.zone == Zones.TOP)
     })
 
     Column(
@@ -639,7 +644,7 @@ fun GenerationContent(
                         ProductImage(p.imageUrl, null, Modifier.size(56.dp))
                         Column(Modifier.weight(1f)) {
                             Text(p.title, fontWeight = FontWeight.Bold, maxLines = 2)
-                            Text(zoneLabel(p.zone) + " · " + money(p.price), color = Brand.colors.muted, style = MaterialTheme.typography.bodySmall)
+                            Text((if (p.isSet) stringResource(UiR.string.tryon_zone_set) else zoneLabel(p.zone)) + " · " + money(p.price), color = Brand.colors.muted, style = MaterialTheme.typography.bodySmall)
                         }
                         if (!p.available) Pill(stringResource(UiR.string.tryon_unavailable), Brand.colors.bad)
                     }

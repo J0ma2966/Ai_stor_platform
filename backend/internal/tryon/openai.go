@@ -72,6 +72,9 @@ var openAIZoneText = map[string]string{
 	ZoneShoes:    "SHOES (footwear)",
 }
 
+// openAISetText — «двойка»: верх и низ одного комплекта на одном фото.
+const openAISetText = "TWO-PIECE SET (matching top AND bottom shown together in one product photo; dress the person in both pieces)"
+
 // labeledImage — подготовленное изображение и его роль в промпте.
 type labeledImage struct {
 	label string
@@ -103,12 +106,16 @@ func PrepareComposite(req CompositeRequest) ([]labeledImage, []string, error) {
 		out = append(out, labeledImage{p.label, img})
 	}
 	byZone := map[string]Garment{}
+	covered := map[string]bool{}
 	for _, g := range req.Garments {
 		if openAIZoneText[g.Zone] == "" {
 			return nil, nil, permanent(CodeUnsupported, "unknown garment zone %q", g.Zone)
 		}
-		if _, dup := byZone[g.Zone]; dup {
-			return nil, nil, permanent(CodeUnsupported, "more than one garment for zone %s", g.Zone)
+		for _, z := range g.covers() {
+			if covered[z] {
+				return nil, nil, permanent(CodeUnsupported, "more than one garment for zone %s", z)
+			}
+			covered[z] = true
 		}
 		byZone[g.Zone] = g
 	}
@@ -119,7 +126,9 @@ func PrepareComposite(req CompositeRequest) ([]labeledImage, []string, error) {
 	for _, z := range zoneOrder {
 		g, ok := byZone[z]
 		if !ok {
-			missing = append(missing, z)
+			if !covered[z] { // низ, закрытый «двойкой», не «отсутствует»
+				missing = append(missing, z)
+			}
 			continue
 		}
 		if len(g.Image) == 0 {
@@ -129,7 +138,11 @@ func PrepareComposite(req CompositeRequest) ([]labeledImage, []string, error) {
 		if err != nil {
 			return nil, nil, permanent(CodeProductMissing, "garment %s: %v", z, err)
 		}
-		out = append(out, labeledImage{openAIZoneText[z] + " garment reference", img})
+		label := openAIZoneText[z]
+		if g.Set && z == ZoneTop {
+			label = openAISetText
+		}
+		out = append(out, labeledImage{label + " garment reference", img})
 	}
 	return out, missing, nil
 }
@@ -219,6 +232,7 @@ IDENTITY PRESERVATION:
 
 CLOTHING:
 - Apply all supplied garment reference images to the person, each to its own body zone as labelled above.
+- A TWO-PIECE SET reference shows a matching top and bottom together: dress the person in both pieces from that one image (it replaces both the top and the bottom).
 - Preserve the original colors, patterns, materials, textures, logos and design details.
 - Do not invent additional clothing items.
 - Do not change the original garment design.

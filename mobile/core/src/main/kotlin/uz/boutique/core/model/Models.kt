@@ -75,6 +75,8 @@ data class Product(
     val brand: String = "",
     val price: Long = 0,
     @SerialName("in_stock") val inStock: Boolean = false,
+    /** «Двойка»: верх и низ на одном фото (только категории зоны «верх»). */
+    @SerialName("is_set") val isSet: Boolean = false,
     val sizes: List<ProductSize> = emptyList(),
     @SerialName("has_sizes") val hasSizes: Boolean = false,
     val status: String? = null,

@@ -476,7 +476,7 @@ func (h *Handlers) enqueue(ctx context.Context, t pgx.Tx, uid uuid.UUID, req *cr
 	}
 
 	// Товары: опубликованы, магазин активен, есть фото, по одному на зону манекена.
-	rows, err := t.Query(ctx, `SELECT p.id, c.zone::text,
+	rows, err := t.Query(ctx, `SELECT p.id, c.zone::text, p.is_set,
 		       p.status = 'published' AND s.status = 'active'
 		       AND EXISTS (SELECT 1 FROM product_images pi WHERE pi.product_id = p.id AND pi.angle = 'front')
 		FROM products p JOIN categories c ON c.id = p.category_id JOIN stores s ON s.id = p.store_id
@@ -487,6 +487,7 @@ func (h *Handlers) enqueue(ctx context.Context, t pgx.Tx, uid uuid.UUID, req *cr
 	type prod struct {
 		ID   uuid.UUID
 		Zone string
+		Set  bool
 		OK   bool
 	}
 	prods, err := pgx.CollectRows(rows, pgx.RowToStructByPos[prod])
@@ -498,16 +499,21 @@ func (h *Handlers) enqueue(ctx context.Context, t pgx.Tx, uid uuid.UUID, req *cr
 	for _, pr := range prods {
 		byID[pr.ID] = pr
 	}
+	// «Двойка» занимает зоны top и bottom: низ к ней не добавляется (zone_taken).
 	zones := map[string]bool{}
 	for i, id := range req.ProductIDs {
 		pr, ok := byID[id]
-		switch {
-		case !ok || !pr.OK:
+		if !ok || !pr.OK {
 			bad[fmt.Sprintf("product_ids[%d]", i)] = "unavailable"
-		case zones[pr.Zone]:
-			bad[fmt.Sprintf("product_ids[%d]", i)] = "zone_taken"
+			continue
 		}
-		zones[pr.Zone] = true
+		g := Garment{Zone: pr.Zone, Set: pr.Set}
+		for _, z := range g.covers() {
+			if zones[z] {
+				bad[fmt.Sprintf("product_ids[%d]", i)] = "zone_taken"
+			}
+			zones[z] = true
+		}
 	}
 	if len(bad) > 0 {
 		return uuid.Nil, validation(bad)
@@ -563,6 +569,7 @@ type productView struct {
 	Brand     string    `json:"brand"`
 	Price     int64     `json:"price"`
 	Zone      string    `json:"zone"`
+	IsSet     bool      `json:"is_set"` // «двойка»: верх и низ на одном фото
 	ImageURL  string    `json:"image_url"`
 	StoreName string    `json:"store_name"`
 	StoreSlug string    `json:"store_slug"`
@@ -650,7 +657,7 @@ func (h *Handlers) enrich(ctx context.Context, q queryer, gens []*generationView
 	for _, g := range gens {
 		ids = append(ids, g.productIDs...)
 	}
-	rows, err := q.Query(ctx, `SELECT p.id, p.title, p.brand, p.price, c.zone::text,
+	rows, err := q.Query(ctx, `SELECT p.id, p.title, p.brand, p.price, c.zone::text, p.is_set,
 		       COALESCE((SELECT key FROM product_images pi WHERE pi.product_id = p.id AND pi.angle = 'front'), ''),
 		       s.name, s.slug, p.status = 'published' AND s.status = 'active' AND p.in_stock
 		FROM products p JOIN categories c ON c.id = p.category_id JOIN stores s ON s.id = p.store_id
@@ -662,7 +669,7 @@ func (h *Handlers) enrich(ctx context.Context, q queryer, gens []*generationView
 	for rows.Next() {
 		var pv productView
 		var key string
-		if err := rows.Scan(&pv.ID, &pv.Title, &pv.Brand, &pv.Price, &pv.Zone, &key, &pv.StoreName, &pv.StoreSlug, &pv.Available); err != nil {
+		if err := rows.Scan(&pv.ID, &pv.Title, &pv.Brand, &pv.Price, &pv.Zone, &pv.IsSet, &key, &pv.StoreName, &pv.StoreSlug, &pv.Available); err != nil {
 			rows.Close()
 			return err
 		}

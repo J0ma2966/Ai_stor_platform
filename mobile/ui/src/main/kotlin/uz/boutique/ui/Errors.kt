@@ -85,6 +85,7 @@ fun fieldErrorText(code: String?): String? = when (code) {
     "e164" -> stringResource(R.string.field_e164)
     "gt" -> stringResource(R.string.field_gt)
     "range" -> stringResource(R.string.field_range)
+    "top_only" -> stringResource(R.string.field_top_only)
     else -> stringResource(R.string.field_invalid)
 }
 

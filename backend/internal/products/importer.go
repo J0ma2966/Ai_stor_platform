@@ -36,6 +36,9 @@ import (
 // «;» или «,», между размером и количеством «:» или «=»). Пустая ячейка не меняет
 // размеры товара. С размерами наличие считается по остаткам, in_stock игнорируется.
 //
+// Необязательный столбец set — «двойка» (верх и низ на одном фото): да/нет. Пустая
+// ячейка не меняет флаг. Учитывается только для категорий зоны «верх» (см. sets.go).
+//
 // Товар ищется по артикулу (sku): новый создаётся черновиком, существующий
 // обновляется (кроме заблокированных модератором). Пустой sku — всегда новый
 // товар с автоартикулом (NextSKU); выданные артикулы возвращаются в generated. Фотографии загружаются
@@ -79,22 +82,23 @@ type importRow struct {
 	price       int64
 	inStock     bool
 	sizes       []SizeIn // nil — размеры не меняются
+	isSet       *bool    // nil — флаг «двойка» не меняется
 }
 
 func (h *Handlers) importTemplate(w http.ResponseWriter, r *http.Request) {
 	f := excelize.NewFile()
 	defer f.Close()
 	sh := f.GetSheetName(0)
-	for i, c := range append(append([]string{}, importColumns...), "sizes") {
+	for i, c := range append(append([]string{}, importColumns...), "sizes", "set") {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 		_ = f.SetCellValue(sh, cell, c)
 	}
-	example := []any{"A-100", "Пальто шерстяное", "Шерсть 80%, подкладка", "tops", "Acme", 1500000, "да", "S:2; M:5; L:3"}
+	example := []any{"A-100", "Пальто шерстяное", "Шерсть 80%, подкладка", "tops", "Acme", 1500000, "да", "S:2; M:5; L:3", "нет"}
 	for i, v := range example {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 2)
 		_ = f.SetCellValue(sh, cell, v)
 	}
-	_ = f.SetColWidth(sh, "A", "H", 22)
+	_ = f.SetColWidth(sh, "A", "I", 22)
 	// справочник категорий на втором листе
 	_, _ = f.NewSheet("categories")
 	rows, err := h.DB.Query(r.Context(), `SELECT slug, name_ru, name_uz FROM categories WHERE is_active ORDER BY sort, slug`)
@@ -168,14 +172,16 @@ func (h *Handlers) importExcel(w http.ResponseWriter, r *http.Request) {
 				}
 				var id uuid.UUID
 				err := tx.QueryRow(r.Context(), `
-					INSERT INTO products (store_id, category_id, sku, title, description, brand, price, in_stock)
-					VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+					INSERT INTO products (store_id, category_id, sku, title, description, brand, price, in_stock, is_set)
+					VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
+					        COALESCE($9, false) AND (SELECT zone = 'top' FROM categories WHERE id = $2))
 					ON CONFLICT (store_id, sku) DO UPDATE SET
 					  category_id = EXCLUDED.category_id, title = EXCLUDED.title, description = EXCLUDED.description,
-					  brand = EXCLUDED.brand, price = EXCLUDED.price, in_stock = EXCLUDED.in_stock
+					  brand = EXCLUDED.brand, price = EXCLUDED.price, in_stock = EXCLUDED.in_stock,
+					  is_set = COALESCE($9, products.is_set) AND (SELECT zone = 'top' FROM categories WHERE id = $2)
 					WHERE products.status <> 'blocked'
 					RETURNING (xmax = 0), id`,
-					p.StoreID, it.categoryID, it.sku, it.title, it.description, it.brand, it.price, it.inStock).Scan(&created, &id)
+					p.StoreID, it.categoryID, it.sku, it.title, it.description, it.brand, it.price, it.inStock, it.isSet).Scan(&created, &id)
 				if err == nil && it.sizes != nil {
 					err = ReplaceSizes(r.Context(), tx, id, it.sizes)
 				}
@@ -311,6 +317,13 @@ func parseImport(rows [][]string, cats map[string]uuid.UUID) ([]importRow, *Impo
 				it.sizes = sizes
 			} else {
 				bad("sizes", "invalid")
+			}
+		}
+		if _, hasCol := col["set"]; hasCol && get("set") != "" {
+			if v, ok := parseBool(get("set")); ok {
+				it.isSet = &v
+			} else {
+				bad("set", "invalid")
 			}
 		}
 		if len(errs) > 0 {

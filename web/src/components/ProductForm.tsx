@@ -23,7 +23,7 @@ export function ProductForm({ product, onSaved }: { product?: Product; onSaved?:
   const [f, setF] = useState({
     title: product?.title ?? "", description: product?.description ?? "", category_id: product?.category_id ?? "",
     price: product ? String(Math.round(product.price / 100)) : "", brand: product?.brand ?? "", sku: product?.sku ?? "",
-    in_stock: product?.in_stock ?? true,
+    in_stock: product?.in_stock ?? true, is_set: product?.is_set ?? false,
   });
   const [sizes, setSizes] = useState<SizeRow[]>((product?.sizes ?? []).map((s) => ({ size: s.size, stock: String(s.stock ?? 0) })));
   const [keys, setKeys] = useState<Partial<Record<Angle, string>>>({});
@@ -34,6 +34,8 @@ export function ProductForm({ product, onSaved }: { product?: Product; onSaved?:
   const [ok, setOk] = useState("");
   useEffect(() => { fetchCategories().then(setCats).catch(() => {}); }, []);
   const fields = error instanceof ApiError ? error.fields : {};
+  // «Двойка» (верх и низ на одном фото) — только для категорий зоны «верх».
+  const topCategory = cats.find((c) => c.id === f.category_id)?.zone === "top";
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF((p) => ({ ...p, [k]: e.target.value }));
 
   async function submit(e: FormEvent) {
@@ -50,7 +52,7 @@ export function ProductForm({ product, onSaved }: { product?: Product; onSaved?:
       // Пустой артикул у нового товара — сервер выдаст его автоматически.
       const sku = f.sku.trim();
       const sizeList = sizes.map((s) => ({ size: s.size.trim(), stock: Math.max(0, Number.parseInt(s.stock, 10) || 0) }));
-      const body = { ...f, price, sku, sizes: sizeList, ...(Object.keys(keys).length ? { images: keys } : {}) };
+      const body = { ...f, is_set: topCategory && f.is_set, price, sku, sizes: sizeList, ...(Object.keys(keys).length ? { images: keys } : {}) };
       if (product) {
         await updateProduct(product.id, body);
         setOk(t("saved"));
@@ -103,6 +105,16 @@ export function ProductForm({ product, onSaved }: { product?: Product; onSaved?:
           {field("brand", 120)}
           {product ? field("sku", 64, t("skuHint")) : field("sku", 64, t("skuAutoHint"), true, t("skuAuto"))}
         </div>
+        {topCategory && (
+          <div className="field">
+            <label className="row check">
+              <input type="checkbox" checked={f.is_set} onChange={(e) => setF((p) => ({ ...p, is_set: e.target.checked }))} aria-describedby="pf-set-h" />
+              <span>{t("isSet")}</span>
+            </label>
+            <span id="pf-set-h" className="muted small">{t("isSetHint")}</span>
+            {fields.is_set && <span className="field-error">{fe(fields.is_set)}</span>}
+          </div>
+        )}
         {sizes.length === 0 && (
           <label className="row check"><input type="checkbox" checked={f.in_stock} onChange={(e) => setF((p) => ({ ...p, in_stock: e.target.checked }))} /><span>{t("inStock")}</span></label>
         )}
