@@ -64,6 +64,9 @@ class RulesTest {
         assertEquals(NotificationTarget.ClientOrder("o2"), NotificationTarget.of(n("order_status", "order_id" to "o2")))
         assertEquals(NotificationTarget.ProductPage("p1"), NotificationTarget.of(n("review_reply", "product_id" to "p1")))
         assertEquals(NotificationTarget.StoreReviews, NotificationTarget.of(n("review_created")))
+        for (k in listOf("promotion_approved", "promotion_rejected", "promotion_stopped")) {
+            assertEquals(NotificationTarget.StoreProduct("p9"), NotificationTarget.of(n(k, "product_id" to "p9")))
+        }
         assertEquals(NotificationTarget.None, NotificationTarget.of(n("review_hidden")))
         assertEquals(NotificationTarget.None, NotificationTarget.of(Notification(2, "system", buildJsonObject { put("x", JsonPrimitive(1)) })))
     }

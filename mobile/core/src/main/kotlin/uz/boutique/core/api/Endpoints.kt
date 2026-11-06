@@ -132,6 +132,8 @@ class CatalogApi(private val c: ApiClient) {
     suspend fun products(f: CatalogFilters, cursor: String? = null, limit: Int = 24): Page<Product> =
         c.list("/v1/products" + f.toQuery(cursor, limit), Product.serializer())
     suspend fun product(id: String): Product = c.get("/v1/products/${enc(id)}", Product.serializer())
+    /** Товары с идущей рекламой для карусели «Реклама» на главной (одобряет суперадмин). */
+    suspend fun promoted(): List<Product> = c.list("/v1/promotions", Product.serializer()).items
     /** Открытие карточки товара (статистика магазина). Ошибки не важны. */
     suspend fun markViewed(id: String) = runCatching { c.exec("POST", "/v1/products/${enc(id)}/view") }
     suspend fun stores(q: String? = null): List<Store> = c.get("/v1/stores" + query("q" to q), ListSerializer(Store.serializer()))
@@ -224,6 +226,9 @@ class StoreApi(private val c: ApiClient) {
         c.exec("PATCH", "/v1/store/products/${enc(id)}/status", buildJsonObject { put("status", status) })
     suspend fun profile(): Store = c.get("/v1/store/profile", Store.serializer())
     suspend fun stats(from: String, to: String): StoreStats = c.get("/v1/store/stats" + query("from" to from, "to" to to), StoreStats.serializer())
+    /** Заявка на рекламу товара: решение принимает суперадмин (docs/PROMOTIONS.md). */
+    suspend fun requestPromotion(productId: String, days: Int, note: String) =
+        c.exec("POST", "/v1/store/promotions", buildJsonObject { put("product_id", productId); put("days", days); put("note", note) })
 }
 
 /** Все API одного приложения. */

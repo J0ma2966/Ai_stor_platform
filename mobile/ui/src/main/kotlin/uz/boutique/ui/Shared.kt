@@ -66,6 +66,12 @@ fun notificationText(n: Notification): String {
         "review_created" -> stringResource(R.string.notif_review_created, title)
         "review_reply" -> stringResource(R.string.notif_review_reply, title)
         "review_hidden" -> stringResource(R.string.notif_review_hidden, title)
+        "promotion_approved" -> stringResource(R.string.notif_promotion_approved, title)
+        "promotion_rejected", "promotion_stopped" -> {
+            val base = stringResource(if (n.kind == "promotion_rejected") R.string.notif_promotion_rejected else R.string.notif_promotion_stopped, title)
+            val reason = s("reason")
+            if (reason.isNotBlank()) base + ". " + stringResource(R.string.order_reason, reason) else base
+        }
         "payment_paid" -> stringResource(R.string.notif_payment_paid)
         "payment_failed" -> stringResource(R.string.notif_payment_failed)
         "generation_succeeded" -> stringResource(R.string.notif_generation_succeeded)

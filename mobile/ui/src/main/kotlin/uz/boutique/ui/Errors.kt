@@ -48,6 +48,9 @@ fun errorRes(code: String, appRole: Role): Int? = when (code) {
     "current_password_wrong" -> R.string.err_current_password_wrong
     "review_not_allowed" -> R.string.err_review_not_allowed
     "review_hidden" -> R.string.err_review_hidden
+    "promotion_exists" -> R.string.err_promotion_exists
+    "promotion_decided" -> R.string.err_promotion_decided
+    "product_not_published" -> R.string.err_product_not_published
     "registration_incomplete" -> R.string.err_registration_incomplete
     "corrupt_image" -> R.string.err_corrupt_image
     "read_file" -> R.string.err_read_file

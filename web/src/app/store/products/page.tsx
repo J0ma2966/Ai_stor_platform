@@ -13,6 +13,7 @@ const FILTERS = ["all", "published", "draft", "unpublished", "blocked"] as const
 export default function StoreProducts() {
   const t = useTranslations("storeProducts");
   const tc = useTranslations("storeCab");
+  const tp = useTranslations("storePromo");
   const ta = useTranslations("app");
   const locale = useLocale();
   const [items, setItems] = useState<Product[] | null>(null);
@@ -84,11 +85,16 @@ export default function StoreProducts() {
                     <td>{p.views ?? 0}</td>
                     <td><ProductStatusBadge status={p.status ?? "draft"} /></td>
                     <td>
-                      {(p.status === "draft" || p.status === "published") && (
-                        <button type="button" className="btn btn-secondary small" disabled={busy === p.id} onClick={() => toggle(p)}>
-                          {p.status === "published" ? t("unpublish") : t("publish")}
-                        </button>
-                      )}
+                      <div className="row wrap">
+                        {(p.status === "draft" || p.status === "published") && (
+                          <button type="button" className="btn btn-secondary small" disabled={busy === p.id} onClick={() => toggle(p)}>
+                            {p.status === "published" ? t("unpublish") : t("publish")}
+                          </button>
+                        )}
+                        {p.status === "published" && (
+                          <Link href={`/store/promotions?product=${p.id}`} className="btn btn-secondary small">{tp("promote")}</Link>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

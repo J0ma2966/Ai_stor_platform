@@ -151,6 +151,7 @@ SMS стоит денег, поэтому код нужен только для 
 Фильтры каталога: `q`, `category`, `store`, `brand`, `price_min`, `price_max`, `in_stock=true`, `sort=new|price_asc|price_desc|popular|rating`. В товаре есть `rating_avg` (0 — отзывов нет) и `rating_count`, в карточке ещё `rating_dist` (число отзывов на 1…5 звёзд).
 
 Отзывы и оценки: [REVIEWS.md](REVIEWS.md).
+Реклама товаров магазинов (заявки, решения суперадмина, карусель на главной): [PROMOTIONS.md](PROMOTIONS.md).
 
 ## Как добавить модуль
 

@@ -8,6 +8,8 @@ import { StoreCard } from "@/components/StoreCard";
 import { JsonLd } from "@/components/JsonLd";
 import { TRYON_ENABLED } from "@/lib/fitting";
 import { Icon, type IconName } from "@/components/Icon";
+import { PromoCarousel } from "@/components/PromoCarousel";
+import { fetchPromoted } from "@/lib/promotions";
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await getLocale();
@@ -28,11 +30,12 @@ async function safe<T>(p: Promise<T>, fallback: T): Promise<T> {
 export default async function Home() {
   const locale = await getLocale();
   const t = await getTranslations("home");
-  const [cats, popular, fresh, stores] = await Promise.all([
+  const [cats, popular, fresh, stores, promoted] = await Promise.all([
     safe<Category[]>(fetchCategories(), []),
     safe<{ items: Product[] }>(fetchProducts({ sort: "popular" }, "", 10), { items: [] }),
     safe<{ items: Product[] }>(fetchProducts({ sort: "new" }, "", 10), { items: [] }),
     safe<Store[]>(fetchStores(), []),
+    safe<Product[]>(fetchPromoted(), []),
   ]);
   return (
     <div className="stack-lg">
@@ -67,6 +70,9 @@ export default async function Home() {
           </Link>
         </div>
       </div>
+
+      {/* Реклама товаров магазинов (одобряет суперадмин): сразу под первым экраном. */}
+      <PromoCarousel items={promoted} />
 
       {cats.length > 0 && (
         <section aria-labelledby="h-cats">

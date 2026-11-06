@@ -15,6 +15,7 @@ export default function StoreLayout({ children }: { children: ReactNode }) {
     { href: "/store/orders", label: t("orders") },
     { href: "/store/products", label: t("products") },
     { href: "/store/reviews", label: t("reviews") },
+    { href: "/store/promotions", label: t("promotions") },
     { href: "/store/import", label: t("import") },
     { href: "/store/profile", label: t("profile") },
     { href: "/store/notifications", label: t("notifications") },

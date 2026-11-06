@@ -107,6 +107,16 @@ fun CatalogScreen(
     val categories = rememberLoader("categories") { api.catalog.categories() }
     val filters = CatalogFilters(q = applied.ifBlank { null }, category = category, store = storeSlug, inStock = inStock, sort = sort)
     val paged = rememberPaged(filters) { c -> api.catalog.products(filters, c) }
+    // Карусель «Реклама» — только на главной (весь каталог без поиска и фильтров).
+    // Ошибка загрузки рекламы не мешает каталогу: карусель просто не показывается.
+    val promos = rememberLoader("promoted") {
+        try {
+            api.catalog.promoted()
+        } catch (e: ApiException) {
+            emptyList()
+        }
+    }
+    val showPromos = storeSlug == null && applied.isBlank() && category == null && !inStock
 
     AppScaffold(
         title = storeName?.takeIf { it.isNotBlank() } ?: stringResource(UiR.string.nav_catalog),
@@ -170,7 +180,11 @@ fun CatalogScreen(
                     )
                 }
             }
-            PullToRefreshBox(isRefreshing = paged.loading && paged.loadedOnce, onRefresh = { paged.refresh() }, modifier = Modifier.fillMaxSize()) {
+            PullToRefreshBox(
+                isRefreshing = paged.loading && paged.loadedOnce,
+                onRefresh = { paged.refresh(); if (showPromos) promos.reload() },
+                modifier = Modifier.fillMaxSize(),
+            ) {
                 when {
                     !paged.loadedOnce && paged.error != null -> ErrorState(paged.error!!, onRetry = { paged.refresh() })
                     !paged.loadedOnce -> CenterLoading()
@@ -182,6 +196,13 @@ fun CatalogScreen(
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                         modifier = Modifier.fillMaxSize().testTag("catalog_grid"),
                     ) {
+                        val promoItems = promos.value.orEmpty()
+                        if (showPromos && promoItems.isNotEmpty()) {
+                            item(span = { GridItemSpan(maxLineSpan) }, key = "promo_carousel") {
+                                // сетка уже даёт отступ 16 dp по краям — свой отступ карусели не нужен
+                                PromoCarousel(promoItems, onProduct = onProduct, edge = 0.dp, modifier = Modifier.padding(bottom = 8.dp))
+                            }
+                        }
                         itemsIndexed(paged.items, key = { _, p -> p.id }) { i, p ->
                             if (i >= paged.items.size - 6) LaunchedEffect(paged.items.size) { paged.loadMore() }
                             ProductCard(p, onClick = { onProduct(p.id) }, onNeedLogin = onNeedLogin)
