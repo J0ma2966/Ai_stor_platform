@@ -44,18 +44,15 @@ func TestTryOnTwoPieceSet(t *testing.T) {
 	if d := f.cli.must(200, "GET", "/v1/products/"+set, nil).data(); d["is_set"] != true || d["zone"] != "top" {
 		t.Fatalf("public card: %v", d)
 	}
-	ids := func(q string) map[string]bool {
-		out := map[string]bool{}
-		for _, it := range f.cli.must(200, "GET", "/v1/products?limit=60&"+q, nil).Body["data"].([]any) {
-			out[it.(map[string]any)["id"].(string)] = true
+	// в каталоге комплект — обычный товар списка, с флагом
+	found := false
+	for _, it := range f.cli.must(200, "GET", "/v1/products?limit=60", nil).Body["data"].([]any) {
+		if m := it.(map[string]any); m["id"] == set {
+			found = m["is_set"] == true
 		}
-		return out
 	}
-	if s := ids("set=true"); len(s) != 1 || !s[set] {
-		t.Fatalf("set=true: %v", s)
-	}
-	if s := ids("set=false"); s[set] || !s[f.top] || !s[bottom] {
-		t.Fatalf("set=false: %v", s)
+	if !found {
+		t.Fatal("list must carry is_set")
 	}
 
 	// двойка закрывает низ: вместе с брюками — zone_taken
@@ -89,7 +86,7 @@ func TestTryOnTwoPieceSet(t *testing.T) {
 		t.Fatalf("provider must get the set flag on every angle: %+v", seen)
 	}
 	g := f.cli.must(200, "GET", "/v1/tryon/generations/"+id, nil).data()
-	found := false
+	found = false
 	for _, p := range g["products"].([]any) {
 		pm := p.(map[string]any)
 		if pm["id"] == set {

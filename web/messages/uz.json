@@ -389,8 +389,7 @@
     "size": "O'lcham",
     "chooseSize": "O'lchamni tanlang",
     "sizeOut": "mavjud emas",
-    "sizeLow": "kam qoldi",
-    "setBadge": "Ikkilik: ustki + pastki"
+    "sizeLow": "kam qoldi"
   },
   "stores": {
     "title": "Butiklar",
@@ -868,10 +867,7 @@
     "toCatalog": "Katalogga",
     "transferConsent": "Suratlarimni kiyib ko'rish uchun {recipient} ga yuborishga roziman. Suratlar O'zbekistondan tashqarida qayta ishlanadi; provayder ularni suiiste'mollarni nazorat qilish uchun 30 kungacha saqlashi mumkin va o'qitish uchun ishlatmaydi.",
     "openFull": "To'liq o'lchamda ochish",
-    "download": "Yuklab olish",
-    "setLabel": "Ikkilik (ustki + pastki)",
-    "setsTab": "Ikkiliklar",
-    "setsHint": "Ikkilik — bitta to‘plamning ustki va pastki kiyimi bitta suratda. Uni tanlaganda pastki kiyim alohida tanlanmaydi."
+    "download": "Yuklab olish"
   },
   "reviews": {
     "title": "Sharhlar",

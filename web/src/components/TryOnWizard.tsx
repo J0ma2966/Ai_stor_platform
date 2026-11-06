@@ -245,7 +245,7 @@ export function TryOnWizard() {
             {items.map((i) => (
               <li key={i.id} className="row">
                 {i.image_url && <img src={i.image_url} alt="" width={48} height={48} className="thumb" />}
-                <span className="grow">{i.is_set ? t("setLabel") : t(`zone.${i.zone}`)}: {i.title}</span>
+                <span className="grow">{t(`zone.${i.zone}`)}: {i.title}</span>
                 <span className="muted small">{formatSum(i.price, locale)}</span>
               </li>
             ))}

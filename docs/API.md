@@ -148,7 +148,7 @@ SMS стоит денег, поэтому код нужен только для 
 - Массовые фото: файлы загружаются через `/v1/uploads?purpose=product`, затем ключи привязываются по имени `АРТИКУЛ_ракурс.jpg` (ракурс: `front|side|back`, `1|2|3`, `спереди|сбоку|сзади`).
 - Статистика: просмотры и добавления в примерочную по дням (`product_stats_daily`), примерки — успешные генерации с товарами магазина, заказы и выручка (доставленные) за период; топ-10 товаров.
 
-Фильтры каталога: `q`, `category`, `store`, `brand`, `price_min`, `price_max`, `in_stock=true`, `set=true|false` (только двойки / без них), `sort=new|price_asc|price_desc|popular|rating`. В товаре есть `rating_avg` (0 — отзывов нет) и `rating_count`, в карточке ещё `rating_dist` (число отзывов на 1…5 звёзд).
+Фильтры каталога: `q`, `category`, `store`, `brand`, `price_min`, `price_max`, `in_stock=true`, `sort=new|price_asc|price_desc|popular|rating`. В товаре есть `rating_avg` (0 — отзывов нет) и `rating_count`, в карточке ещё `rating_dist` (число отзывов на 1…5 звёзд).
 
 Отзывы и оценки: [REVIEWS.md](REVIEWS.md).
 

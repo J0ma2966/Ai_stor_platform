@@ -110,7 +110,6 @@ fun ProductContent(
                 Text(p.title, style = MaterialTheme.typography.headlineSmall)
                 Text(money(p.price), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.testTag("price"))
                 RatingRow(p.ratingAvg, p.ratingCount)
-                if (p.isSet) Pill(stringResource(UiR.string.product_set_badge), Brand.colors.info, Modifier.testTag("set_badge"))
                 if (p.storeName.isNotBlank()) {
                     Text(
                         stringResource(UiR.string.product_seller, p.storeName),

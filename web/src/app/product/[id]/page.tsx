@@ -100,7 +100,6 @@ export default async function ProductPage({ params }: { params: P }) {
             <div className="row wrap product-price-row">
               <p className="price price-lg">{formatSum(p.price, locale)}</p>
               <span className={`badge ${p.in_stock ? "badge-ok" : "badge-bad"}`}>{p.in_stock ? t("inStock") : t("outOfStock")}</span>
-              {p.is_set && <span className="badge">{t("setBadge")}</span>}
             </div>
             <ProductActions product={p} />
             {TRYON_ENABLED && <p className="muted small">{t("fittingNote")}</p>}

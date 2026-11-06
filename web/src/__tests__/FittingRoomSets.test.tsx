@@ -28,41 +28,41 @@ const renderIt = () =>
     </NextIntlClientProvider>,
   );
 
-describe("FittingRoom: двойки", () => {
+describe("FittingRoom: комплект верх+низ", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
     vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 204 })));
     apiList.mockImplementation(async (url: string) => ({
-      items: url.includes("set=true")
-        ? [{ id: "suit", title: "Костюм-двойка", brand: "A", price: 100, store_name: "S", is_set: true, images: {} }]
-        : [{ id: "x", title: "Вещь", brand: "A", price: 100, store_name: "S", images: {} }],
+      items: url.includes("c-top")
+        ? [
+            { id: "suit", title: "Костюм", brand: "A", price: 100, store_name: "S", is_set: true, images: {} },
+            { id: "shirt", title: "Рубашка", brand: "A", price: 100, store_name: "S", images: {} },
+          ]
+        : [{ id: "jeans", title: "Джинсы", brand: "A", price: 100, store_name: "S", images: {} }],
       next: "",
     }));
   });
 
-  it("picking a set hides the bottom slot and the bottom tab", async () => {
+  it("adapts to the pick: a set hides the bottom, a regular top brings it back", async () => {
     localStorage.setItem("fitting_v1", JSON.stringify({ bottom: { id: "pants", title: "Брюки", brand: "A", price: 100, image_url: "", zone: "bottom" } }));
     renderIt();
     const tabs = screen.getByRole("tablist");
-    expect(within(tabs).getByRole("tab", { name: "Низ" })).toBeInTheDocument();
+    expect(within(tabs).getAllByRole("tab").map((x) => x.textContent)).toEqual(["Головной убор", "Верх", "Низ", "Обувь"]);
     expect(screen.getByText("Брюки")).toBeInTheDocument();
+    // верх — одним списком, без отдельного раздела для комплектов
+    await waitFor(() => expect(apiList).toHaveBeenCalledWith("/v1/products?limit=12&category=c-top"));
 
-    fireEvent.click(within(tabs).getByRole("tab", { name: "Двойки" }));
-    await waitFor(() => expect(apiList).toHaveBeenCalledWith(expect.stringContaining("category=c-top&set=true")));
-    const tile = (await screen.findByText("Костюм-двойка")).closest("li")!;
-    fireEvent.click(within(tile).getByRole("button", { name: "В примерочную" }));
-
+    const pick = async (title: string) => {
+      const tile = (await screen.findByText(title, { selector: ".product-tile div" })).closest("li")!;
+      fireEvent.click(within(tile).getByRole("button"));
+    };
+    await pick("Костюм");
     await waitFor(() => expect(within(tabs).queryByRole("tab", { name: "Низ" })).toBeNull());
-    expect(screen.queryByText("Брюки")).toBeNull(); // выбранный низ убран
-    expect(screen.getByText("Двойка (верх + низ)")).toBeInTheDocument();
-    expect(JSON.parse(localStorage.getItem("fitting_v1")!)).toEqual({
-      top: expect.objectContaining({ id: "suit", zone: "top", is_set: true }),
-    });
-  });
+    expect(screen.queryByText("Брюки")).toBeNull(); // низ уже в комплекте
+    expect(JSON.parse(localStorage.getItem("fitting_v1")!)).toEqual({ top: expect.objectContaining({ id: "suit", is_set: true }) });
 
-  it("the regular top tab lists only non-set tops", async () => {
-    renderIt();
-    await waitFor(() => expect(apiList).toHaveBeenCalledWith(expect.stringContaining("category=c-top&set=false")));
+    await pick("Рубашка");
+    await waitFor(() => expect(within(tabs).getByRole("tab", { name: "Низ" })).toBeInTheDocument());
   });
 });

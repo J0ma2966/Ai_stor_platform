@@ -80,9 +80,6 @@
     <string name="tryon_zone_bottom">Низ</string>
     <string name="tryon_zone_shoes">Обувь</string>
     <string name="tryon_empty_zone">Не выбрано</string>
-    <string name="tryon_zone_set">Двойка (верх + низ)</string>
-    <string name="tryon_set_hint">Двойка — верх и низ одного комплекта на одном фото, поэтому низ отдельно не выбирается.</string>
-    <string name="product_set_badge">Двойка: верх + низ</string>
     <string name="tryon_remove_item">Убрать</string>
     <string name="tryon_unsupported">Текущая AI-модель не переодевает: %1$s. Эти вещи останутся как на ваших фото.</string>
     <string name="tryon_disclaimer">Результат — визуализация AI. Он зависит от ваших фото и фото товаров и не гарантирует точную посадку или размер.</string>

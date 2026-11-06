@@ -135,7 +135,7 @@ var sorts = map[string]struct {
 	"rating":     {"p.rating_avg", true, "numeric"},
 }
 
-// list: GET /v1/products?q=&category=&store=&brand=&price_min=&price_max=&in_stock=&set=&sort=&cursor=&limit=
+// list: GET /v1/products?q=&category=&store=&brand=&price_min=&price_max=&in_stock=&sort=&cursor=&limit=
 func (h *Handlers) list(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	sortName := q.Get("sort")
@@ -182,13 +182,6 @@ func (h *Handlers) list(w http.ResponseWriter, r *http.Request) {
 	}
 	if q.Get("in_stock") == "true" {
 		where = append(where, "p.in_stock")
-	}
-	// set=true — только «двойки», set=false — без них (вкладки «Верх» и «Двойки» в примерочной).
-	switch q.Get("set") {
-	case "true":
-		where = append(where, "p.is_set")
-	case "false":
-		where = append(where, "NOT p.is_set")
 	}
 	dir, cmp := "ASC", ">"
 	if srt.desc {

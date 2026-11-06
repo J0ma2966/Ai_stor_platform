@@ -80,8 +80,7 @@ class TryonScreensTest {
         shop.setFitting(listOf(FittingItem("p3", "Костюм-двойка", "Brand", 30_000_000, "", Zones.TOP, isSet = true)))
         rule.waitForIdle()
         rule.onNodeWithTag("zone_bottom").assertDoesNotExist()
-        rule.onNodeWithText("Двойка (верх + низ)").assertExists()
-        rule.onNodeWithTag("set_hint").assertExists()
+        rule.onNodeWithText("Костюм-двойка").assertExists()
         // выбранный отдельно низ вытесняет двойку и возвращает зону «низ»
         shop.setFitting(listOf(FittingItem("p3", "Костюм-двойка", "Brand", 30_000_000, "", Zones.TOP, isSet = true), FittingItem("p2", "Брюки", "Brand", 9_000_000, "", Zones.BOTTOM)))
         rule.waitForIdle()

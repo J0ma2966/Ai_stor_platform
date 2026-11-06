@@ -80,9 +80,6 @@
     <string name="tryon_zone_bottom">Pastki kiyim</string>
     <string name="tryon_zone_shoes">Poyabzal</string>
     <string name="tryon_empty_zone">Tanlanmagan</string>
-    <string name="tryon_zone_set">Ikkilik (ustki + pastki)</string>
-    <string name="tryon_set_hint">Ikkilik — bitta to‘plamning ustki va pastki kiyimi bitta suratda, shuning uchun pastki kiyim alohida tanlanmaydi.</string>
-    <string name="product_set_badge">Ikkilik: ustki + pastki</string>
     <string name="tryon_remove_item">Olib tashlash</string>
     <string name="tryon_unsupported">Joriy AI modeli quyidagilarni kiydira olmaydi: %1$s. Ular fotodagidek qoladi.</string>
     <string name="tryon_disclaimer">Natija — AI vizualizatsiyasi. U fotosuratlaringiz va mahsulot fotolariga bog‘liq, aniq o‘lcham yoki o‘tirishni kafolatlamaydi.</string>
