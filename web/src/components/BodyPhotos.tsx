@@ -5,6 +5,7 @@ import { useRouter } from "@/i18n/navigation";
 import { formatDateTime } from "@/lib/money";
 import { ANGLES, deletePhoto, getQuote, giveConsent, listPhotos, revokeConsent, savePhoto, uploadBodyPhoto, type Angle, type SavedPhoto } from "@/lib/tryon";
 import { ErrorBox } from "@/components/ErrorBox";
+import { PhotoGuide, PoseFigure } from "@/components/PhotoGuide";
 
 // Профиль → сохранённые фото: просмотреть, заменить, удалить (ТЗ 7.2), отозвать согласие.
 export function BodyPhotos() {
@@ -72,6 +73,7 @@ export function BodyPhotos() {
   return (
     <div className="stack">
       <p className="small muted">{t("photosIntro")}</p>
+      <PhotoGuide defaultOpen={photos.length < ANGLES.length} />
       <ErrorBox error={error} />
       <div className="grid-3">
         {ANGLES.map((a) => {
@@ -79,7 +81,7 @@ export function BodyPhotos() {
           return (
             <div key={a} className="card photo-slot">
               <div className="label">{t(`angle.${a}`)}</div>
-              {p ? <img src={p.url} alt={t(`angle.${a}`)} className="photo-preview" /> : <div className="photo-empty" aria-hidden="true" />}
+              {p ? <img src={p.url} alt={t(`angle.${a}`)} className="photo-preview" /> : <div className="photo-empty" aria-hidden="true"><PoseFigure pose={a} ghost id={`mine-${a}`} /></div>}
               {p && <p className="small muted">{t("photoExpires", { date: formatDateTime(p.expires_at, locale) })}</p>}
               <label className="btn btn-secondary">
                 {busy === a ? t("uploading") : p ? t("replacePhoto") : t("uploadPhoto")}

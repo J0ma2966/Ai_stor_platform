@@ -1,7 +1,9 @@
 package uz.boutique.client
 
+import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -52,6 +54,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
@@ -335,7 +338,8 @@ private fun TryonWizard(data: WizardData, items: List<FittingItem>, modifier: Mo
         if (ok && a != null && f != null) uploadUri(a, Uri.fromFile(f), temp = f) else f?.delete()
     }
 
-    fun takePhoto(angle: String) {
+    // Системная камера — запасной путь: без разрешения CAMERA или если своя камера не открылась.
+    fun systemCamera(angle: String) {
         pendingAngle.value = angle
         val dir = File(context.cacheDir, "camera").apply { mkdirs() }
         val f = File(dir, "tryon_$angle.jpg")
@@ -346,6 +350,38 @@ private fun TryonWizard(data: WizardData, items: List<FittingItem>, modifier: Mo
         } catch (_: ActivityNotFoundException) {
             f.delete()
         }
+    }
+
+    // Своя камера с таймером (TimerCamera.kt), чтобы снять себя в полный рост без помощника.
+    var timerAngle by rememberSaveable { mutableStateOf<String?>(null) }
+    val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        val a = pendingAngle.value
+        if (a != null) { if (granted) timerAngle = a else systemCamera(a) }
+    }
+
+    fun takePhoto(angle: String) {
+        pendingAngle.value = angle
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            timerAngle = angle
+        } else {
+            cameraPermission.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    timerAngle?.let { a ->
+        val shot = remember(a) { File(File(context.cacheDir, "camera").apply { mkdirs() }, "timer_$a.jpg") }
+        TimerCameraDialog(
+            angle = a,
+            file = shot,
+            onResult = { f ->
+                timerAngle = null
+                if (f != null) uploadUri(a, Uri.fromFile(f), temp = f)
+            },
+            onSystemCamera = {
+                timerAngle = null
+                systemCamera(a)
+            },
+        )
     }
 
     val allPhotos = Angles.ALL.all { slots[it] != null }
@@ -371,13 +407,18 @@ private fun TryonWizard(data: WizardData, items: List<FittingItem>, modifier: Mo
                         color = Brand.colors.muted,
                     )
                 }
+                PhotoGuideCard(defaultOpen = !Angles.ALL.all { slots[it]?.saved == true })
                 Angles.ALL.forEach { a ->
                     val s = slots[a]
                     SectionCard(Modifier.testTag("slot_$a")) {
                         Text(angleLabel(a), style = MaterialTheme.typography.titleSmall)
                         Text(angleHint(a), style = MaterialTheme.typography.bodySmall, color = Brand.colors.muted)
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            ProductImage(s?.url, angleLabel(a), Modifier.size(width = 72.dp, height = 96.dp))
+                            if (s == null) {
+                                PoseFigure(Modifier.size(width = 72.dp, height = 96.dp).testTag("pose_$a"), pose = a, ghost = true)
+                            } else {
+                                ProductImage(s.url, angleLabel(a), Modifier.size(width = 72.dp, height = 96.dp))
+                            }
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 if (s?.saved == true) Pill(stringResource(UiR.string.tryon_saved_photo), Brand.colors.info)
                                 if (uploadingAngle == a) {

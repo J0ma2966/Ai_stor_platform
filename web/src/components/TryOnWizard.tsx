@@ -10,6 +10,7 @@ import {
   type Angle, type BodyInput, type Quote, type SavedPhoto,
 } from "@/lib/tryon";
 import { useFitting } from "@/components/FittingRoom";
+import { PhotoGuide, PoseFigure } from "@/components/PhotoGuide";
 import { ErrorBox, useErrorText } from "@/components/ErrorBox";
 
 type Slot = { key: string; url: string; saved: boolean } | null;
@@ -169,6 +170,7 @@ export function TryOnWizard() {
             </ul>
             <p className="muted">{t("privacy", { hours: quote.retention.photo_hours, days: quote.retention.saved_photo_days, results: quote.retention.result_days })}</p>
           </div>
+          <PhotoGuide defaultOpen={!ANGLES.every((a) => slots[a]?.saved)} />
           <div className="grid-3">
             {ANGLES.map((a) => {
               const s = slots[a];
@@ -176,7 +178,7 @@ export function TryOnWizard() {
                 <div key={a} className="card photo-slot">
                   <div className="label">{t(`angle.${a}`)}</div>
                   <p className="small muted">{t(`angleHint.${a}`)}</p>
-                  {s ? <img src={s.url} alt={t(`angle.${a}`)} className="photo-preview" /> : <div className="photo-empty" aria-hidden="true" />}
+                  {s ? <img src={s.url} alt={t(`angle.${a}`)} className="photo-preview" /> : <div className="photo-empty" aria-hidden="true"><PoseFigure pose={a} ghost id={`slot-${a}`} /></div>}
                   {s?.saved && <span className="badge badge-info">{t("savedPhoto")}</span>}
                   <label className="btn btn-secondary">
                     {busy === a ? t("uploading") : s ? t("replacePhoto") : t("uploadPhoto")}
