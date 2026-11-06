@@ -183,6 +183,7 @@ S = [
 ("field_invalid", "Неверное значение", "Noto‘g‘ri qiymat"),
 ("field_gt", "Должно быть больше нуля", "Noldan katta bo‘lishi kerak"),
 ("field_range", "От 1 до 99", "1 dan 99 gacha"),
+("field_top_only", "Двойка возможна только в категории «Верх»", "Ikkilik faqat «Ustki kiyim» toifasida bo‘lishi mumkin"),
 # ---- статусы заказа ----
 ("status_pending", "Ожидает подтверждения", "Tasdiqlanishi kutilmoqda"),
 ("status_confirmed", "Подтверждён", "Tasdiqlandi"),
@@ -424,6 +425,8 @@ S = [
 ("prod_sku_hint", "Оставьте пустым — номер выдастся автоматически", "Bo‘sh qoldiring — raqam avtomatik beriladi"),
 ("prod_category", "Категория", "Kategoriya"),
 ("prod_in_stock", "В наличии", "Mavjud"),
+("prod_is_set", "Двойка: верх и низ на одном фото", "Ikkilik: ustki va pastki kiyim bitta suratda"),
+("prod_is_set_hint", "Отметьте, если на фото комплект. В примерочной покупатель не будет выбирать к нему отдельный низ.", "Suratda to‘plam bo‘lsa belgilang. Kiyinish xonasida xaridor unga alohida pastki kiyim tanlamaydi."),
 ("prod_sizes", "Размеры и остатки", "O‘lchamlar va qoldiqlar"),
 ("prod_sizes_hint", "Если указаны размеры, наличие считается по остаткам.", "O‘lchamlar ko‘rsatilsa, mavjudlik qoldiqlar bo‘yicha hisoblanadi."),
 ("prod_size_name", "Размер", "O‘lcham"),

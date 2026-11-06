@@ -57,7 +57,7 @@ export function GenerationView({ id }: { id: string }) {
   // «Изменить образ»: вернуть вещи в примерочную
   const edit = () => {
     clearFitting();
-    g.products.forEach((p) => addToFitting({ id: p.id, title: p.title, brand: p.brand, price: p.price, image_url: p.image_url, zone: p.zone, store_name: p.store_name }));
+    g.products.forEach((p) => addToFitting({ id: p.id, title: p.title, brand: p.brand, price: p.price, image_url: p.image_url, zone: p.zone, store_name: p.store_name, is_set: p.is_set }));
     router.push("/fitting");
   };
 

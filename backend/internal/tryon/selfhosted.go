@@ -17,7 +17,8 @@ import (
 //
 //	POST <TRYON_ENDPOINT>  Authorization: Bearer <TRYON_API_KEY>
 //	{"angle":"front","gender":"female","body":{...},"person_image":"<base64 jpeg>",
-//	 "garments":[{"zone":"top","title":"...","brand":"...","image":"<base64 jpeg>"}]}
+//	 "garments":[{"zone":"top","set":false,"title":"...","brand":"...","image":"<base64 jpeg>"}]}
+//	set=true — «двойка»: верх и низ на одном фото (зона top), низа отдельно нет.
 //	200 → тело — картинка (image/jpeg или image/png)
 //	422 {"code":"photo_rejected|content_blocked|unsupported_items"} → без повтора
 //	429/5xx → повтор
@@ -34,6 +35,7 @@ func b64(b []byte) string { return base64.StdEncoding.EncodeToString(b) }
 func (s *SelfHosted) Generate(ctx context.Context, req Request) ([]byte, error) {
 	type garment struct {
 		Zone  string `json:"zone"`
+		Set   bool   `json:"set"`
 		Title string `json:"title"`
 		Brand string `json:"brand"`
 		Image string `json:"image"`
@@ -46,7 +48,7 @@ func (s *SelfHosted) Generate(ctx context.Context, req Request) ([]byte, error) 
 		Garments []garment `json:"garments"`
 	}{Angle: req.Angle, Gender: req.Gender, Body: req.Body, Person: b64(req.Person)}
 	for _, g := range req.Garments {
-		in.Garments = append(in.Garments, garment{g.Zone, g.Title, g.Brand, b64(g.Image)})
+		in.Garments = append(in.Garments, garment{g.Zone, g.Set, g.Title, g.Brand, b64(g.Image)})
 	}
 	buf, err := json.Marshal(in)
 	if err != nil {

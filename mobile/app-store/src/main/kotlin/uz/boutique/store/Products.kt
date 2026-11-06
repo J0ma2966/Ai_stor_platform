@@ -199,6 +199,7 @@ private fun ProductForm(
     var sku by rememberSaveable(key) { mutableStateOf(p?.sku.orEmpty()) }
     var categoryId by rememberSaveable(key) { mutableStateOf(p?.categoryId ?: "") }
     var inStock by rememberSaveable(key) { mutableStateOf(p?.inStock ?: true) }
+    var isSet by rememberSaveable(key) { mutableStateOf(p?.isSet ?: false) }
     val sizes = remember(key) { mutableStateListOf<SizeRow>().apply { p?.sizes?.forEach { add(SizeRow(it.size, (it.stock ?: 0).toString())) } } }
     // ракурс → (ключ загрузки, ссылка для предпросмотра); ключи только у новых фото
     val newImages = remember(key) { mutableStateOf(mapOf<String, Pair<String, String>>()) }
@@ -211,6 +212,7 @@ private fun ProductForm(
     val status = rememberAction()
     val savedText = stringResource(UiR.string.prod_saved)
     val blocked = p?.status == "blocked"
+    val topCategory = categories.firstOrNull { it.id == categoryId }?.zone == "top"
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
         val angle = pickAngle
@@ -245,6 +247,7 @@ private fun ProductForm(
             put("price", tiyin!!)
             put("category_id", categoryId)
             put("in_stock", inStock)
+            put("is_set", isSet && topCategory)
             if (sku.isNotBlank()) put("sku", sku.trim())
             if (newImages.value.isNotEmpty()) putJsonObject("images") { newImages.value.forEach { (a, v) -> put(a, v.first) } }
             putJsonArray("sizes") {
@@ -306,6 +309,15 @@ private fun ProductForm(
                     DropdownMenuItem(text = { Text(c.name(lang)) }, onClick = { categoryId = c.id; catMenu = false })
                 }
             }
+        }
+        // «Двойка» (верх и низ на одном фото) — только для категорий зоны «верх».
+        if (topCategory) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(UiR.string.prod_is_set), modifier = Modifier.weight(1f))
+                Switch(checked = isSet, onCheckedChange = { isSet = it }, enabled = !blocked, modifier = Modifier.testTag("is_set"))
+            }
+            Text(stringResource(UiR.string.prod_is_set_hint), style = MaterialTheme.typography.bodySmall, color = Brand.colors.muted)
+            err("is_set")?.let { Text(it, color = Brand.colors.bad) }
         }
         FormField(description, { description = it }, stringResource(UiR.string.prod_description), error = err("description"), singleLine = false, minLines = 3, maxLength = 10000, enabled = !blocked)
 

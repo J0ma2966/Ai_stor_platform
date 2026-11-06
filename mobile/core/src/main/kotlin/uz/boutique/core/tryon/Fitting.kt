@@ -16,12 +16,14 @@ data class FittingItem(
     val imageUrl: String = "",
     val zone: String,
     val storeName: String = "",
+    /** «Двойка»: верх и низ на одном фото; бывает только в зоне «верх» и занимает и «низ». */
+    val isSet: Boolean = false,
 ) {
     companion object {
         fun of(p: Product): FittingItem? {
             val zone = p.zone ?: return null
             if (zone !in Zones.ALL) return null
-            return FittingItem(p.id, p.title, p.brand, p.price, p.cardImage.orEmpty(), zone, p.storeName)
+            return FittingItem(p.id, p.title, p.brand, p.price, p.cardImage.orEmpty(), zone, p.storeName, p.isSet && zone == Zones.TOP)
         }
     }
 }
@@ -29,20 +31,32 @@ data class FittingItem(
 /**
  * Примерочная (как на сайте, web/src/lib/fitting.ts): по одной вещи на зону манекена,
  * новая вещь той же зоны заменяет старую. Хранится на телефоне и работает без входа.
+ * «Двойка» лежит в зоне «верх» и занимает также «низ»: выбранный низ убирается, а
+ * отдельный низ, добавленный позже, вытесняет двойку.
  */
 class FittingSelection(private val store: KeyValueStore) {
     private var items: Map<String, FittingItem> = load()
 
     val all: List<FittingItem> get() = Zones.ALL.mapNotNull { items[it] }
     val count: Int get() = items.size
+
+    /** Выбрана «двойка» — зона «низ» занята ею. */
+    val hasSet: Boolean get() = items[Zones.TOP]?.isSet == true
+
+    /** Зоны, которые показывает примерочная (без «низа» при двойке). */
+    val visibleZones: List<String> get() = visibleZones(all)
     operator fun get(zone: String): FittingItem? = items[zone]
     fun contains(productId: String): Boolean = items.values.any { it.id == productId }
 
     /** @return true, если вещь новая (для счётчика «В примерочную»). */
     fun add(item: FittingItem): Boolean {
         require(item.zone in Zones.ALL) { "unknown zone ${item.zone}" }
-        val isNew = items[item.zone]?.id != item.id
-        items = items + (item.zone to item)
+        val x = if (item.isSet && item.zone != Zones.TOP) item.copy(isSet = false) else item
+        val isNew = items[x.zone]?.id != x.id
+        var next = items + (x.zone to x)
+        if (x.isSet) next = next - Zones.BOTTOM // двойка уже включает низ
+        if (x.zone == Zones.BOTTOM && next[Zones.TOP]?.isSet == true) next = next - Zones.TOP
+        items = next
         save()
         return isNew
     }
@@ -62,6 +76,7 @@ class FittingSelection(private val store: KeyValueStore) {
             ApiJson.decodeFromString(ListSerializer(FittingItem.serializer()), raw)
                 .filter { it.zone in Zones.ALL }
                 .associateBy { it.zone }
+                .let { m -> if (m[Zones.TOP]?.isSet == true) m - Zones.BOTTOM else m }
         } ?: emptyMap()
     } catch (_: Exception) {
         emptyMap()
@@ -71,6 +86,10 @@ class FittingSelection(private val store: KeyValueStore) {
 
     companion object {
         const val KEY = "fitting_v1"
+
+        /** Зоны примерочной для выбранных вещей: при «двойке» без «низа». */
+        fun visibleZones(items: List<FittingItem>): List<String> =
+            if (items.any { it.zone == Zones.TOP && it.isSet }) Zones.ALL - Zones.BOTTOM else Zones.ALL
     }
 }
 

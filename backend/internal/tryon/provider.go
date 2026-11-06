@@ -31,6 +31,17 @@ type Garment struct {
 	Title string
 	Brand string
 	Image []byte // фото товара того же ракурса (или фронтальное), JPEG
+	// Set — «двойка» (products.is_set): верх и низ на одном фото. Бывает только в зоне
+	// top и занимает также зону bottom — отдельного низа в запросе тогда нет.
+	Set bool
+}
+
+// covers — зоны манекена, которые занимает вещь.
+func (g Garment) covers() []string {
+	if g.Set && g.Zone == ZoneTop {
+		return []string{ZoneTop, ZoneBottom}
+	}
+	return []string{g.Zone}
 }
 
 // Body — необязательные параметры тела.

@@ -46,6 +46,7 @@ type Product struct {
 	Brand       string            `json:"brand"`
 	Price       int64             `json:"price"`
 	InStock     bool              `json:"in_stock"`
+	IsSet       bool              `json:"is_set"` // «двойка»: верх и низ на одном фото (только зона top)
 	Status      string            `json:"status,omitempty"`
 	Reason      *string           `json:"moderation_reason,omitempty"`
 	Images      map[string]string `json:"images"`                // большое фото (1600 px), пока копий нет — оригинал
@@ -206,12 +207,12 @@ func (h *Handlers) list(w http.ResponseWriter, r *http.Request) {
 	// подзапросы в одном SELECT с ORDER BY, PostgreSQL вычисляет их до сортировки
 	// для каждого подходящего товара.
 	sql := fmt.Sprintf(`
-		SELECT p.id, p.store_id, p.store_name, p.store_slug, p.category_id, c.zone::text, p.title, p.brand, p.price, p.in_stock, p.created_at, p.sort_val,
+		SELECT p.id, p.store_id, p.store_name, p.store_slug, p.category_id, c.zone::text, p.title, p.brand, p.price, p.in_stock, p.is_set, p.created_at, p.sort_val,
 		       p.rating_avg::float8, p.rating_count,
 		       `+imagesSQL+`,
 		       EXISTS (SELECT 1 FROM product_sizes ps WHERE ps.product_id = p.id)
 		FROM (
-			SELECT p.id, p.store_id, s.name AS store_name, s.slug AS store_slug, p.category_id, p.title, p.brand, p.price, p.in_stock,
+			SELECT p.id, p.store_id, s.name AS store_name, s.slug AS store_slug, p.category_id, p.title, p.brand, p.price, p.in_stock, p.is_set,
 			       p.created_at, p.rating_avg, p.rating_count, (%s)::text AS sort_val, %s AS sort_key
 			FROM products p JOIN stores s ON s.id = p.store_id
 			WHERE %s ORDER BY %s %s, p.id %s LIMIT %d
@@ -227,7 +228,7 @@ func (h *Handlers) list(w http.ResponseWriter, r *http.Request) {
 	var items []Product
 	for rows.Next() {
 		var p Product
-		if err := rows.Scan(&p.ID, &p.StoreID, &p.StoreName, &p.StoreSlug, &p.CategoryID, &p.Zone, &p.Title, &p.Brand, &p.Price, &p.InStock, &p.CreatedAt, &p.sortVal,
+		if err := rows.Scan(&p.ID, &p.StoreID, &p.StoreName, &p.StoreSlug, &p.CategoryID, &p.Zone, &p.Title, &p.Brand, &p.Price, &p.InStock, &p.IsSet, &p.CreatedAt, &p.sortVal,
 			&p.RatingAvg, &p.RatingCount, &p.imageKeys, &p.HasSizes); err != nil {
 			httpx.Fail(w, r, err)
 			return
@@ -261,7 +262,7 @@ func (h *Handlers) get(w http.ResponseWriter, r *http.Request) {
 	}
 	var p Product
 	err = h.DB.QueryRow(r.Context(), `
-		SELECT p.id, p.store_id, s.name, s.slug, p.category_id, c.zone::text, p.title, p.description, p.brand, p.price, p.in_stock, p.created_at,
+		SELECT p.id, p.store_id, s.name, s.slug, p.category_id, c.zone::text, p.title, p.description, p.brand, p.price, p.in_stock, p.is_set, p.created_at,
 		  p.rating_avg::float8, p.rating_count,
 		  ARRAY(SELECT count(r.id)::int FROM generate_series(1, 5) g
 		        LEFT JOIN product_reviews r ON r.product_id = p.id AND r.status = 'visible' AND r.rating = g
@@ -269,7 +270,7 @@ func (h *Handlers) get(w http.ResponseWriter, r *http.Request) {
 		  `+imagesSQL+`
 		FROM products p JOIN stores s ON s.id = p.store_id JOIN categories c ON c.id = p.category_id
 		WHERE p.id = $1 AND p.status = 'published' AND s.status = 'active'`, id).
-		Scan(&p.ID, &p.StoreID, &p.StoreName, &p.StoreSlug, &p.CategoryID, &p.Zone, &p.Title, &p.Description, &p.Brand, &p.Price, &p.InStock, &p.CreatedAt,
+		Scan(&p.ID, &p.StoreID, &p.StoreName, &p.StoreSlug, &p.CategoryID, &p.Zone, &p.Title, &p.Description, &p.Brand, &p.Price, &p.InStock, &p.IsSet, &p.CreatedAt,
 			&p.RatingAvg, &p.RatingCount, &p.RatingDist, &p.imageKeys)
 	if errors.Is(err, pgx.ErrNoRows) {
 		httpx.Fail(w, r, httpx.ErrNotFound)
@@ -326,7 +327,7 @@ const CardImageSQL = `(SELECT CASE WHEN pi.variants = 'ready' THEN left(pi.key, 
 
 // storeListSQL собирается из констант на этапе компиляции.
 const storeListSQL = `
-		SELECT p.id, p.store_id, p.category_id, p.sku, p.title, p.brand, p.price, p.in_stock, p.status, p.moderation_reason, p.created_at,
+		SELECT p.id, p.store_id, p.category_id, p.sku, p.title, p.brand, p.price, p.in_stock, p.is_set, p.status, p.moderation_reason, p.created_at,
 		       p.views_count, p.fitting_adds,
 		       ` + imagesSQL + `
 		FROM products p WHERE p.store_id = $1 ORDER BY p.created_at DESC LIMIT 2000`
@@ -342,7 +343,7 @@ func (h *Handlers) storeList(w http.ResponseWriter, r *http.Request) {
 	items := []Product{}
 	for rows.Next() {
 		var it Product
-		if err := rows.Scan(&it.ID, &it.StoreID, &it.CategoryID, &it.SKU, &it.Title, &it.Brand, &it.Price, &it.InStock, &it.Status, &it.Reason, &it.CreatedAt,
+		if err := rows.Scan(&it.ID, &it.StoreID, &it.CategoryID, &it.SKU, &it.Title, &it.Brand, &it.Price, &it.InStock, &it.IsSet, &it.Status, &it.Reason, &it.CreatedAt,
 			&it.Views, &it.FittingAdds, &it.imageKeys); err != nil {
 			httpx.Fail(w, r, err)
 			return
@@ -366,6 +367,7 @@ type createReq struct {
 	Brand       string            `json:"brand" validate:"required,min=1,max=120"`
 	Price       int64             `json:"price" validate:"required,gt=0"`
 	InStock     *bool             `json:"in_stock" validate:"required"`
+	IsSet       bool              `json:"is_set"` // «двойка»; только для категорий зоны top
 	Images      map[string]string `json:"images" validate:"required,len=3,dive,keys,oneof=front side back,endkeys,required"`
 	Sizes       []SizeIn          `json:"sizes"` // необязательно; с размерами наличие считается по остаткам
 }
@@ -395,10 +397,15 @@ func (h *Handlers) storeCreate(w http.ResponseWriter, r *http.Request) {
 		if sku, err = skuOrAuto(r.Context(), tx, p.StoreID, req.SKU); err != nil {
 			return err
 		}
+		if req.IsSet {
+			if err := checkSetCategory(r.Context(), tx, req.CategoryID); err != nil {
+				return err
+			}
+		}
 		if err := tx.QueryRow(r.Context(), `
-			INSERT INTO products (store_id, category_id, sku, title, description, brand, price, in_stock)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
-			p.StoreID, req.CategoryID, sku, req.Title, req.Description, req.Brand, req.Price, *req.InStock).Scan(&id); err != nil {
+			INSERT INTO products (store_id, category_id, sku, title, description, brand, price, in_stock, is_set)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+			p.StoreID, req.CategoryID, sku, req.Title, req.Description, req.Brand, req.Price, *req.InStock, req.IsSet).Scan(&id); err != nil {
 			return err
 		}
 		for angle, key := range req.Images {

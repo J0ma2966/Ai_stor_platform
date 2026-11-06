@@ -64,6 +64,7 @@ import uz.boutique.core.model.Me
 import uz.boutique.core.tryon.Angles
 import uz.boutique.core.tryon.CreateGeneration
 import uz.boutique.core.tryon.FittingItem
+import uz.boutique.core.tryon.FittingSelection
 import uz.boutique.core.tryon.GenStatus
 import uz.boutique.core.tryon.Generation
 import uz.boutique.core.tryon.Photos
@@ -205,7 +206,9 @@ fun FittingRoomScreen(
             Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Zones.ALL.forEach { zone ->
+            // Примерочная подстраивается сама: если выбранный верх — комплект (верх и низ
+            // на одном фото), карточка «низа» скрыта.
+            FittingSelection.visibleZones(items).forEach { zone ->
                 val item = items.firstOrNull { it.zone == zone }
                 SectionCard(Modifier.testTag("zone_$zone")) {
                     Text(zoneLabel(zone), style = MaterialTheme.typography.labelLarge, color = Brand.colors.muted)
@@ -570,7 +573,7 @@ fun GenerationContent(
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
 
     fun toFitting() = shop.setFitting(g.products.filter { it.zone in Zones.ALL }.map {
-        FittingItem(it.id, it.title, it.brand, it.price, it.imageUrl, it.zone, it.storeName)
+        FittingItem(it.id, it.title, it.brand, it.price, it.imageUrl, it.zone, it.storeName, it.isSet && it.zone == Zones.TOP)
     })
 
     Column(

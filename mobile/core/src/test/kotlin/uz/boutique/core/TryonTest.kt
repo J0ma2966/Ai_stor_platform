@@ -11,6 +11,7 @@ import uz.boutique.core.api.MemoryStore
 import uz.boutique.core.api.PersistentCookieJar
 import uz.boutique.core.api.SessionManager
 import uz.boutique.core.model.Me
+import uz.boutique.core.model.Product
 import uz.boutique.core.model.Role
 import uz.boutique.core.model.SessionResp
 import uz.boutique.core.tryon.CreateGeneration
@@ -56,6 +57,37 @@ class TryonTest {
         again.remove(Zones.TOP)
         assertEquals(listOf("c"), FittingSelection(store).all.map { it.id })
         assertFailsWith<IllegalArgumentException> { f.add(FittingItem("x", "?", zone = "bag")) }
+    }
+
+    @Test fun twoPieceSetTakesTheBottomZone() {
+        val store = MemoryStore()
+        val f = FittingSelection(store)
+        f.add(FittingItem("pants", "Брюки", zone = Zones.BOTTOM))
+        f.add(FittingItem("hat", "Кепка", zone = Zones.HEADWEAR))
+        f.add(FittingItem("suit", "Костюм-двойка", zone = Zones.TOP, isSet = true))
+        assertTrue(f.hasSet)
+        assertEquals(listOf("hat", "suit"), f.all.map { it.id }) // выбранный низ убран
+        assertEquals(listOf(Zones.HEADWEAR, Zones.TOP, Zones.SHOES), f.visibleZones)
+        assertTrue(FittingSelection(store).hasSet) // переживает перезапуск
+        // отдельный низ вытесняет двойку
+        f.add(FittingItem("jeans", "Джинсы", zone = Zones.BOTTOM))
+        assertFalse(f.hasSet)
+        assertEquals(listOf("hat", "jeans"), f.all.map { it.id })
+        assertEquals(Zones.ALL, f.visibleZones)
+        // флаг двойки вне зоны «верх» не учитывается
+        f.add(FittingItem("skirt", "Юбка", zone = Zones.BOTTOM, isSet = true))
+        assertFalse(f.hasSet)
+        // из сохранённого состояния с двойкой и низом низ отбрасывается
+        store.put(FittingSelection.KEY, """[{"id":"s","title":"S","zone":"top","isSet":true},{"id":"b","title":"B","zone":"bottom"}]""")
+        assertEquals(listOf("s"), FittingSelection(store).all.map { it.id })
+    }
+
+    @Test fun fittingItemFromProductKeepsSetFlagOnlyForTops() {
+        val p = Product(id = "p", title = "Костюм", zone = Zones.TOP, isSet = true)
+        assertTrue(FittingItem.of(p)!!.isSet)
+        assertFalse(FittingItem.of(p.copy(zone = Zones.BOTTOM))!!.isSet)
+        val json = """{"id":"p","title":"T","zone":"top","is_set":true,"in_stock":true}"""
+        assertTrue(uz.boutique.core.api.ApiJson.decodeFromString(Product.serializer(), json).isSet)
     }
 
     @Test fun brokenStoredFittingIsIgnored() {

@@ -4,7 +4,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { Link, useRouter } from "@/i18n/navigation";
 import { api, apiList, currentRole, refreshSession } from "@/lib/api";
 import { formatSum } from "@/lib/money";
-import { addToFitting, FITTING_EVENT, fittingItems, getFitting, removeFromFitting, ZONES, type Fitting, type FittingItem, type Zone } from "@/lib/fitting";
+import { addToFitting, FITTING_EVENT, fittingItems, getFitting, removeFromFitting, visibleZones, type Fitting, type FittingItem, type Zone } from "@/lib/fitting";
 import { getQuote, type Quote } from "@/lib/tryon";
 import { Mannequin } from "@/components/Mannequin";
 import { ErrorBox } from "@/components/ErrorBox";
@@ -25,7 +25,8 @@ export function useFitting(): Fitting {
 }
 
 type Category = { id: string; zone: Zone; name_ru: string; name_uz: string };
-type Product = { id: string; title: string; brand: string; price: number; store_name: string; images: Record<string, string>; thumbs?: Record<string, string> };
+type Product = { id: string; title: string; brand: string; price: number; store_name: string; is_set?: boolean; images: Record<string, string>; thumbs?: Record<string, string> };
+
 
 // Экран примерочной: манекен, карточки у зон, выбор товаров, запуск генерации.
 export function FittingRoom() {
@@ -61,7 +62,7 @@ export function FittingRoom() {
         <div className="mannequin-wrap">
           <Mannequin gender={quote?.gender ?? null} label={t(quote?.gender === "female" ? "mannequinFemale" : "mannequinMale")} />
           <ul className="plain zone-slots">
-            {ZONES.map((z) => {
+            {visibleZones(fitting).map((z) => {
               const it = fitting[z];
               return (
                 <li key={z} className={`zone-slot zone-${z}`}>
@@ -112,6 +113,12 @@ function ProductPicker({ fitting }: { fitting: Fitting }) {
   const locale = useLocale();
   const [cats, setCats] = useState<Category[]>([]);
   const [zone, setZone] = useState<Zone>("top");
+  // Выбор подстраивается сам: если выбранный верх — комплект (верх и низ на одном
+  // фото), низ уже подобран и вкладка «Низ» скрыта.
+  const zones = visibleZones(fitting);
+  useEffect(() => {
+    if (!zones.includes(zone)) setZone("top");
+  }, [zones, zone]);
   const [q, setQ] = useState("");
   const [products, setProducts] = useState<Product[] | null>(null);
   const [error, setError] = useState<unknown>(null);
@@ -127,7 +134,9 @@ function ProductPicker({ fitting }: { fitting: Fitting }) {
     setProducts(null);
     try {
       const lists = await Promise.all(
-        zoneCats.map((c) => apiList<Product>(`/v1/products?limit=12&category=${c.id}${q ? `&q=${encodeURIComponent(q)}` : ""}`)),
+        zoneCats.map((c) =>
+          apiList<Product>(`/v1/products?limit=12&category=${c.id}${q ? `&q=${encodeURIComponent(q)}` : ""}`),
+        ),
       );
       setProducts(lists.flatMap((l) => l.items));
     } catch (e) {
@@ -141,14 +150,14 @@ function ProductPicker({ fitting }: { fitting: Fitting }) {
   }, [load]);
 
   const add = (p: Product) => {
-    const item: FittingItem = { id: p.id, title: p.title, brand: p.brand, price: p.price, image_url: p.thumbs?.front ?? p.images?.front ?? "", zone, store_name: p.store_name };
+    const item: FittingItem = { id: p.id, title: p.title, brand: p.brand, price: p.price, image_url: p.thumbs?.front ?? p.images?.front ?? "", zone, store_name: p.store_name, is_set: p.is_set };
     addToFitting(item);
   };
 
   return (
     <section className="card stack" aria-label={t("pickTitle")}>
       <div className="row wrap" role="tablist">
-        {ZONES.map((z) => (
+        {zones.map((z) => (
           <button key={z} type="button" role="tab" aria-selected={zone === z} className={`btn ${zone === z ? "btn-primary" : "btn-secondary"}`} onClick={() => setZone(z)}>
             {t(`zone.${z}`)}
           </button>

@@ -74,6 +74,7 @@ data class GenProduct(
     val brand: String = "",
     val price: Long = 0,
     val zone: String = "",
+    @SerialName("is_set") val isSet: Boolean = false,
     @SerialName("image_url") val imageUrl: String = "",
     @SerialName("store_name") val storeName: String = "",
     @SerialName("store_slug") val storeSlug: String = "",

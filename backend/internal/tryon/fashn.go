@@ -25,6 +25,15 @@ func (f *Fashn) Name() string { return "fashn" }
 
 var fashnCategory = map[string]string{ZoneTop: "tops", ZoneBottom: "bottoms"}
 
+// fashnCategoryOf: «двойка» (верх+низ на одном фото) — категория FASHN one-pieces,
+// модель переодевает верх и низ за один проход.
+func fashnCategoryOf(g Garment) string {
+	if g.Set && g.Zone == ZoneTop {
+		return "one-pieces"
+	}
+	return fashnCategory[g.Zone]
+}
+
 func (f *Fashn) Generate(ctx context.Context, req Request) ([]byte, error) {
 	var chain []Garment
 	for _, z := range []string{ZoneBottom, ZoneTop} {
@@ -81,7 +90,7 @@ func (f *Fashn) run(ctx context.Context, person string, g Garment) ([]byte, erro
 		"inputs": map[string]any{
 			"model_image":      person,
 			"garment_image":    dataURI(g.Image),
-			"category":         fashnCategory[g.Zone],
+			"category":         fashnCategoryOf(g),
 			"mode":             mode,
 			"output_format":    "jpeg",
 			"return_base64":    true,

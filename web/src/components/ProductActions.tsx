@@ -60,7 +60,7 @@ export function ProductActions({ product: p }: { product: Product }) {
 
   function toFitting() {
     if (!p.zone) return;
-    addToFitting({ id: p.id, title: p.title, brand: p.brand, price: p.price, image_url: cardImage(p), zone: p.zone, store_name: p.store_name });
+    addToFitting({ id: p.id, title: p.title, brand: p.brand, price: p.price, image_url: cardImage(p), zone: p.zone, store_name: p.store_name, is_set: p.is_set });
   }
 
   function pick(s: string) {

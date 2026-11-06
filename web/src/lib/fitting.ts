@@ -1,6 +1,8 @@
 // Примерочная (выбор вещей на манекене) — на клиенте, в localStorage: выбор сохраняется
 // при переходах по каталогу и к загрузке фото (ТЗ 6.3), работает и без входа.
 // По одному товару на зону манекена; новый товар той же зоны заменяет старый.
+// «Двойка» (is_set: верх и низ на одном фото) лежит в зоне top и занимает также зону
+// bottom: выбор низа при ней скрыт, а выбранный низ убирается (и наоборот).
 import { API_URL } from "@/lib/api";
 
 // Выключатель AI-примерки (prod запускается без неё): NEXT_PUBLIC_TRYON_ENABLED=false
@@ -19,6 +21,7 @@ export type FittingItem = {
   image_url: string;
   zone: Zone;
   store_name?: string;
+  is_set?: boolean; // «двойка»: только для zone = "top"
 };
 
 export type Fitting = Partial<Record<Zone, FittingItem>>;
@@ -37,6 +40,7 @@ export function getFitting(): Fitting {
     const raw = JSON.parse(window.localStorage.getItem(KEY) ?? "{}") as Record<string, unknown>;
     const out: Fitting = {};
     for (const z of ZONES) if (isItem(raw[z]) && (raw[z] as FittingItem).zone === z) out[z] = raw[z] as FittingItem;
+    if (hasSet(out)) delete out.bottom;
     return out;
   } catch {
     return {};
@@ -56,7 +60,10 @@ export function addToFitting(item: FittingItem): void {
   if (!TRYON_ENABLED) return;
   const f = getFitting();
   const replaced = f[item.zone]?.id === item.id;
-  f[item.zone] = item;
+  const it: FittingItem = item.is_set && item.zone !== "top" ? { ...item, is_set: false } : item;
+  f[item.zone] = it;
+  if (it.is_set) delete f.bottom; // двойка уже включает низ
+  if (item.zone === "bottom" && f.top?.is_set) delete f.top; // выбран отдельный низ — двойка больше не подходит
   write(f);
   if (!replaced) {
     // счётчик для статистики магазина; ошибки не мешают пользователю
@@ -77,6 +84,16 @@ export function removeFromFitting(zone: Zone): void {
 
 export function clearFitting(): void {
   write({});
+}
+
+// В примерочной выбрана «двойка» — зона «низ» занята ею, отдельный низ не выбирается.
+export function hasSet(f: Fitting): boolean {
+  return !!f.top?.is_set;
+}
+
+// Зоны, которые показываются в примерочной (без «низа», если выбрана двойка).
+export function visibleZones(f: Fitting): Zone[] {
+  return hasSet(f) ? ZONES.filter((z) => z !== "bottom") : ZONES;
 }
 
 export function fittingItems(f: Fitting): FittingItem[] {

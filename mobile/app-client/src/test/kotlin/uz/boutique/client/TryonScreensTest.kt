@@ -71,6 +71,23 @@ class TryonScreensTest {
         assertTrue(shop.fittingItems.isEmpty())
     }
 
+    @Test fun twoPieceSetHidesTheBottomZone() {
+        val g = graph(loggedIn = false)
+        val shop = ShopState(g.api, MemoryStore())
+        shop.setFitting(listOf(FittingItem("p2", "Брюки", "Brand", 9_000_000, "", Zones.BOTTOM)))
+        show(g, shop) { FittingRoomScreen(onBack = {}, onProduct = {}, onStart = {}, onHistory = {}, onCatalog = {}) }
+        rule.onNodeWithTag("zone_bottom").assertExists()
+        shop.setFitting(listOf(FittingItem("p3", "Костюм-двойка", "Brand", 30_000_000, "", Zones.TOP, isSet = true)))
+        rule.waitForIdle()
+        rule.onNodeWithTag("zone_bottom").assertDoesNotExist()
+        rule.onNodeWithText("Костюм-двойка").assertExists()
+        // выбранный отдельно низ вытесняет двойку и возвращает зону «низ»
+        shop.setFitting(listOf(FittingItem("p3", "Костюм-двойка", "Brand", 30_000_000, "", Zones.TOP, isSet = true), FittingItem("p2", "Брюки", "Brand", 9_000_000, "", Zones.BOTTOM)))
+        rule.waitForIdle()
+        rule.onNodeWithTag("zone_bottom").assertExists()
+        rule.onNodeWithText("Костюм-двойка").assertDoesNotExist()
+    }
+
     @Test fun wizardAsksConsentsThenStartsOnce() {
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {

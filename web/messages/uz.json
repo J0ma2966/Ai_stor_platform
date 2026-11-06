@@ -108,7 +108,8 @@
     "already_saved": "Foto allaqachon saqlangan",
     "size_required": "O'lcham tanlanmagan",
     "size_unknown": "O'lcham endi yo'q",
-    "not_enough_stock": "Yetarli emas"
+    "not_enough_stock": "Yetarli emas",
+    "top_only": "ikkilik faqat «Ustki kiyim» toifasida bo‘lishi mumkin"
   },
   "status": {
     "pending": "Tasdiqlanishi kutilmoqda",
@@ -594,13 +595,15 @@
     "presetLetters": "XS–XXL",
     "presetRu": "42–54",
     "presetShoes": "Poyabzal 36–45",
-    "totalStock": "Jami: {n} dona"
+    "totalStock": "Jami: {n} dona",
+    "isSet": "Ikkilik: ustki va pastki kiyim bitta suratda",
+    "isSetHint": "Suratda to‘plam bo‘lsa belgilang (ustki va pastki birga tanlangan). Kiyinish xonasida xaridor unga alohida pastki kiyim tanlamaydi."
   },
   "import": {
     "title": "Mahsulotlarni import qilish",
     "excelTitle": "1. Mahsulotlar Excel fayli",
     "excelText": "Shablonni yuklab oling, har bir mahsulot uchun bir qator to‘ldiring va faylni yuklang. Yangi mahsulotlar qoralama sifatida yaratiladi, mavjudlari (artikul bo‘yicha) yangilanadi.",
-    "columns": "Ustunlar: sku (artikul; bo‘sh bo‘lsa — avtomatik beriladi), title, description, category (kategoriya kodi yoki nomi), brand, price (so‘mda), in_stock (ha/yo‘q). Ixtiyoriy sizes ustuni — o'lchamlar va qoldiq, masalan «S:2; M:5; L:0».",
+    "columns": "Ustunlar: sku (artikul; bo‘sh bo‘lsa — avtomatik beriladi), title, description, category (kategoriya kodi yoki nomi), brand, price (so‘mda), in_stock (ha/yo‘q). Ixtiyoriy sizes ustuni — o'lchamlar va qoldiq, masalan «S:2; M:5; L:0». Ixtiyoriy set ustuni — ikkilik (ustki va pastki bitta suratda): ha/yo‘q, faqat ustki kiyim toifalari uchun.",
     "template": "Shablonni yuklab olish",
     "chooseFile": ".xlsx faylni tanlash",
     "uploading": "Yuklanmoqda…",
