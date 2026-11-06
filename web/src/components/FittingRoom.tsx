@@ -2,9 +2,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Link, useRouter } from "@/i18n/navigation";
-import { api, apiList, currentRole, refreshSession } from "@/lib/api";
+import { currentRole, refreshSession } from "@/lib/api";
+import { getCart, type CartItem } from "@/lib/shop";
 import { formatSum } from "@/lib/money";
-import { addToFitting, FITTING_EVENT, fittingItems, getFitting, removeFromFitting, visibleZones, type Fitting, type FittingItem, type Zone } from "@/lib/fitting";
+import { addToFitting, FITTING_EVENT, fittingItems, getFitting, removeFromFitting, visibleZones, ZONES, type Fitting, type Zone } from "@/lib/fitting";
 import { getQuote, type Quote } from "@/lib/tryon";
 import { Mannequin } from "@/components/Mannequin";
 import { ErrorBox } from "@/components/ErrorBox";
@@ -24,8 +25,6 @@ export function useFitting(): Fitting {
   return f;
 }
 
-type Category = { id: string; zone: Zone; name_ru: string; name_uz: string };
-type Product = { id: string; title: string; brand: string; price: number; store_name: string; is_set?: boolean; images: Record<string, string>; thumbs?: Record<string, string> };
 
 
 // Экран примерочной: манекен, карточки у зон, выбор товаров, запуск генерации.
@@ -36,7 +35,7 @@ export function FittingRoom() {
   const fitting = useFitting();
   const items = fittingItems(fitting);
   const [quote, setQuote] = useState<Quote | null>(null);
-  const [authed, setAuthed] = useState(false);
+  const [authed, setAuthed] = useState<boolean | null>(null); // null — ещё проверяем вход
 
   useEffect(() => {
     (async () => {
@@ -101,17 +100,17 @@ export function FittingRoom() {
           )}
         </div>
       </section>
-      <ProductPicker fitting={fitting} />
+      <ProductPicker fitting={fitting} authed={authed} />
     </div>
   );
 }
 
-// Список товаров по зонам (справа на десктопе, ниже на мобильном). Добавление — кнопкой,
-// без drag-and-drop (ТЗ 6.2).
-function ProductPicker({ fitting }: { fitting: Fitting }) {
+// Выбор вещей — только из корзины покупателя (не весь каталог), по зонам манекена.
+// Добавление — кнопкой, без drag-and-drop (ТЗ 6.2). Одна вещь корзины в разных
+// размерах показывается один раз.
+function ProductPicker({ fitting, authed }: { fitting: Fitting; authed: boolean | null }) {
   const t = useTranslations("tryon");
   const locale = useLocale();
-  const [cats, setCats] = useState<Category[]>([]);
   const [zone, setZone] = useState<Zone>("top");
   // Выбор подстраивается сам: если выбранный верх — комплект (верх и низ на одном
   // фото), низ уже подобран и вкладка «Низ» скрыта.
@@ -119,69 +118,71 @@ function ProductPicker({ fitting }: { fitting: Fitting }) {
   useEffect(() => {
     if (!zones.includes(zone)) setZone("top");
   }, [zones, zone]);
-  const [q, setQ] = useState("");
-  const [products, setProducts] = useState<Product[] | null>(null);
+  const [items, setItems] = useState<CartItem[] | null>(null);
   const [error, setError] = useState<unknown>(null);
 
-  useEffect(() => {
-    api<Category[]>("/v1/categories").then(setCats).catch(setError);
-  }, []);
-
   const load = useCallback(async () => {
-    const zoneCats = cats.filter((c) => c.zone === zone);
-    if (zoneCats.length === 0) return;
     setError(null);
-    setProducts(null);
     try {
-      const lists = await Promise.all(
-        zoneCats.map((c) =>
-          apiList<Product>(`/v1/products?limit=12&category=${c.id}${q ? `&q=${encodeURIComponent(q)}` : ""}`),
-        ),
-      );
-      setProducts(lists.flatMap((l) => l.items));
+      const cart = await getCart();
+      const seen = new Set<string>();
+      setItems(cart.items.filter((i) => ZONES.includes(i.zone as Zone) && !seen.has(i.product_id) && !!seen.add(i.product_id)));
     } catch (e) {
       setError(e);
     }
-  }, [cats, zone, q]);
+  }, []);
 
   useEffect(() => {
-    const id = setTimeout(load, 250);
-    return () => clearTimeout(id);
-  }, [load]);
+    if (authed) void load();
+  }, [authed, load]);
 
-  const add = (p: Product) => {
-    const item: FittingItem = { id: p.id, title: p.title, brand: p.brand, price: p.price, image_url: p.thumbs?.front ?? p.images?.front ?? "", zone, store_name: p.store_name, is_set: p.is_set };
-    addToFitting(item);
-  };
+  const add = (c: CartItem) =>
+    addToFitting({ id: c.product_id, title: c.title, brand: c.brand, price: c.price, image_url: c.image_url ?? "", zone: c.zone as Zone, store_name: c.store_name, is_set: c.is_set });
 
+  const inZone = items?.filter((i) => i.zone === zone) ?? [];
   return (
     <section className="card stack" aria-label={t("pickTitle")}>
-      <div className="row wrap" role="tablist">
-        {zones.map((z) => (
-          <button key={z} type="button" role="tab" aria-selected={zone === z} className={`btn ${zone === z ? "btn-primary" : "btn-secondary"}`} onClick={() => setZone(z)}>
-            {t(`zone.${z}`)}
-          </button>
-        ))}
-      </div>
-      <input type="search" placeholder={t("search")} value={q} onChange={(e) => setQ(e.target.value)} aria-label={t("search")} />
-      <ErrorBox error={error} onRetry={load} />
-      {!products && !error && <p className="muted">{t("loading")}</p>}
-      {products?.length === 0 && <p className="muted">{t("noProducts")}</p>}
-      <ul className="plain product-grid">
-        {products?.map((p) => {
-          const chosen = fitting[zone]?.id === p.id;
-          return (
-            <li key={p.id} className="product-tile">
-              {(p.thumbs?.front ?? p.images?.front) && <img src={p.thumbs?.front ?? p.images.front} alt="" loading="lazy" />}
-              <div className="small clamp">{p.title}</div>
-              <div className="small muted">{p.brand} · {formatSum(p.price, locale)}</div>
-              <button type="button" className="btn btn-secondary small" disabled={chosen} onClick={() => add(p)}>
-                {chosen ? t("added") : fitting[zone] ? t("replace") : t("add")}
+      <h2>{t("fromCart")}</h2>
+      {authed === false && (
+        <p className="muted">
+          {t("cartLogin")} <Link href={`/login?next=${encodeURIComponent("/fitting")}`}>{t("login")}</Link>
+        </p>
+      )}
+      {authed && (
+        <>
+          <div className="row wrap" role="tablist">
+            {zones.map((z) => (
+              <button key={z} type="button" role="tab" aria-selected={zone === z} className={`btn ${zone === z ? "btn-primary" : "btn-secondary"}`} onClick={() => setZone(z)}>
+                {t(`zone.${z}`)}
+                {items ? ` · ${items.filter((i) => i.zone === z).length}` : ""}
               </button>
-            </li>
-          );
-        })}
-      </ul>
+            ))}
+          </div>
+          <ErrorBox error={error} onRetry={load} />
+          {!items && !error && <p className="muted">{t("loading")}</p>}
+          {items?.length === 0 && (
+            <p className="muted">
+              {t("cartEmpty")} <Link href="/catalog">{t("toCatalog")}</Link>
+            </p>
+          )}
+          {!!items?.length && inZone.length === 0 && <p className="muted">{t("cartZoneEmpty")}</p>}
+          <ul className="plain product-grid">
+            {inZone.map((c) => {
+              const chosen = fitting[zone]?.id === c.product_id;
+              return (
+                <li key={c.product_id} className="product-tile">
+                  {c.image_url && <img src={c.image_url} alt="" loading="lazy" />}
+                  <div className="small clamp">{c.title}</div>
+                  <div className="small muted">{c.brand} · {formatSum(c.price, locale)}</div>
+                  <button type="button" className="btn btn-secondary small" disabled={chosen} onClick={() => add(c)}>
+                    {chosen ? t("added") : fitting[zone] ? t("replace") : t("add")}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
     </section>
   );
 }

@@ -88,6 +88,29 @@ class TryonScreensTest {
         rule.onNodeWithText("Костюм-двойка").assertDoesNotExist()
     }
 
+    @Test fun fittingRoomPicksOnlyFromCart() {
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when (request.path) {
+                "/v1/me/cart" -> json("""{"data":{"items":[
+                    {"product_id":"jeans","title":"Джинсы","zone":"bottom","qty":1},
+                    {"product_id":"suit","title":"Костюм","zone":"top","is_set":true,"qty":1}],"total_qty":2}}""")
+                else -> MockResponse().setResponseCode(404)
+            }
+        }
+        val g = graph(loggedIn = true)
+        val shop = ShopState(g.api, MemoryStore())
+        show(g, shop) { FittingRoomScreen(onBack = {}, onProduct = {}, onStart = {}, onHistory = {}, onCatalog = {}) }
+        rule.waitUntil(5_000) { rule.onAllNodes(hasTestTag("pick_jeans")).fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithTag("pick_jeans").performScrollTo().performClick()
+        rule.waitUntil(5_000) { shop.fittingItems.any { it.id == "jeans" } }
+        rule.onNodeWithTag("pick_suit").performScrollTo().performClick()
+        rule.waitUntil(5_000) { shop.fittingItems.any { it.id == "suit" } }
+        // комплект закрывает низ: джинсы убраны и больше не предлагаются
+        assertEquals(listOf("suit"), shop.fittingItems.map { it.id })
+        rule.onNodeWithTag("pick_jeans").assertDoesNotExist()
+        rule.onNodeWithTag("zone_bottom").assertDoesNotExist()
+    }
+
     @Test fun wizardAsksConsentsThenStartsOnce() {
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {

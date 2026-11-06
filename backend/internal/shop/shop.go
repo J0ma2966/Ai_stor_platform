@@ -60,6 +60,7 @@ type Card struct {
 	StoreName   string    `json:"store_name"`
 	CategoryID  uuid.UUID `json:"category_id"`
 	Zone        string    `json:"zone"`
+	IsSet       bool      `json:"is_set"` // комплект: верх и низ на одном фото (примерочная из корзины)
 	ImageURL    string    `json:"image_url,omitempty"`
 	InStock     bool      `json:"in_stock"`
 	HasSizes    bool      `json:"has_sizes"`
@@ -95,12 +96,12 @@ func (c *Card) finish(base string) {
 	}
 }
 
-const cardCols = `p.id, p.title, p.brand, p.price, p.store_id, s.name, p.category_id, c.zone::text,
+const cardCols = `p.id, p.title, p.brand, p.price, p.store_id, s.name, p.category_id, c.zone::text, p.is_set,
 	` + products.CardImageSQL + `,
 	p.in_stock, EXISTS (SELECT 1 FROM product_sizes ps WHERE ps.product_id = p.id), p.status::text, s.status::text`
 
 func scanCard(row pgx.Row, c *Card, extra ...any) error {
-	dst := append([]any{&c.ProductID, &c.Title, &c.Brand, &c.Price, &c.StoreID, &c.StoreName, &c.CategoryID, &c.Zone,
+	dst := append([]any{&c.ProductID, &c.Title, &c.Brand, &c.Price, &c.StoreID, &c.StoreName, &c.CategoryID, &c.Zone, &c.IsSet,
 		&c.imageKey, &c.InStock, &c.HasSizes, &c.status, &c.storeStatus}, extra...)
 	return row.Scan(dst...)
 }

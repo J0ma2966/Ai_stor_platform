@@ -4,6 +4,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import uz.boutique.core.api.ApiJson
 import uz.boutique.core.api.KeyValueStore
+import uz.boutique.core.model.CartItem
 import uz.boutique.core.model.Product
 
 /** Вещь в примерочной: снимок карточки, чтобы примерочная открывалась без сети. */
@@ -24,6 +25,20 @@ data class FittingItem(
             val zone = p.zone ?: return null
             if (zone !in Zones.ALL) return null
             return FittingItem(p.id, p.title, p.brand, p.price, p.cardImage.orEmpty(), zone, p.storeName, p.isSet && zone == Zones.TOP)
+        }
+
+        fun of(c: CartItem): FittingItem? {
+            if (c.zone !in Zones.ALL) return null
+            return FittingItem(c.productId, c.title, c.brand, c.price, c.imageUrl.orEmpty(), c.zone, c.storeName, c.isSet && c.zone == Zones.TOP)
+        }
+
+        /**
+         * Вещи для выбора в примерочной — только из корзины (не весь каталог), как на сайте.
+         * Один товар в разных размерах — один раз; порядок — по зонам манекена.
+         */
+        fun fromCart(items: List<CartItem>): List<FittingItem> {
+            val list = items.mapNotNull { of(it) }.distinctBy { it.id }
+            return Zones.ALL.flatMap { z -> list.filter { it.zone == z } }
         }
     }
 }

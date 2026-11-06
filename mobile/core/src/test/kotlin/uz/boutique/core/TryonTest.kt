@@ -90,6 +90,22 @@ class TryonTest {
         assertTrue(uz.boutique.core.api.ApiJson.decodeFromString(Product.serializer(), json).isSet)
     }
 
+    @Test fun fittingPickerOffersOnlyCartItems() {
+        val json = """{"items":[
+            {"product_id":"jeans","title":"Джинсы","zone":"bottom","qty":1},
+            {"product_id":"suit","title":"Костюм","zone":"top","is_set":true,"qty":1},
+            {"product_id":"shirt","title":"Рубашка","zone":"top","size":"M","qty":1},
+            {"product_id":"shirt","title":"Рубашка","zone":"top","size":"L","qty":1},
+            {"product_id":"bag","title":"Сумка","zone":"","qty":1}
+        ],"total_qty":5}"""
+        val cart = uz.boutique.core.api.ApiJson.decodeFromString(uz.boutique.core.model.Cart.serializer(), json)
+        val offer = FittingItem.fromCart(cart.items)
+        assertEquals(listOf("suit", "shirt", "jeans"), offer.map { it.id }) // по зонам, без дублей размеров и без вещей вне зон
+        assertTrue(offer.first().isSet)
+        // выбран комплект — низ из корзины не предлагается
+        assertEquals(listOf(Zones.HEADWEAR, Zones.TOP, Zones.SHOES), FittingSelection.visibleZones(listOf(offer.first())))
+    }
+
     @Test fun brokenStoredFittingIsIgnored() {
         val store = MemoryStore()
         store.put(FittingSelection.KEY, "{oops")
