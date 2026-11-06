@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Checkroom
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.DropdownMenu
@@ -88,9 +89,11 @@ fun CatalogScreen(
     onProduct: (String) -> Unit,
     onBack: (() -> Unit)?,
     onNeedLogin: () -> Unit,
+    onFitting: () -> Unit = {},
 ) {
     val api = LocalGraph.current.api
     val lang = currentLang()
+    val fittingCount = LocalShop.current.fittingItems.size
     var query by rememberSaveable { mutableStateOf("") }
     var applied by rememberSaveable { mutableStateOf("") }
     var category by rememberSaveable { mutableStateOf<String?>(null) }
@@ -109,6 +112,17 @@ fun CatalogScreen(
         title = storeName?.takeIf { it.isNotBlank() } ?: stringResource(UiR.string.nav_catalog),
         onBack = onBack,
         actions = {
+            if (tryonEnabled) {
+                IconButton(onClick = onFitting, modifier = Modifier.testTag("open_fitting")) {
+                    if (fittingCount > 0) {
+                        androidx.compose.material3.BadgedBox(badge = { androidx.compose.material3.Badge { Text(fittingCount.toString()) } }) {
+                            Icon(Icons.Filled.Checkroom, contentDescription = stringResource(UiR.string.tryon_room))
+                        }
+                    } else {
+                        Icon(Icons.Filled.Checkroom, contentDescription = stringResource(UiR.string.tryon_room))
+                    }
+                }
+            }
             Box {
                 IconButton(onClick = { sortMenu = true }, modifier = Modifier.testTag("sort")) {
                     Icon(Icons.Filled.FilterList, contentDescription = stringResource(UiR.string.catalog_sort))

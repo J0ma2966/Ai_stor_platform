@@ -233,7 +233,10 @@ switch ($Command) {
       $env:NEXT_PUBLIC_API_URL = Get-ApiUrl
       # Запросы со стороны сервера Next.js: тоже мимо IPv6 localhost
       $env:API_INTERNAL_URL = Get-ApiProbeUrl
-      $env:NEXT_PUBLIC_MEDIA_ORIGIN = "http://localhost:$(Get-Port 'MINIO_HOST_PORT')"
+      # Фото отдаются с адреса из DEV_PUBLIC_HOST (IP компьютера, если проверяете с телефона), иначе localhost
+      $mediaHost = (Read-DotEnv)['DEV_PUBLIC_HOST']
+      if (-not $mediaHost) { $mediaHost = 'localhost' }
+      $env:NEXT_PUBLIC_MEDIA_ORIGIN = "http://${mediaHost}:$(Get-Port 'MINIO_HOST_PORT')"
       $webPort = Get-Port 'WEB_PORT'
       if (-not (Test-PortFree $webPort)) {
         throw "Порт $webPort для сайта занят или зарезервирован Windows. Выполните .\scripts\dev.ps1 up (подберёт другой) или задайте WEB_PORT в .env."

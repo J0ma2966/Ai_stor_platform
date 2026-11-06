@@ -109,7 +109,8 @@ fun FavoritesScreen(onProduct: (String) -> Unit) {
 }
 
 @Composable
-fun ProfileScreen(onLogin: () -> Unit, onChangePassword: () -> Unit, onNotifications: () -> Unit, onRestart: () -> Unit) {
+fun ProfileScreen(onLogin: () -> Unit, onChangePassword: () -> Unit, onNotifications: () -> Unit, onRestart: () -> Unit,
+    onFitting: () -> Unit = {}, onTryonHistory: () -> Unit = {}, onTryonPhotos: () -> Unit = {}) {
     val graph = LocalGraph.current
     val api = graph.api
     val context = LocalContext.current
@@ -150,6 +151,14 @@ fun ProfileScreen(onLogin: () -> Unit, onChangePassword: () -> Unit, onNotificat
                         Text(stringResource(UiR.string.app_notifications), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                         val n = unread.value ?: 0
                         if (n > 0) Badge { Text(n.toString()) }
+                    }
+                }
+                if (tryonEnabled) {
+                    SectionCard(Modifier.testTag("profile_tryon")) {
+                        SectionTitle(stringResource(UiR.string.tryon_section))
+                        TextButton(onClick = onFitting) { Text(stringResource(UiR.string.tryon_room)) }
+                        TextButton(onClick = onTryonHistory) { Text(stringResource(UiR.string.tryon_history)) }
+                        TextButton(onClick = onTryonPhotos) { Text(stringResource(UiR.string.tryon_my_photos)) }
                     }
                 }
                 SectionCard {

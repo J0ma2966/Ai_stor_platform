@@ -83,6 +83,7 @@ sealed interface NotificationTarget {
     data class StoreProduct(val id: String?) : NotificationTarget
     data object StoreReviews : NotificationTarget
     data class ProductPage(val id: String) : NotificationTarget
+    data class TryonResult(val id: String) : NotificationTarget
     data object None : NotificationTarget
 
     companion object {
@@ -94,6 +95,7 @@ sealed interface NotificationTarget {
                 "product_moderated" -> StoreProduct(s("product_id"))
                 "review_created" -> StoreReviews
                 "review_reply", "review_hidden" -> s("product_id")?.let { ProductPage(it) } ?: None
+                "generation_succeeded", "generation_failed" -> s("generation_id")?.let { TryonResult(it) } ?: None
                 else -> None
             }
         }
