@@ -68,6 +68,7 @@ type Options struct {
 
 type Result struct {
 	StoresCreated   int
+	StoresRestored  int // архивированные командой remove (были заказы) снова активны
 	ProductsCreated int
 	ProductsUpdated int // название, описание, цена или категория приведены к каталогу
 	PhotosAdded     int
@@ -94,13 +95,17 @@ func Seed(ctx context.Context, pool *pgxpool.Pool, store media.Storage, opt Opti
 		return res, err
 	}
 	for _, s := range Catalog {
-		storeID, userID, created, err := ensureStore(ctx, pool, s, hash)
+		storeID, userID, created, restored, err := ensureStore(ctx, pool, s, hash)
 		if err != nil {
 			return res, fmt.Errorf("store %s: %w", s.Slug, err)
 		}
 		if created {
 			res.StoresCreated++
 			opt.Log.Info("demo store created", slog.String("slug", s.Slug), slog.String("login", s.Login))
+		}
+		if restored {
+			res.StoresRestored++
+			opt.Log.Info("demo store restored from archive", slog.String("slug", s.Slug))
 		}
 		n, err := retire(ctx, pool, store, storeID, opt.Log)
 		if err != nil {
@@ -167,7 +172,10 @@ func categoryIDs(ctx context.Context, pool *pgxpool.Pool) (map[string]uuid.UUID,
 	return out, rows.Err()
 }
 
-func ensureStore(ctx context.Context, pool *pgxpool.Pool, s Store, hash string) (storeID, userID uuid.UUID, created bool, err error) {
+// ensureStore создаёт магазин с учётной записью или обновляет его описание. Магазин,
+// который команда remove архивировала (по нему были заказы), снова становится
+// активным, и его товары из каталога, снятые с публикации при архивации, публикуются.
+func ensureStore(ctx context.Context, pool *pgxpool.Pool, s Store, hash string) (storeID, userID uuid.UUID, created, restored bool, err error) {
 	err = db.Tx(ctx, pool, func(tx pgx.Tx) error {
 		err := tx.QueryRow(ctx, `SELECT id FROM stores WHERE slug = $1`, s.Slug).Scan(&storeID)
 		switch {
@@ -179,8 +187,24 @@ func ensureStore(ctx context.Context, pool *pgxpool.Pool, s Store, hash string) 
 				s.Slug, s.Name, s.Description, s.Phone, s.Address, s.Lat, s.Lng).Scan(&storeID)
 		case err == nil:
 			// описание из каталога: прошлые версии обещали товары, которых больше нет
-			_, err = tx.Exec(ctx, `UPDATE stores SET name = $2, description = $3 WHERE id = $1
-				AND (name, description) IS DISTINCT FROM ($2, $3)`, storeID, s.Name, s.Description)
+			if _, err = tx.Exec(ctx, `UPDATE stores SET name = $2, description = $3 WHERE id = $1
+				AND (name, description) IS DISTINCT FROM ($2, $3)`, storeID, s.Name, s.Description); err != nil {
+				return err
+			}
+			var tag pgconn.CommandTag
+			if tag, err = tx.Exec(ctx, `UPDATE stores SET status = 'active' WHERE id = $1 AND status = 'archived'`, storeID); err != nil {
+				return err
+			}
+			if restored = tag.RowsAffected() > 0; restored {
+				skus := make([]string, len(s.Products))
+				for i, p := range s.Products {
+					skus[i] = p.SKU
+				}
+				_, err = tx.Exec(ctx, `
+					UPDATE products p SET status = 'published', published_at = COALESCE(published_at, now())
+					WHERE p.store_id = $1 AND p.status = 'unpublished' AND p.sku = ANY($2)
+					  AND EXISTS (SELECT 1 FROM product_images i WHERE i.product_id = p.id)`, storeID, skus)
+			}
 		}
 		if err != nil {
 			return err

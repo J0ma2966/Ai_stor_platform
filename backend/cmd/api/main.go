@@ -299,8 +299,8 @@ func runDemoData(ctx context.Context, log *slog.Logger, cfg config.Config, pool 
 	if err != nil {
 		return err
 	}
-	fmt.Printf("stores created: %d, products created: %d, updated: %d, retired: %d; photos added: %d, replaced: %d\n",
-		res.StoresCreated, res.ProductsCreated, res.ProductsUpdated, res.ProductsRetired, res.PhotosAdded, res.PhotosReplaced)
+	fmt.Printf("stores created: %d, restored from archive: %d; products created: %d, updated: %d, retired: %d; photos added: %d, replaced: %d\n",
+		res.StoresCreated, res.StoresRestored, res.ProductsCreated, res.ProductsUpdated, res.ProductsRetired, res.PhotosAdded, res.PhotosReplaced)
 	for _, s := range demoseed.Catalog {
 		fmt.Printf("store %-22s login %s\n", s.Name, s.Login)
 	}

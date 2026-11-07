@@ -332,4 +332,20 @@ func TestSeedIdempotentAndRemove(t *testing.T) {
 	if want := len(Catalog[2].Products) + 1; left != want { // фото архивного магазина + обложка
 		t.Fatalf("files left = %d, want %d", left, want)
 	}
+
+	// запуск после remove: удалённые магазины создаются заново, архивный снова активен
+	res, err = Seed(ctx, pool, store, Options{Password: "demo-password-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	restoredProducts := len(Catalog[2].Products)
+	if res != (Result{StoresCreated: len(Catalog) - 1, StoresRestored: 1, ProductsCreated: total - restoredProducts, PhotosAdded: total - restoredProducts}) {
+		t.Fatalf("seed after remove: %+v", res)
+	}
+	if n := count(`SELECT count(*) FROM products WHERE status = 'published'`); n != total {
+		t.Fatalf("published after seed following remove = %d, want %d", n, total)
+	}
+	if n := count(`SELECT count(*) FROM stores WHERE slug LIKE 'demo-%' AND status = 'active'`); n != len(Catalog) {
+		t.Fatalf("active demo stores = %d", n)
+	}
 }
