@@ -7,6 +7,7 @@
                                   # (занятые или зарезервированные Windows порты заменит сам, см. .env)
   .\scripts\dev.ps1 admin root    # создать администратора (спросит пароль)
   .\scripts\dev.ps1 demo          # тестовые магазины и товары (спросит пароль для кабинетов магазинов)
+  .\scripts\dev.ps1 demo offline  # то же без скачивания фото с Unsplash (нарисованные картинки)
   .\scripts\dev.ps1 demo remove   # удалить тестовые магазины и товары
   .\scripts\dev.ps1 otp           # показать последние SMS-коды из логов (только dev)
   .\scripts\dev.ps1 web           # запустить сайт на http://localhost:3000
@@ -101,9 +102,17 @@ function Get-Port([string]$Name) {
 # Порт из такого диапазона не открыть даже свободным: «access a socket in a way forbidden».
 function Get-ExcludedRanges {
   if ($env:OS -ne 'Windows_NT') { return @() }
+  # netsh может не быть в PATH (урезанный PATH, PowerShell 7): берём из System32, а без него
+  # просто не знаем резервов — тогда занятый порт найдёт проверка Test-PortFree.
+  $netsh = Join-Path $env:SystemRoot 'System32\netsh.exe'
+  if (-not (Test-Path $netsh)) {
+    $cmd = Get-Command netsh.exe -ErrorAction SilentlyContinue
+    if (-not $cmd) { return @() }
+    $netsh = $cmd.Source
+  }
   $prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-  $out = & netsh interface ipv4 show excludedportrange protocol=tcp 2>$null
-  $ErrorActionPreference = $prev
+  try { $out = & $netsh interface ipv4 show excludedportrange protocol=tcp 2>$null } catch { $out = @() }
+  finally { $ErrorActionPreference = $prev }
   $ranges = @()
   foreach ($line in $out) {
     if ($line -match '^\s*(\d+)\s+(\d+)') { $ranges += [pscustomobject]@{ Start = [int]$Matches[1]; End = [int]$Matches[2] } }
@@ -232,7 +241,9 @@ switch ($Command) {
     $secure = Read-Host 'Пароль для входа в кабинеты тестовых магазинов (минимум 10 символов)' -AsSecureString
     $plain = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
     $env:DEMO_STORE_PASSWORD = $plain
-    try { Invoke-Compose exec -e DEMO_STORE_PASSWORD api /api demo-data }
+    # demo offline — не ходить на Unsplash, сразу нарисовать картинки товаров
+    $extra = @(); if ($Arg -eq 'offline') { $extra = @('--offline') }
+    try { Invoke-Compose exec -e DEMO_STORE_PASSWORD api /api demo-data @extra }
     finally { Remove-Item Env:DEMO_STORE_PASSWORD -ErrorAction SilentlyContinue }
   }
   'web'    {

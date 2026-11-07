@@ -44,6 +44,9 @@ func TestCatalogIsValid(t *testing.T) {
 				t.Errorf("%s: photo id %q must be a unique 11-char Unsplash id", p.SKU, p.Photo)
 			}
 			photos[p.Photo] = true
+			if _, ok := shapes[p.Art.Shape]; !ok || len(p.Art.Color) != 7 {
+				t.Errorf("%s: fallback art %+v", p.SKU, p.Art)
+			}
 			if p.Price < 10_000 || p.Title == "" || p.Description == "" || p.Brand == "" || len(p.Sizes) == 0 {
 				t.Errorf("%s: incomplete product", p.SKU)
 			}
@@ -81,7 +84,9 @@ func TestSeedIdempotentAndRemove(t *testing.T) {
 	store := media.NewMemory()
 	pic := jpegBytes(t)
 	failing := map[string]bool{Catalog[0].Products[0].Photo: true}
+	calls := 0
 	fetch := func(_ context.Context, id string) ([]byte, error) {
+		calls++
 		if failing[id] {
 			return nil, errors.New("network down")
 		}
@@ -99,7 +104,8 @@ func TestSeedIdempotentAndRemove(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.StoresCreated != len(Catalog) || res.ProductsCreated != total || res.PhotosAdded != total-1 || len(res.PhotoFailures) != 1 {
+	// фото, которое не скачалось, заменяется нарисованным: товар всё равно опубликован
+	if res.StoresCreated != len(Catalog) || res.ProductsCreated != total || res.PhotosAdded != total || res.PhotosDrawn != 1 || len(res.PhotoFailures) != 0 {
 		t.Fatalf("first run: %+v", res)
 	}
 	count := func(q string, args ...any) int {
@@ -110,11 +116,8 @@ func TestSeedIdempotentAndRemove(t *testing.T) {
 		}
 		return n
 	}
-	if n := count(`SELECT count(*) FROM products WHERE status = 'published'`); n != total-1 {
-		t.Fatalf("published = %d, want %d", n, total-1)
-	}
-	if n := count(`SELECT count(*) FROM products WHERE status = 'draft' AND sku = $1`, Catalog[0].Products[0].SKU); n != 1 {
-		t.Fatal("product without photo must stay a draft")
+	if n := count(`SELECT count(*) FROM products WHERE status = 'published'`); n != total {
+		t.Fatalf("published = %d, want %d", n, total)
 	}
 	if n := count(`SELECT count(*) FROM stores WHERE status = 'active' AND cover_key IS NOT NULL AND slug LIKE 'demo-%'`); n != len(Catalog) {
 		t.Fatalf("active stores with cover = %d", n)
@@ -160,14 +163,36 @@ func TestSeedIdempotentAndRemove(t *testing.T) {
 		t.Fatal("store password does not match")
 	}
 
-	// второй запуск: ничего не дублирует, докачивает недостающее фото
-	delete(failing, Catalog[0].Products[0].Photo)
+	// черновики без фото от прошлой версии команды (Unsplash не открылся) — как у пользователя
+	krows, err := pool.Query(ctx, `DELETE FROM product_images WHERE product_id IN (SELECT id FROM products WHERE sku IN ('DL-TEE-WHT', 'AM-SK-WHT')) RETURNING key`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for krows.Next() {
+		var k string
+		if err := krows.Scan(&k); err != nil {
+			t.Fatal(err)
+		}
+		_ = store.Delete(ctx, k)
+	}
+	krows.Close()
+	if _, err := pool.Exec(ctx, `UPDATE products SET status = 'draft', published_at = NULL WHERE sku IN ('DL-TEE-WHT', 'AM-SK-WHT')`); err != nil {
+		t.Fatal(err)
+	}
+	// второй запуск без интернета: ничего не дублирует, черновикам рисует картинки и публикует их;
+	// после двух неудач подряд Unsplash больше не запрашивается
+	for _, s := range Catalog {
+		for _, p := range s.Products {
+			failing[p.Photo] = true
+		}
+	}
+	calls = 0
 	res, err = Seed(ctx, pool, store, Options{Password: "another-password", Fetch: fetch})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.StoresCreated != 0 || res.ProductsCreated != 0 || res.PhotosAdded != 1 || len(res.PhotoFailures) != 0 {
-		t.Fatalf("second run: %+v", res)
+	if res.StoresCreated != 0 || res.ProductsCreated != 0 || res.PhotosAdded != 2 || res.PhotosDrawn != 2 || calls != maxFetchFailures {
+		t.Fatalf("second run: %+v, fetch calls %d", res, calls)
 	}
 	if n := count(`SELECT count(*) FROM products WHERE status = 'published'`); n != total {
 		t.Fatalf("published after rerun = %d, want %d", n, total)
@@ -212,5 +237,21 @@ func TestSeedIdempotentAndRemove(t *testing.T) {
 	}
 	if want := len(Catalog[2].Products) + 1; left != want { // фото архивного магазина + обложка
 		t.Fatalf("files left = %d, want %d", left, want)
+	}
+}
+
+func TestRenderArtAllShapes(t *testing.T) {
+	for name := range shapes {
+		b, err := RenderArt(Art{Shape: name, Color: "#3f6fa8", Color2: "#222222"})
+		if err != nil {
+			t.Fatal(name, err)
+		}
+		// картинка проходит ту же проверку, что и загрузки магазинов
+		if _, err := media.Process(bytes.NewReader(b), 10<<20); err != nil {
+			t.Fatal(name, err)
+		}
+	}
+	if _, err := RenderArt(Art{Shape: "nope", Color: "#000000"}); err == nil {
+		t.Fatal("unknown shape must fail")
 	}
 }

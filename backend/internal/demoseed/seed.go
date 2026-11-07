@@ -36,7 +36,9 @@ type Options struct {
 	// поэтому seed требует пароль.
 	Password string
 	Fetch    FetchFunc // nil — UnsplashFetch
-	MaxBytes int64     // предел размера скачанного фото
+	// Offline — не ходить на Unsplash, сразу рисовать запасные картинки.
+	Offline  bool
+	MaxBytes int64 // предел размера скачанного фото
 	Log      *slog.Logger
 }
 
@@ -44,8 +46,13 @@ type Result struct {
 	StoresCreated   int
 	ProductsCreated int
 	PhotosAdded     int
+	PhotosDrawn     int      // из них нарисованы, потому что фото не скачалось
 	PhotoFailures   []string // артикулы товаров без фото (оставлены черновиками)
 }
+
+// maxFetchFailures: после стольких неудач подряд Unsplash считается недоступным
+// и остальные товары сразу получают нарисованные картинки (без ожидания таймаутов).
+const maxFetchFailures = 2
 
 var photoIDRe = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
 
@@ -82,7 +89,7 @@ func Seed(ctx context.Context, pool *pgxpool.Pool, store media.Storage, opt Opti
 		return res, errors.New("store password must be at least 10 characters")
 	}
 	if opt.Fetch == nil {
-		opt.Fetch = UnsplashFetch(&http.Client{Timeout: 60 * time.Second})
+		opt.Fetch = UnsplashFetch(&http.Client{Timeout: 30 * time.Second})
 	}
 	if opt.MaxBytes <= 0 {
 		opt.MaxBytes = 10 << 20
@@ -97,6 +104,10 @@ func Seed(ctx context.Context, pool *pgxpool.Pool, store media.Storage, opt Opti
 	cats, err := categoryIDs(ctx, pool)
 	if err != nil {
 		return res, err
+	}
+	failures := 0
+	if opt.Offline {
+		failures = maxFetchFailures
 	}
 	for _, s := range Catalog {
 		storeID, userID, created, err := ensureStore(ctx, pool, s, hash)
@@ -123,12 +134,24 @@ func Seed(ctx context.Context, pool *pgxpool.Pool, store media.Storage, opt Opti
 			if hasPhoto {
 				continue
 			}
-			img, err := fetchPhoto(ctx, opt, p.Photo)
-			if err != nil {
-				opt.Log.Warn("demo photo not downloaded; product stays draft",
-					slog.String("sku", p.SKU), slog.String("photo", p.Photo), slog.String("err", err.Error()))
-				res.PhotoFailures = append(res.PhotoFailures, p.SKU)
-				continue
+			var img []byte
+			if failures < maxFetchFailures {
+				if img, err = fetchPhoto(ctx, opt, p.Photo); err != nil {
+					failures++
+					opt.Log.Warn("demo photo not downloaded from Unsplash; using a drawn picture",
+						slog.String("sku", p.SKU), slog.String("photo", p.Photo), slog.String("err", err.Error()))
+				} else {
+					failures = 0
+				}
+			}
+			drawn := false
+			if img == nil {
+				if img, err = drawnPhoto(opt, p.Art); err != nil {
+					opt.Log.Warn("demo picture not drawn; product stays draft", slog.String("sku", p.SKU), slog.String("err", err.Error()))
+					res.PhotoFailures = append(res.PhotoFailures, p.SKU)
+					continue
+				}
+				drawn = true
 			}
 			key := media.NewKey(userID, media.PurposeProductImage)
 			if err := store.Put(ctx, key, img, "image/jpeg"); err != nil {
@@ -139,6 +162,9 @@ func Seed(ctx context.Context, pool *pgxpool.Pool, store media.Storage, opt Opti
 				return res, fmt.Errorf("product %s: %w", p.SKU, err)
 			}
 			res.PhotosAdded++
+			if drawn {
+				res.PhotosDrawn++
+			}
 			if coverSrc == nil {
 				coverSrc = img
 			}
@@ -158,6 +184,14 @@ func fetchPhoto(ctx context.Context, opt Options, id string) ([]byte, error) {
 		return nil, err
 	}
 	// та же очистка, что и у загрузок магазинов: проверка типа, EXIF, перекодирование в JPEG
+	return media.Process(bytes.NewReader(raw), opt.MaxBytes)
+}
+
+func drawnPhoto(opt Options, a Art) ([]byte, error) {
+	raw, err := RenderArt(a)
+	if err != nil {
+		return nil, err
+	}
 	return media.Process(bytes.NewReader(raw), opt.MaxBytes)
 }
 
