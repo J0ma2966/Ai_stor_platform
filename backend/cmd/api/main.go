@@ -261,7 +261,7 @@ func internalMux() http.Handler {
 // runDemoData — «api demo-data» наполняет платформу тестовыми магазинами и товарами,
 // «api demo-data remove» удаляет их. В prod — только с флагом --allow-prod.
 func runDemoData(ctx context.Context, log *slog.Logger, cfg config.Config, pool *pgxpool.Pool, args []string) error {
-	remove, allowProd, offline := false, false, false
+	remove, allowProd := false, false
 	for _, a := range args {
 		switch a {
 		case "remove":
@@ -269,9 +269,9 @@ func runDemoData(ctx context.Context, log *slog.Logger, cfg config.Config, pool 
 		case "--allow-prod":
 			allowProd = true
 		case "--offline":
-			offline = true
+			// фото встроены в программу, интернет не нужен; флаг прошлой версии принимаем молча
 		default:
-			return fmt.Errorf("usage: api demo-data [remove] [--offline] [--allow-prod]")
+			return fmt.Errorf("usage: api demo-data [remove] [--allow-prod]")
 		}
 	}
 	if cfg.IsProd() && !allowProd {
@@ -295,16 +295,12 @@ func runDemoData(ctx context.Context, log *slog.Logger, cfg config.Config, pool 
 	if os.Getenv("DEMO_STORE_PASSWORD") == "" {
 		return errors.New("usage: DEMO_STORE_PASSWORD=... api demo-data (password for the demo store accounts, at least 10 characters)")
 	}
-	res, err := demoseed.Seed(ctx, pool, store, demoseed.Options{
-		Password: os.Getenv("DEMO_STORE_PASSWORD"), MaxBytes: int64(cfg.MaxUploadMB) << 20, Offline: offline, Log: log})
+	res, err := demoseed.Seed(ctx, pool, store, demoseed.Options{Password: os.Getenv("DEMO_STORE_PASSWORD"), Log: log})
 	if err != nil {
 		return err
 	}
-	fmt.Printf("stores created: %d, products created: %d, photos added: %d (drawn because Unsplash was unreachable: %d)\n",
-		res.StoresCreated, res.ProductsCreated, res.PhotosAdded, res.PhotosDrawn)
-	if len(res.PhotoFailures) > 0 {
-		fmt.Printf("products without a photo (left as drafts): %v\n", res.PhotoFailures)
-	}
+	fmt.Printf("stores created: %d, restored from archive: %d; products created: %d, updated: %d, retired: %d; photos added: %d, replaced: %d\n",
+		res.StoresCreated, res.StoresRestored, res.ProductsCreated, res.ProductsUpdated, res.ProductsRetired, res.PhotosAdded, res.PhotosReplaced)
 	for _, s := range demoseed.Catalog {
 		fmt.Printf("store %-22s login %s\n", s.Name, s.Login)
 	}
