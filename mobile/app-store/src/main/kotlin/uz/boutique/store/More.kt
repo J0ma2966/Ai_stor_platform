@@ -34,6 +34,7 @@ import uz.boutique.ui.AppScaffold
 import uz.boutique.ui.Brand
 import uz.boutique.ui.ConfirmDialog
 import uz.boutique.ui.LanguagePicker
+import uz.boutique.ui.ThemePicker
 import uz.boutique.ui.LoadContent
 import uz.boutique.ui.LocalGraph
 import uz.boutique.ui.ProductImage
@@ -91,7 +92,10 @@ fun MoreScreen(onStats: () -> Unit, onNotifications: () -> Unit, onRestart: () -
                     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(graph.siteUrl + (if (lang == "uz") "/uz" else "") + "/store")))
                 })
             }
-            SectionCard { LanguagePicker() }
+            SectionCard {
+                LanguagePicker()
+                ThemePicker()
+            }
             SecondaryButton(stringResource(UiR.string.app_logout), onClick = { confirmLogout = true }, modifier = Modifier.testTag("logout"))
             Text(
                 stringResource(UiR.string.app_version, BuildConfig.VERSION_NAME) + if (graph.allowServerOverride) " · " + graph.baseUrl else "",
