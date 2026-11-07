@@ -2,13 +2,13 @@ package demoseed
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
 	"image/jpeg"
 	"math"
-	"strconv"
 
 	"golang.org/x/image/vector"
 )
@@ -91,11 +91,12 @@ func (c *canvas) line(col color.Color, w, x0, y0, x1, y1 float32) {
 }
 
 func parseHex(s string) color.RGBA {
-	v, err := strconv.ParseUint(s[1:], 16, 32)
-	if len(s) != 7 || s[0] != '#' || err != nil {
-		return color.RGBA{120, 120, 120, 255}
+	if len(s) == 7 && s[0] == '#' {
+		if b, err := hex.DecodeString(s[1:]); err == nil {
+			return color.RGBA{b[0], b[1], b[2], 255}
+		}
 	}
-	return color.RGBA{uint8(v >> 16), uint8(v >> 8), uint8(v), 255}
+	return color.RGBA{120, 120, 120, 255}
 }
 
 func shade(c color.RGBA, k float64) color.RGBA {
