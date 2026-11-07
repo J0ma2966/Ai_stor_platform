@@ -38,6 +38,15 @@ import uz.boutique.core.model.Notification
 import uz.boutique.core.model.OrderStatus
 import uz.boutique.core.util.Dates
 import uz.boutique.core.util.NotificationTarget
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.remember
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.isSystemInDarkTheme
 
 /** Текст уведомления по виду и данным (без ПД), как на сайте. */
 @Composable
@@ -155,6 +164,44 @@ fun LanguagePicker(onChanged: (String) -> Unit = {}) {
                 )
             }
         }
+    }
+}
+
+/** Выбор темы: как в системе, светлая, тёмная. */
+@Composable
+fun ThemePicker() {
+    val context = LocalContext.current
+    var mode by remember { mutableStateOf(AppTheme.current(context)) }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(stringResource(R.string.app_theme), style = MaterialTheme.typography.labelMedium, color = Brand.colors.muted)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for ((code, label) in listOf(AppTheme.SYSTEM to R.string.theme_system, AppTheme.LIGHT to R.string.theme_light, AppTheme.DARK to R.string.theme_dark)) {
+                FilterChip(
+                    selected = mode == code,
+                    onClick = {
+                        if (mode != code) {
+                            mode = code
+                            AppTheme.set(context, code)
+                        }
+                    },
+                    label = { Text(stringResource(label)) },
+                    modifier = Modifier.testTag("theme_$code"),
+                )
+            }
+        }
+    }
+}
+
+/** Кнопка «луна / солнце»: быстро переключить светлую и тёмную тему. */
+@Composable
+fun ThemeToggleButton(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val dark = isSystemInDarkTheme()
+    IconButton(onClick = { AppTheme.set(context, if (dark) AppTheme.LIGHT else AppTheme.DARK) }, modifier = modifier.testTag("theme_toggle")) {
+        Icon(
+            if (dark) Icons.Filled.LightMode else Icons.Filled.DarkMode,
+            contentDescription = stringResource(if (dark) R.string.theme_to_light else R.string.theme_to_dark),
+        )
     }
 }
 

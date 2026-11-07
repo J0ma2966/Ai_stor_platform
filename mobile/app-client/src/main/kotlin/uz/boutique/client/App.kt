@@ -54,6 +54,7 @@ import uz.boutique.core.model.CartItem
 import uz.boutique.core.model.Role
 import uz.boutique.core.util.NotificationTarget
 import uz.boutique.ui.AppGraph
+import uz.boutique.ui.AppTheme
 import uz.boutique.ui.BoutiqueTheme
 import uz.boutique.ui.CenterLoading
 import uz.boutique.ui.ErrorState
@@ -68,6 +69,7 @@ class ClientApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        AppTheme.apply(this)
         graph = AppGraph(this, Role.CLIENT, BuildConfig.API_URL, BuildConfig.SERVER_OVERRIDE, BuildConfig.SITE_URL, BuildConfig.VERSION_NAME)
     }
 }
@@ -206,6 +208,15 @@ fun NavHostController.finishLogin(next: String?) {
     }
 }
 
+/** Переход на вкладку нижнего меню с сохранением состояния вкладок. */
+fun NavHostController.switchTab(route: String) {
+    navigate(route) {
+        popUpTo(Routes.CATALOG) { saveState = true }
+        launchSingleTop = true
+        restoreState = true
+    }
+}
+
 @Composable
 fun ClientRoot(onRestart: () -> Unit) {
     val graph = LocalGraph.current
@@ -269,13 +280,7 @@ fun ClientNav(onRestart: () -> Unit) {
                     tabs.forEach { t ->
                         NavigationBarItem(
                             selected = route == t.route,
-                            onClick = {
-                                nav.navigate(t.route) {
-                                    popUpTo(Routes.CATALOG) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
+                            onClick = { nav.switchTab(t.route) },
                             icon = {
                                 if (t.route == Routes.CART && shop.cartCount > 0) {
                                     BadgedBox(badge = { Badge { Text(shop.cartCount.coerceAtMost(99).toString()) } }) {
@@ -301,6 +306,7 @@ fun ClientNav(onRestart: () -> Unit) {
                     onBack = null,
                     onNeedLogin = { nav.navigate(Routes.LOGIN) },
                     onFitting = { nav.navigate(Routes.FITTING) },
+                    onFavorites = { nav.switchTab(Routes.FAVORITES) },
                 )
             }
             composable(

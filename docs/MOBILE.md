@@ -10,7 +10,7 @@
 Общий код:
 
 - `mobile/core` — чистый Kotlin (без Android SDK): API-клиент на OkHttp, модели, сессия с refresh-кукой и единым обновлением токена, правила и форматирование. Подключён как included build.
-- `mobile/ui` — тема (дизайн B), компоненты, строки ru/uz.
+- `mobile/ui` — тема «Бенто», палитра «Лаванда и мята» (светлая и тёмная, переключатель «Как в системе / Светлая / Тёмная» в профиле, кнопка луны на главной; контраст проверяет `PaletteContrastTest`), шрифты Rubik и Rubik Mono One (OFL), компоненты, строки ru/uz.
 
 Строки ru/uz хранятся в одной таблице `mobile/tools/strings.py`; после правки: `python3 mobile/tools/strings.py && python3 mobile/tools/strings.py --check`.
 

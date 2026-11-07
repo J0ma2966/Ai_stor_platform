@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -148,7 +149,7 @@ fun SectionCard(modifier: Modifier = Modifier, padding: PaddingValues = PaddingV
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
-        shadowElevation = 1.dp,
+        shadowElevation = 0.dp, // бенто: плоская плитка, отличается от фона цветом, без тени
     ) {
         Column(Modifier.padding(padding), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
     }
@@ -320,10 +321,15 @@ fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifi
         onClick = onClick,
         enabled = enabled && !busy,
         modifier = modifier.fillMaxWidth().height(52.dp),
-        shape = RoundedCornerShape(50),
+        shape = MaterialTheme.shapes.medium,
+        // Бенто: пастельная лавандовая кнопка с тёмным текстом (контраст около 6:1).
+        colors = ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        ),
     ) {
         if (busy) {
-            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimaryContainer)
         } else {
             Text(text, style = MaterialTheme.typography.labelLarge)
         }
@@ -336,7 +342,7 @@ fun SecondaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modi
         onClick = onClick,
         enabled = enabled,
         modifier = modifier.fillMaxWidth().height(48.dp),
-        shape = RoundedCornerShape(50),
+        shape = MaterialTheme.shapes.medium,
     ) {
         Text(text, style = MaterialTheme.typography.labelLarge, color = color ?: MaterialTheme.colorScheme.primary)
     }

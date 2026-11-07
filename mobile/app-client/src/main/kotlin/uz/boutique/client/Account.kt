@@ -49,6 +49,7 @@ import uz.boutique.ui.ConfirmDialog
 import uz.boutique.ui.EmptyState
 import uz.boutique.ui.ErrorBanner
 import uz.boutique.ui.LanguagePicker
+import uz.boutique.ui.ThemePicker
 import uz.boutique.ui.LocalGraph
 import uz.boutique.ui.PagedFooter
 import uz.boutique.ui.PagedState
@@ -169,6 +170,7 @@ fun ProfileScreen(onLogin: () -> Unit, onChangePassword: () -> Unit, onNotificat
             }
             SectionCard {
                 LanguagePicker(onChanged = { code -> if (loggedIn) scope.launch { runCatching { api.auth.setLang(code) } } })
+                ThemePicker()
             }
             SectionCard {
                 SectionTitle(stringResource(UiR.string.app_support))

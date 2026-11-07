@@ -65,6 +65,7 @@ import uz.boutique.ui.LocalGraph
 import uz.boutique.ui.PagedFooter
 import uz.boutique.ui.ProductImage
 import uz.boutique.ui.RatingRow
+import uz.boutique.ui.ThemeToggleButton
 import uz.boutique.ui.currentLang
 import uz.boutique.ui.errorRes
 import uz.boutique.ui.money
@@ -90,10 +91,12 @@ fun CatalogScreen(
     onBack: (() -> Unit)?,
     onNeedLogin: () -> Unit,
     onFitting: () -> Unit = {},
+    onFavorites: () -> Unit = {},
 ) {
     val api = LocalGraph.current.api
     val lang = currentLang()
-    val fittingCount = LocalShop.current.fittingItems.size
+    val shop = LocalShop.current
+    val fittingCount = shop.fittingItems.size
     var query by rememberSaveable { mutableStateOf("") }
     var applied by rememberSaveable { mutableStateOf("") }
     var category by rememberSaveable { mutableStateOf<String?>(null) }
@@ -122,6 +125,7 @@ fun CatalogScreen(
         title = storeName?.takeIf { it.isNotBlank() } ?: stringResource(UiR.string.nav_catalog),
         onBack = onBack,
         actions = {
+            if (storeSlug == null) ThemeToggleButton()
             if (tryonEnabled) {
                 IconButton(onClick = onFitting, modifier = Modifier.testTag("open_fitting")) {
                     if (fittingCount > 0) {
@@ -196,6 +200,19 @@ fun CatalogScreen(
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                         modifier = Modifier.fillMaxSize().testTag("catalog_grid"),
                     ) {
+                        if (showPromos) {
+                            item(span = { GridItemSpan(maxLineSpan) }, key = "home_bento") {
+                                HomeBento(
+                                    showFitting = tryonEnabled,
+                                    fittingCount = fittingCount,
+                                    favCount = shop.favIds.size,
+                                    onFitting = onFitting,
+                                    onNew = { sort = "new" },
+                                    onFavorites = onFavorites,
+                                    modifier = Modifier.padding(bottom = 8.dp),
+                                )
+                            }
+                        }
                         val promoItems = promos.value.orEmpty()
                         if (showPromos && promoItems.isNotEmpty()) {
                             item(span = { GridItemSpan(maxLineSpan) }, key = "promo_carousel") {

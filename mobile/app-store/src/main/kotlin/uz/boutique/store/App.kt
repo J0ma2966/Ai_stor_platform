@@ -44,6 +44,7 @@ import uz.boutique.core.api.RefreshOutcome
 import uz.boutique.core.model.Role
 import uz.boutique.core.util.NotificationTarget
 import uz.boutique.ui.AppGraph
+import uz.boutique.ui.AppTheme
 import uz.boutique.ui.BoutiqueTheme
 import uz.boutique.ui.CenterLoading
 import uz.boutique.ui.ErrorState
@@ -57,6 +58,7 @@ class StoreApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        AppTheme.apply(this)
         graph = AppGraph(this, Role.STORE, BuildConfig.API_URL, BuildConfig.SERVER_OVERRIDE, BuildConfig.SITE_URL, BuildConfig.VERSION_NAME)
     }
 }
