@@ -4,6 +4,7 @@
 //	api migrate up|down|status
 //	api create-admin <login> (пароль из ADMIN_PASSWORD)
 //	api worker               только воркер AI-примерки (prod: отдельный процесс/контейнер)
+//	api demo-data [remove]   тестовые магазины и товары (пароль магазинов из DEMO_STORE_PASSWORD)
 package main
 
 import (
@@ -27,6 +28,7 @@ import (
 	"github.com/boutique-market/backend/internal/admin"
 	"github.com/boutique-market/backend/internal/auth"
 	"github.com/boutique-market/backend/internal/config"
+	"github.com/boutique-market/backend/internal/demoseed"
 	"github.com/boutique-market/backend/internal/janitor"
 	"github.com/boutique-market/backend/internal/media"
 	"github.com/boutique-market/backend/internal/notify"
@@ -83,6 +85,8 @@ func run(log *slog.Logger, args []string) error {
 				fmt.Println("admin created:", id)
 			}
 			return err
+		case "demo-data":
+			return runDemoData(ctx, log, cfg, pool, args[1:])
 		case "serve", "worker":
 		default:
 			return fmt.Errorf("unknown command %q", args[0])
@@ -252,6 +256,56 @@ func internalMux() http.Handler {
 	m.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 	m.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
 	return m
+}
+
+// runDemoData — «api demo-data» наполняет платформу тестовыми магазинами и товарами,
+// «api demo-data remove» удаляет их. В prod — только с флагом --allow-prod.
+func runDemoData(ctx context.Context, log *slog.Logger, cfg config.Config, pool *pgxpool.Pool, args []string) error {
+	remove, allowProd := false, false
+	for _, a := range args {
+		switch a {
+		case "remove":
+			remove = true
+		case "--allow-prod":
+			allowProd = true
+		default:
+			return fmt.Errorf("usage: api demo-data [remove] [--allow-prod]")
+		}
+	}
+	if cfg.IsProd() && !allowProd {
+		return errors.New("APP_ENV=prod: test data is not loaded into production; add --allow-prod if this is really intended")
+	}
+	store, err := newStorage(cfg)
+	if err != nil {
+		return err
+	}
+	if remove {
+		res, err := demoseed.Remove(ctx, pool, store, log)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("demo stores deleted: %d\n", res.StoresDeleted)
+		if len(res.StoresArchived) > 0 {
+			fmt.Printf("stores with orders were archived instead of deleted: %v\n", res.StoresArchived)
+		}
+		return nil
+	}
+	if os.Getenv("DEMO_STORE_PASSWORD") == "" {
+		return errors.New("usage: DEMO_STORE_PASSWORD=... api demo-data (password for the demo store accounts, at least 10 characters)")
+	}
+	res, err := demoseed.Seed(ctx, pool, store, demoseed.Options{
+		Password: os.Getenv("DEMO_STORE_PASSWORD"), MaxBytes: int64(cfg.MaxUploadMB) << 20, Log: log})
+	if err != nil {
+		return err
+	}
+	fmt.Printf("stores created: %d, products created: %d, photos added: %d\n", res.StoresCreated, res.ProductsCreated, res.PhotosAdded)
+	if len(res.PhotoFailures) > 0 {
+		fmt.Printf("photos not downloaded (products left as drafts, run the command again later): %v\n", res.PhotoFailures)
+	}
+	for _, s := range demoseed.Catalog {
+		fmt.Printf("store %-22s login %s\n", s.Name, s.Login)
+	}
+	return nil
 }
 
 // newStorage: основное хранилище + хранилище биометрии в Узбекистане. Без
