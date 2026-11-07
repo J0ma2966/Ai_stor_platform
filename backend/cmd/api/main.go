@@ -261,15 +261,17 @@ func internalMux() http.Handler {
 // runDemoData — «api demo-data» наполняет платформу тестовыми магазинами и товарами,
 // «api demo-data remove» удаляет их. В prod — только с флагом --allow-prod.
 func runDemoData(ctx context.Context, log *slog.Logger, cfg config.Config, pool *pgxpool.Pool, args []string) error {
-	remove, allowProd := false, false
+	remove, allowProd, offline := false, false, false
 	for _, a := range args {
 		switch a {
 		case "remove":
 			remove = true
 		case "--allow-prod":
 			allowProd = true
+		case "--offline":
+			offline = true
 		default:
-			return fmt.Errorf("usage: api demo-data [remove] [--allow-prod]")
+			return fmt.Errorf("usage: api demo-data [remove] [--offline] [--allow-prod]")
 		}
 	}
 	if cfg.IsProd() && !allowProd {
@@ -294,13 +296,14 @@ func runDemoData(ctx context.Context, log *slog.Logger, cfg config.Config, pool 
 		return errors.New("usage: DEMO_STORE_PASSWORD=... api demo-data (password for the demo store accounts, at least 10 characters)")
 	}
 	res, err := demoseed.Seed(ctx, pool, store, demoseed.Options{
-		Password: os.Getenv("DEMO_STORE_PASSWORD"), MaxBytes: int64(cfg.MaxUploadMB) << 20, Log: log})
+		Password: os.Getenv("DEMO_STORE_PASSWORD"), MaxBytes: int64(cfg.MaxUploadMB) << 20, Offline: offline, Log: log})
 	if err != nil {
 		return err
 	}
-	fmt.Printf("stores created: %d, products created: %d, photos added: %d\n", res.StoresCreated, res.ProductsCreated, res.PhotosAdded)
+	fmt.Printf("stores created: %d, products created: %d, photos added: %d (drawn because Unsplash was unreachable: %d)\n",
+		res.StoresCreated, res.ProductsCreated, res.PhotosAdded, res.PhotosDrawn)
 	if len(res.PhotoFailures) > 0 {
-		fmt.Printf("photos not downloaded (products left as drafts, run the command again later): %v\n", res.PhotoFailures)
+		fmt.Printf("products without a photo (left as drafts): %v\n", res.PhotoFailures)
 	}
 	for _, s := range demoseed.Catalog {
 		fmt.Printf("store %-22s login %s\n", s.Name, s.Login)
