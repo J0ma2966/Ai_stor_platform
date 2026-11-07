@@ -7,7 +7,6 @@
                                   # (занятые или зарезервированные Windows порты заменит сам, см. .env)
   .\scripts\dev.ps1 admin root    # создать администратора (спросит пароль)
   .\scripts\dev.ps1 demo          # тестовые магазины и товары (спросит пароль для кабинетов магазинов)
-  .\scripts\dev.ps1 demo offline  # то же без скачивания фото с Unsplash (нарисованные картинки)
   .\scripts\dev.ps1 demo remove   # удалить тестовые магазины и товары
   .\scripts\dev.ps1 otp           # показать последние SMS-коды из логов (только dev)
   .\scripts\dev.ps1 web           # запустить сайт на http://localhost:3000
@@ -241,9 +240,7 @@ switch ($Command) {
     $secure = Read-Host 'Пароль для входа в кабинеты тестовых магазинов (минимум 10 символов)' -AsSecureString
     $plain = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
     $env:DEMO_STORE_PASSWORD = $plain
-    # demo offline — не ходить на Unsplash, сразу нарисовать картинки товаров
-    $extra = @(); if ($Arg -eq 'offline') { $extra = @('--offline') }
-    try { Invoke-Compose exec -e DEMO_STORE_PASSWORD api /api demo-data @extra }
+    try { Invoke-Compose exec -e DEMO_STORE_PASSWORD api /api demo-data }
     finally { Remove-Item Env:DEMO_STORE_PASSWORD -ErrorAction SilentlyContinue }
   }
   'web'    {

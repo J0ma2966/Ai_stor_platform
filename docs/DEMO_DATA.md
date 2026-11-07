@@ -1,31 +1,31 @@
 # Тестовые магазины и товары
 
-Команда `api demo-data` заполняет платформу витриной для проверки: **4 магазина и 33 товара**
-во всех зонах примерочной (головные уборы, верх, низ, обувь), из них 5 «двоек» (костюмы,
-комплекты и платье — верх и низ на одном фото). Покупателей команда не создаёт.
+Команда `api demo-data` заполняет платформу витриной для проверки: **4 магазина и 37 товаров**
+во всех зонах примерочной (головные уборы, верх, низ, обувь), из них 8 «двоек» (костюмы,
+комплекты и платья — верх и низ на одном фото). Покупателей команда не создаёт.
 
 Что получается:
 
 - магазины сразу **активны**, у каждого есть адрес на карте Ташкента, телефон и обложка;
 - у каждого магазина есть учётная запись для кабинета (логин ниже, пароль задаёте вы при запуске) —
   без неё магазином нельзя управлять: в системе один аккаунт на магазин;
-- товары **опубликованы**, с размерами и остатками; у худи `DL-HD-BLK` остаток только у одного
-  размера — удобно проверять «нет в наличии» по размерам;
+- товары **опубликованы**, с настоящими фото, размерами и остатками; у худи `DL-HD-BLK` остаток
+  только у одного размера — удобно проверять «нет в наличии» по размерам;
 - цены в сумах, похожие на цены бутиков Ташкента; часть товаров — модели известных брендов
-  (Levi's 501, Nike), остальные — собственные марки магазинов.
+  (Levi's, Nike, Adidas), остальные — собственные марки магазинов.
 
 ## Как запустить
 
-Фото команда пытается скачать с Unsplash. Если Unsplash недоступен (например, не открывается
-из сети или из Docker), после двух неудачных попыток команда перестаёт ждать и рисует каждому
-товару картинку-силуэт вещи нужного цвета: товары всё равно публикуются и видны на сайте.
+Фото лежат в репозитории (`backend/internal/demoseed/photos/`) и встроены в программу:
+интернет команде не нужен. После `git pull` пересоберите контейнер API (`.\scripts\dev.ps1 up`
+делает это сам), иначе в нём останется старая версия команды без фото.
 Пароль для кабинетов магазинов — минимум 10 символов.
 
-**Windows (PowerShell)**, окружение уже поднято командой `.\scripts\dev.ps1 up`:
+**Windows (PowerShell):**
 
 ```powershell
+.\scripts\dev.ps1 up            # поднять окружение (пересобирает API)
 .\scripts\dev.ps1 demo          # спросит пароль для кабинетов магазинов
-.\scripts\dev.ps1 demo offline  # сразу нарисованные картинки, без попыток скачать с Unsplash
 .\scripts\dev.ps1 demo remove   # удалить всё тестовое
 ```
 
@@ -49,85 +49,101 @@ docker compose exec api /api demo-data remove --allow-prod
 
 ## Повторный запуск и удаление
 
-- Запускать можно сколько угодно раз: существующие магазины, аккаунты (и их пароли) и товары
-  не меняются и не дублируются. Товарам без фото (например, черновикам от первой версии команды,
-  когда Unsplash не открылся) повторный запуск добавляет картинку и публикует их.
-- Нарисованные картинки повторный запуск не заменяет на фото. Чтобы получить настоящие фото,
-  когда Unsplash станет доступен: `demo remove`, затем `demo`.
+- Запускать можно сколько угодно раз: ничего не дублируется. Повторный запуск приводит тестовые
+  магазины к каталогу:
+  - ставит фото товарам без фото и публикует их (черновики от первой версии команды);
+  - **заменяет картинку, если она отличается от фото в папке** — так нарисованные картинки
+    прошлой версии команды становятся настоящими фото; старые файлы удаляются;
+  - обновляет названия, описания, цены, размеры и остатки товаров и описания магазинов;
+  - удаляет товары прошлых версий каталога (список `Retired` в `catalog.go`).
+- Повторный запуск не меняет пароли учётных записей магазинов, не публикует товары, снятые
+  с публикации вручную, и не трогает товары, которые вы добавили в тестовый магазин сами.
+  Но фото и описания товаров из каталога он вернёт к исходным, если вы их меняли.
 - `demo-data remove` удаляет магазины из этого списка (slug начинается с `demo-`) вместе с товарами,
   аккаунтами магазинов и файлами. Если по магазину уже есть **заказы**, его нельзя удалить
   (заказы — учётные документы): такой магазин архивируется, его товары снимаются с публикации.
-- Данные описаны в `backend/internal/demoseed/catalog.go`: чтобы добавить товар, допишите его туда
-  (фото — идентификатор с Unsplash, последние 11 символов адреса страницы фото).
+- Данные описаны в `backend/internal/demoseed/catalog.go`. Чтобы добавить товар, допишите его туда
+  и положите фото в `backend/internal/demoseed/photos/<артикул в нижнем регистре>.jpg`
+  (портрет 3:4, не меньше 380 px по ширине, лучше от 768 px) с источником в `photos/NOTICE.md`;
+  тест `TestCatalogIsValid` проверит, что фото есть и подходит. Убранный из каталога артикул допишите в `Retired`.
 
 ## Фото и лицензия
 
-Нарисованные картинки создаются кодом (`backend/internal/demoseed/artwork.go`), сторонних файлов в них нет.
+Фото взяты из демо-данных открытых интернет-магазинов [Bagisto](https://github.com/bagisto/bagisto)
+и [Sylius](https://github.com/Sylius/Sylius) (лицензия MIT), [Saleor](https://github.com/saleor/saleor)
+и [Solidus](https://github.com/solidusio/solidus) (BSD-3-Clause). Эти лицензии разрешают копировать
+и изменять файлы при сохранении уведомления об авторских правах; источник каждого файла и тексты
+лицензий — в [photos/NOTICE.md](../backend/internal/demoseed/photos/NOTICE.md). Фото Bagisto и
+Sylius — сгенерированные изображения; логотипы на некоторых фото принадлежат их владельцам.
+Это тестовые данные: перед запуском платформы для покупателей тестовые магазины нужно удалить
+(`demo-data remove`).
 
-Все фото — с [Unsplash](https://unsplash.com) по [лицензии Unsplash](https://unsplash.com/license):
-бесплатно, в том числе в коммерческих целях, ссылка на автора не обязательна. Фото не изображают
-конкретный товар магазина один в один — это тестовые данные. Перед запуском платформы для
-покупателей тестовые магазины нужно удалить (`demo-data remove`).
+Для примерки подходят все фото: на каждом хорошо видна вещь своей зоны. На фото «двоек» видны
+и верх, и низ; на фото обуви — пара целиком.
 
 ## Магазины и товары
 
 ### Denim Lab — логин `demo-denim-lab`
 
-Джинсы, футболки и рубашки на каждый день. Подгонка длины джинсов бесплатно.
+Джинсы, футболки и худи на каждый день. Подгонка длины джинсов бесплатно.
 
 | Артикул | Товар | Бренд | Зона | Цена, сум | Фото |
 |---|---|---|---|---|---|
-| DL-501-IND | Джинсы прямого кроя 501 Original, индиго | Levi's | Низ | 890 000 | [C012HlPoiLs](https://unsplash.com/photos/C012HlPoiLs) |
-| DL-TEE-WHT | Футболка базовая из хлопка, белая | Uniqlo | Верх | 149 000 | [8ACmRoleM24](https://unsplash.com/photos/8ACmRoleM24) |
-| DL-SET-DNM | Джинсовый костюм: куртка и джинсы (двойка) | Denim Lab | Верх | 1 290 000 | [LdekusMFSsA](https://unsplash.com/photos/LdekusMFSsA) |
-| DL-SHR-PLD | Рубашка в клетку из фланели | Denim Lab | Верх | 329 000 | [AE-9l0oedcg](https://unsplash.com/photos/AE-9l0oedcg) |
-| DL-SNK-WHT | Кеды кожаные белые | Denim Lab | Обувь | 690 000 | [TByVYxFp7F8](https://unsplash.com/photos/TByVYxFp7F8) |
-| DL-CAP-GRY | Бейсболка серая | Denim Lab | Головные уборы | 119 000 | [2loKxdi6Hmo](https://unsplash.com/photos/2loKxdi6Hmo) |
-| DL-HD-BLK | Худи оверсайз чёрное | Denim Lab | Верх | 459 000 | [f5P1emDHupU](https://unsplash.com/photos/f5P1emDHupU) |
+| DL-501-IND | Джинсы 501 Original прямого кроя, синие | Levi's | Низ | 890 000 | [dl-501-ind.jpg](../backend/internal/demoseed/photos/dl-501-ind.jpg) |
+| DL-JNS-GRY | Джинсы slim fit, серые с потёртостями | Denim Lab | Низ | 690 000 | [dl-jns-gry.jpg](../backend/internal/demoseed/photos/dl-jns-gry.jpg) |
+| DL-TEE-WHT | Футболка базовая из хлопка, белая | Uniqlo | Верх | 149 000 | [dl-tee-wht.jpg](../backend/internal/demoseed/photos/dl-tee-wht.jpg) |
+| DL-TEE-BLK | Футболка базовая из хлопка, чёрная | Uniqlo | Верх | 149 000 | [dl-tee-blk.jpg](../backend/internal/demoseed/photos/dl-tee-blk.jpg) |
+| DL-SET-DNM | Джинсовый костюм: куртка и джинсы (двойка) | Denim Lab | Верх | 1 290 000 | [dl-set-dnm.jpg](../backend/internal/demoseed/photos/dl-set-dnm.jpg) |
+| DL-SNK-WHT | Кеды кожаные белые | Denim Lab | Обувь | 690 000 | [dl-snk-wht.jpg](../backend/internal/demoseed/photos/dl-snk-wht.jpg) |
+| DL-CAP-GRY | Бейсболка серая с прямым козырьком | Denim Lab | Головные уборы | 119 000 | [dl-cap-gry.jpg](../backend/internal/demoseed/photos/dl-cap-gry.jpg) |
+| DL-HD-BLK | Худи чёрное с капюшоном | Denim Lab | Верх | 459 000 | [dl-hd-blk.jpg](../backend/internal/demoseed/photos/dl-hd-blk.jpg) |
 
 ### Atlas Moda — логин `demo-atlas-moda`
 
-Женская одежда: платья, костюмы, блузки и обувь. Новые поступления каждую неделю.
+Женская одежда: платья, комплекты, джинсы и обувь. Новые поступления каждую неделю.
 
 | Артикул | Товар | Бренд | Зона | Цена, сум | Фото |
 |---|---|---|---|---|---|
-| AM-DR-GRN | Платье-сарафан без рукавов, зелёное (двойка) | Atlas Moda | Верх | 590 000 | [VyI0GBHSsJ8](https://unsplash.com/photos/VyI0GBHSsJ8) |
-| AM-TOP-BLK | Топ с круглым вырезом, чёрный | Mango | Верх | 219 000 | [TMZHoaUprk8](https://unsplash.com/photos/TMZHoaUprk8) |
-| AM-SET-PLT | Комплект: блузка и плиссированная юбка (двойка) | Atlas Moda | Верх | 749 000 | [rctpxLpXCjQ](https://unsplash.com/photos/rctpxLpXCjQ) |
-| AM-SK-WHT | Юбка миди белая | Zara | Низ | 349 000 | [e5I1Q-MNtCA](https://unsplash.com/photos/e5I1Q-MNtCA) |
-| AM-SUIT-WHT | Брючный костюм белый: жакет и брюки (двойка) | Atlas Moda | Верх | 1 590 000 | [C0rD3GUc85U](https://unsplash.com/photos/C0rD3GUc85U) |
-| AM-TR-BEI | Тренч бежевый двубортный | Massimo Dutti | Верх | 1 390 000 | [O4uZbwuta8w](https://unsplash.com/photos/O4uZbwuta8w) |
-| AM-SW-WHT | Свитер крупной вязки, молочный | Atlas Moda | Верх | 429 000 | [1Pj1Yrpca4A](https://unsplash.com/photos/1Pj1Yrpca4A) |
-| AM-HL-WHT | Туфли на невысоком каблуке, белые | Atlas Moda | Обувь | 690 000 | [Mjz4YVIy69Y](https://unsplash.com/photos/Mjz4YVIy69Y) |
-| AM-BT-BLK | Ботинки кожаные чёрные | Atlas Moda | Обувь | 890 000 | [_btfJLXnBoE](https://unsplash.com/photos/_btfJLXnBoE) |
-| AM-HAT-STR | Соломенная шляпа с широкими полями | Atlas Moda | Головные уборы | 189 000 | [xtQGgvc1n3Y](https://unsplash.com/photos/xtQGgvc1n3Y) |
+| AM-SET-SKT | Комплект: кроп-топ и мини-юбка с орнаментом (двойка) | Atlas Moda | Верх | 649 000 | [am-set-skt.jpg](../backend/internal/demoseed/photos/am-set-skt.jpg) |
+| AM-SET-PLT | Комплект: блузка и юбка-клёш (двойка) | Atlas Moda | Верх | 749 000 | [am-set-plt.jpg](../backend/internal/demoseed/photos/am-set-plt.jpg) |
+| AM-SET-SPT | Спортивный комплект: топ и шорты (двойка) | Atlas Moda | Верх | 389 000 | [am-set-spt.jpg](../backend/internal/demoseed/photos/am-set-spt.jpg) |
+| AM-DR-WHT | Сарафан на бретелях, молочный (двойка) | Atlas Moda | Верх | 590 000 | [am-dr-wht.jpg](../backend/internal/demoseed/photos/am-dr-wht.jpg) |
+| AM-DR-BLK | Платье-комбинация мини, чёрное (двойка) | Mango | Верх | 459 000 | [am-dr-blk.jpg](../backend/internal/demoseed/photos/am-dr-blk.jpg) |
+| AM-DR-FLR | Платье макси с цветочным принтом (двойка) | Atlas Moda | Верх | 690 000 | [am-dr-flr.jpg](../backend/internal/demoseed/photos/am-dr-flr.jpg) |
+| AM-TEE-CRL | Футболка с принтом, коралловая | Atlas Moda | Верх | 179 000 | [am-tee-crl.jpg](../backend/internal/demoseed/photos/am-tee-crl.jpg) |
+| AM-TOP-BLK | Футболка приталенная, чёрная | Mango | Верх | 219 000 | [am-top-blk.jpg](../backend/internal/demoseed/photos/am-top-blk.jpg) |
+| AM-JNS-SKN | Джинсы скинни с высокой посадкой | Zara | Низ | 549 000 | [am-jns-skn.jpg](../backend/internal/demoseed/photos/am-jns-skn.jpg) |
+| AM-HL-FLR | Туфли-лодочки с цветочным принтом и бантом | Atlas Moda | Обувь | 690 000 | [am-hl-flr.jpg](../backend/internal/demoseed/photos/am-hl-flr.jpg) |
+| AM-RUN-NVY | Кроссовки беговые женские, тёмно-синие | Adidas | Обувь | 990 000 | [am-run-nvy.jpg](../backend/internal/demoseed/photos/am-run-nvy.jpg) |
+| AM-BN-WHT | Шапка вязаная с помпоном, молочная | Atlas Moda | Головные уборы | 159 000 | [am-bn-wht.jpg](../backend/internal/demoseed/photos/am-bn-wht.jpg) |
 
 ### Street Code — логин `demo-street-code`
 
-Уличная мода: кроссовки, куртки, карго и аксессуары. Оригинальная продукция.
+Уличная мода: кроссовки, худи, куртки и шапки. Оригинальная продукция.
 
 | Артикул | Товар | Бренд | Зона | Цена, сум | Фото |
 |---|---|---|---|---|---|
-| SC-NK-RUN | Кроссовки беговые, красно-чёрные | Nike | Обувь | 1 450 000 | [kjq44My3RwU](https://unsplash.com/photos/kjq44My3RwU) |
-| SC-NK-HI | Кроссовки высокие, красно-белые | Nike | Обувь | 1 690 000 | [5O94e9s_-ks](https://unsplash.com/photos/5O94e9s_-ks) |
-| SC-SNK-WHT | Кроссовки белые низкие | Street Code | Обувь | 799 000 | [NUoPWImmjCU](https://unsplash.com/photos/NUoPWImmjCU) |
-| SC-JK-LTH | Куртка кожаная косуха | Street Code | Верх | 1 890 000 | [611O0YD9UDs](https://unsplash.com/photos/611O0YD9UDs) |
-| SC-CRG-KHK | Брюки карго, хаки | Street Code | Низ | 389 000 | [ZsUCBnNx5_0](https://unsplash.com/photos/ZsUCBnNx5_0) |
-| SC-BN-GRY | Шапка-бини вязаная, серая | Street Code | Головные уборы | 99 000 | [y7NBxZuL-_w](https://unsplash.com/photos/y7NBxZuL-_w) |
-| SC-BMB-BRN | Бомбер коричневый | Street Code | Верх | 1 090 000 | [Fg15LdqpWrs](https://unsplash.com/photos/Fg15LdqpWrs) |
+| SC-NK-HI | Кроссовки высокие, бело-красные | Nike | Обувь | 1 690 000 | [sc-nk-hi.jpg](../backend/internal/demoseed/photos/sc-nk-hi.jpg) |
+| SC-RUN-MLT | Кроссовки беговые, разноцветные | Street Code | Обувь | 899 000 | [sc-run-mlt.jpg](../backend/internal/demoseed/photos/sc-run-mlt.jpg) |
+| SC-RUN-NVY | Кроссовки беговые, тёмно-синие | Adidas | Обувь | 1 190 000 | [sc-run-nvy.jpg](../backend/internal/demoseed/photos/sc-run-nvy.jpg) |
+| SC-JK-LTH | Куртка кожаная коричневая | Street Code | Верх | 1 890 000 | [sc-jk-lth.jpg](../backend/internal/demoseed/photos/sc-jk-lth.jpg) |
+| SC-ZIP-NVY | Толстовка на молнии с капюшоном, тёмно-синяя | Street Code | Верх | 429 000 | [sc-zip-nvy.jpg](../backend/internal/demoseed/photos/sc-zip-nvy.jpg) |
+| SC-HD-RED | Худи красное с капюшоном | Street Code | Верх | 459 000 | [sc-hd-red.jpg](../backend/internal/demoseed/photos/sc-hd-red.jpg) |
+| SC-TEE-TIE | Футболка тай-дай, песочно-оранжевая | Street Code | Верх | 199 000 | [sc-tee-tie.jpg](../backend/internal/demoseed/photos/sc-tee-tie.jpg) |
+| SC-JOG-BLK | Джоггеры чёрные с манжетами | Street Code | Низ | 389 000 | [sc-jog-blk.jpg](../backend/internal/demoseed/photos/sc-jog-blk.jpg) |
+| SC-CAP-RED | Бейсболка красная с прямым козырьком | Street Code | Головные уборы | 119 000 | [sc-cap-red.jpg](../backend/internal/demoseed/photos/sc-cap-red.jpg) |
+| SC-BN-GRY | Шапка-бини вязаная, серая | Street Code | Головные уборы | 99 000 | [sc-bn-gry.jpg](../backend/internal/demoseed/photos/sc-bn-gry.jpg) |
+| SC-BN-STR | Шапка в полоску с помпоном | Street Code | Головные уборы | 129 000 | [sc-bn-str.jpg](../backend/internal/demoseed/photos/sc-bn-str.jpg) |
 
 ### Gentleman Tailoring — логин `demo-gentleman`
 
-Мужская классика: костюмы, рубашки, обувь из кожи. Подгонка по фигуре за 2 дня.
+Мужская классика и smart casual: костюмы, пиджаки, поло и трикотаж. Подгонка по фигуре за 2 дня.
 
 | Артикул | Товар | Бренд | Зона | Цена, сум | Фото |
 |---|---|---|---|---|---|
-| GT-SUIT-BLK | Костюм классический чёрный: пиджак и брюки (двойка) | Gentleman Tailoring | Верх | 2 390 000 | [0-INtpAVg70](https://unsplash.com/photos/0-INtpAVg70) |
-| GT-BLZ-BLK | Пиджак однобортный чёрный | Hugo Boss | Верх | 1 490 000 | [VsCBt8j-qg4](https://unsplash.com/photos/VsCBt8j-qg4) |
-| GT-SHR-WHT | Рубашка классическая белая | Gentleman Tailoring | Верх | 349 000 | [e8sbQNYEwX8](https://unsplash.com/photos/e8sbQNYEwX8) |
-| GT-SW-BRN | Свитер вязаный коричневый | Gentleman Tailoring | Верх | 529 000 | [IpJCzR5r7w8](https://unsplash.com/photos/IpJCzR5r7w8) |
-| GT-CH-BEI | Брюки чинос бежевые | Gentleman Tailoring | Низ | 459 000 | [DjniaF8q-HI](https://unsplash.com/photos/DjniaF8q-HI) |
-| GT-DRB-BRN | Туфли дерби коричневые | Gentleman Tailoring | Обувь | 990 000 | [ZzdIzsclJuI](https://unsplash.com/photos/ZzdIzsclJuI) |
-| GT-OXF-BRN | Туфли оксфорды коричневые | Gentleman Tailoring | Обувь | 1 190 000 | [NfZiOJzZgcg](https://unsplash.com/photos/NfZiOJzZgcg) |
-| GT-BT-BRN | Ботинки кожаные на шнуровке | Gentleman Tailoring | Обувь | 1 290 000 | [WlB8TsI_th0](https://unsplash.com/photos/WlB8TsI_th0) |
-| GT-BN-GRY | Шапка вязаная, серый меланж | Gentleman Tailoring | Головные уборы | 149 000 | [NZ83iHvAFIk](https://unsplash.com/photos/NZ83iHvAFIk) |
+| GT-SUIT-NVY | Костюм тёмно-синий: пиджак и брюки (двойка) | Gentleman Tailoring | Верх | 2 390 000 | [gt-suit-nvy.jpg](../backend/internal/demoseed/photos/gt-suit-nvy.jpg) |
+| GT-BLZ-GRY | Пиджак однобортный, графитовый | Hugo Boss | Верх | 1 490 000 | [gt-blz-gry.jpg](../backend/internal/demoseed/photos/gt-blz-gry.jpg) |
+| GT-HNL-BLU | Лонгслив-хенли, синий | Gentleman Tailoring | Верх | 329 000 | [gt-hnl-blu.jpg](../backend/internal/demoseed/photos/gt-hnl-blu.jpg) |
+| GT-POLO-NVY | Поло из хлопка пике, тёмно-синее | Gentleman Tailoring | Верх | 279 000 | [gt-polo-nvy.jpg](../backend/internal/demoseed/photos/gt-polo-nvy.jpg) |
+| GT-TEE-GRY | Футболка из хлопка, серый меланж | Gentleman Tailoring | Верх | 169 000 | [gt-tee-gry.jpg](../backend/internal/demoseed/photos/gt-tee-gry.jpg) |
+| GT-BN-GRY | Шапка вязаная, серый меланж | Gentleman Tailoring | Головные уборы | 149 000 | [gt-bn-gry.jpg](../backend/internal/demoseed/photos/gt-bn-gry.jpg) |

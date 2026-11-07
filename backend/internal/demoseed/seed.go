@@ -1,24 +1,27 @@
 // Package demoseed наполняет платформу тестовыми магазинами и товарами
 // (команда «api demo-data») и удаляет их («api demo-data remove»).
 //
-// Повторный запуск безопасен: существующие магазины, учётные записи и товары
-// (по slug и артикулу) не меняются, только докачиваются фото, которых не хватает.
-// Покупателей seed не создаёт.
+// Фото товаров встроены в программу (папка photos/), интернет не нужен.
+// Повторный запуск приводит тестовые магазины к каталогу: создаёт недостающее,
+// обновляет описания магазинов, названия, цены и размеры товаров, заменяет фото,
+// которое отличается от файла в photos/ (например, нарисованную картинку прошлой
+// версии), и убирает товары прошлых версий каталога (Retired). Пароли учётных
+// записей магазинов не меняются. Покупателей seed не создаёт.
 package demoseed
 
 import (
 	"bytes"
 	"context"
+	"embed"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
-	"regexp"
-	"time"
+	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/boutique-market/backend/internal/auth"
@@ -27,72 +30,57 @@ import (
 	"github.com/boutique-market/backend/internal/products"
 )
 
-// FetchFunc скачивает фото по id Unsplash.
-type FetchFunc func(ctx context.Context, photoID string) ([]byte, error)
+//go:embed photos/*.jpg
+var photoFiles embed.FS
+
+// PhotoFile — путь к фото товара внутри photos/: артикул в нижнем регистре.
+func PhotoFile(sku string) string { return "photos/" + strings.ToLower(sku) + ".jpg" }
+
+// Photo возвращает фото товара после той же обработки, что и загрузки магазинов
+// (проверка типа, очистка метаданных, JPEG). Результат детерминирован: по нему
+// повторный запуск узнаёт, что фото в хранилище уже нужное.
+func Photo(sku string) ([]byte, error) {
+	if b, ok := processed.Load(sku); ok {
+		return b.([]byte), nil
+	}
+	raw, err := photoFiles.ReadFile(PhotoFile(sku))
+	if err != nil {
+		return nil, err
+	}
+	b, err := media.Process(bytes.NewReader(raw), 10<<20)
+	if err != nil {
+		return nil, err
+	}
+	processed.Store(sku, b)
+	return b, nil
+}
+
+// processed — уже обработанные фото (артикул → JPEG): повторная обработка дорогая.
+var processed sync.Map
 
 type Options struct {
-	// Password — пароль учётных записей тестовых магазинов (вход в кабинет магазина
-	// по логину из каталога). Минимум 10 символов. Пустой — магазины без входа нельзя,
-	// поэтому seed требует пароль.
+	// Password — пароль новых учётных записей тестовых магазинов (вход в кабинет
+	// магазина по логину из каталога). Минимум 10 символов. Пароль уже созданных
+	// учётных записей не меняется.
 	Password string
-	Fetch    FetchFunc // nil — UnsplashFetch
-	// Offline — не ходить на Unsplash, сразу рисовать запасные картинки.
-	Offline  bool
-	MaxBytes int64 // предел размера скачанного фото
 	Log      *slog.Logger
 }
 
 type Result struct {
 	StoresCreated   int
 	ProductsCreated int
+	ProductsUpdated int // название, описание, цена или категория приведены к каталогу
 	PhotosAdded     int
-	PhotosDrawn     int      // из них нарисованы, потому что фото не скачалось
-	PhotoFailures   []string // артикулы товаров без фото (оставлены черновиками)
+	PhotosReplaced  int // старая картинка (например, нарисованная) заменена фото из photos/
+	ProductsRetired int // удалены товары прошлых версий каталога
 }
 
-// maxFetchFailures: после стольких неудач подряд Unsplash считается недоступным
-// и остальные товары сразу получают нарисованные картинки (без ожидания таймаутов).
-const maxFetchFailures = 2
-
-var photoIDRe = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
-
-// UnsplashFetch скачивает фото шириной 1600 px через официальную ссылку скачивания
-// (https://unsplash.com/photos/<id>/download), как это делает кнопка Download на сайте.
-func UnsplashFetch(client *http.Client) FetchFunc {
-	return func(ctx context.Context, id string) ([]byte, error) {
-		if !photoIDRe.MatchString(id) {
-			return nil, fmt.Errorf("bad unsplash id %q", id)
-		}
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-			"https://unsplash.com/photos/"+id+"/download?force=true&w=1600", nil)
-		if err != nil {
-			return nil, err
-		}
-		req.Header.Set("User-Agent", "boutique-market-demo-seed/1.0")
-		resp, err := client.Do(req)
-		if err != nil {
-			return nil, err
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("unsplash %s: HTTP %d", id, resp.StatusCode)
-		}
-		return io.ReadAll(io.LimitReader(resp.Body, 30<<20))
-	}
-}
-
-// Seed создаёт магазины (статус active, с учётной записью магазина) и их товары
-// (опубликованы, если фото скачалось; иначе черновик).
+// Seed создаёт или обновляет тестовые магазины (статус active, с учётной записью
+// магазина) и их товары с фото; новые товары сразу опубликованы.
 func Seed(ctx context.Context, pool *pgxpool.Pool, store media.Storage, opt Options) (Result, error) {
 	var res Result
 	if len(opt.Password) < 10 {
 		return res, errors.New("store password must be at least 10 characters")
-	}
-	if opt.Fetch == nil {
-		opt.Fetch = UnsplashFetch(&http.Client{Timeout: 30 * time.Second})
-	}
-	if opt.MaxBytes <= 0 {
-		opt.MaxBytes = 10 << 20
 	}
 	if opt.Log == nil {
 		opt.Log = slog.Default()
@@ -105,10 +93,6 @@ func Seed(ctx context.Context, pool *pgxpool.Pool, store media.Storage, opt Opti
 	if err != nil {
 		return res, err
 	}
-	failures := 0
-	if opt.Offline {
-		failures = maxFetchFailures
-	}
 	for _, s := range Catalog {
 		storeID, userID, created, err := ensureStore(ctx, pool, s, hash)
 		if err != nil {
@@ -118,81 +102,51 @@ func Seed(ctx context.Context, pool *pgxpool.Pool, store media.Storage, opt Opti
 			res.StoresCreated++
 			opt.Log.Info("demo store created", slog.String("slug", s.Slug), slog.String("login", s.Login))
 		}
-		var coverSrc []byte
+		n, err := retire(ctx, pool, store, storeID, opt.Log)
+		if err != nil {
+			return res, fmt.Errorf("store %s: retire old products: %w", s.Slug, err)
+		}
+		res.ProductsRetired += n
+		var cover []byte
 		for _, p := range s.Products {
 			catID, ok := cats[p.Category]
 			if !ok {
 				return res, fmt.Errorf("product %s: unknown category %q", p.SKU, p.Category)
 			}
-			productID, hasPhoto, created, err := ensureProduct(ctx, pool, storeID, catID, p)
+			img, err := Photo(p.SKU)
+			if err != nil {
+				return res, fmt.Errorf("product %s: photo %s: %w", p.SKU, PhotoFile(p.SKU), err)
+			}
+			if cover == nil {
+				cover = img
+			}
+			productID, created, updated, err := upsertProduct(ctx, pool, storeID, catID, p)
 			if err != nil {
 				return res, fmt.Errorf("product %s: %w", p.SKU, err)
 			}
 			if created {
 				res.ProductsCreated++
+			} else if updated {
+				res.ProductsUpdated++
 			}
-			if hasPhoto {
-				continue
-			}
-			var img []byte
-			if failures < maxFetchFailures {
-				if img, err = fetchPhoto(ctx, opt, p.Photo); err != nil {
-					failures++
-					opt.Log.Warn("demo photo not downloaded from Unsplash; using a drawn picture",
-						slog.String("sku", p.SKU), slog.String("photo", p.Photo), slog.String("err", err.Error()))
-				} else {
-					failures = 0
-				}
-			}
-			drawn := false
-			if img == nil {
-				if img, err = drawnPhoto(opt, p.Art); err != nil {
-					opt.Log.Warn("demo picture not drawn; product stays draft", slog.String("sku", p.SKU), slog.String("err", err.Error()))
-					res.PhotoFailures = append(res.PhotoFailures, p.SKU)
-					continue
-				}
-				drawn = true
-			}
-			key := media.NewKey(userID, media.PurposeProductImage)
-			if err := store.Put(ctx, key, img, "image/jpeg"); err != nil {
-				return res, fmt.Errorf("product %s: upload photo: %w", p.SKU, err)
-			}
-			if err := attachPhoto(ctx, pool, productID, key); err != nil {
-				_ = store.Delete(ctx, key)
+			added, replaced, err := syncPhoto(ctx, pool, store, opt.Log, productID, userID, img)
+			if err != nil {
 				return res, fmt.Errorf("product %s: %w", p.SKU, err)
 			}
-			res.PhotosAdded++
-			if drawn {
-				res.PhotosDrawn++
+			if added {
+				res.PhotosAdded++
 			}
-			if coverSrc == nil {
-				coverSrc = img
+			if replaced {
+				res.PhotosReplaced++
 			}
 		}
-		if coverSrc != nil {
-			if err := ensureCover(ctx, pool, store, storeID, userID, coverSrc); err != nil {
+		if cover != nil {
+			if err := syncCover(ctx, pool, store, opt.Log, storeID, userID, cover); err != nil {
 				return res, fmt.Errorf("store %s: cover: %w", s.Slug, err)
 			}
 		}
 	}
 	return res, nil
-}
-
-func fetchPhoto(ctx context.Context, opt Options, id string) ([]byte, error) {
-	raw, err := opt.Fetch(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	// та же очистка, что и у загрузок магазинов: проверка типа, EXIF, перекодирование в JPEG
-	return media.Process(bytes.NewReader(raw), opt.MaxBytes)
-}
-
-func drawnPhoto(opt Options, a Art) ([]byte, error) {
-	raw, err := RenderArt(a)
-	if err != nil {
-		return nil, err
-	}
-	return media.Process(bytes.NewReader(raw), opt.MaxBytes)
 }
 
 func categoryIDs(ctx context.Context, pool *pgxpool.Pool) (map[string]uuid.UUID, error) {
@@ -216,12 +170,17 @@ func categoryIDs(ctx context.Context, pool *pgxpool.Pool) (map[string]uuid.UUID,
 func ensureStore(ctx context.Context, pool *pgxpool.Pool, s Store, hash string) (storeID, userID uuid.UUID, created bool, err error) {
 	err = db.Tx(ctx, pool, func(tx pgx.Tx) error {
 		err := tx.QueryRow(ctx, `SELECT id FROM stores WHERE slug = $1`, s.Slug).Scan(&storeID)
-		if errors.Is(err, pgx.ErrNoRows) {
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
 			created = true
 			err = tx.QueryRow(ctx, `
 				INSERT INTO stores (slug, name, description, phone, address, lat, lng, status, activated_at)
 				VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', now()) RETURNING id`,
 				s.Slug, s.Name, s.Description, s.Phone, s.Address, s.Lat, s.Lng).Scan(&storeID)
+		case err == nil:
+			// описание из каталога: прошлые версии обещали товары, которых больше нет
+			_, err = tx.Exec(ctx, `UPDATE stores SET name = $2, description = $3 WHERE id = $1
+				AND (name, description) IS DISTINCT FROM ($2, $3)`, storeID, s.Name, s.Description)
 		}
 		if err != nil {
 			return err
@@ -240,20 +199,28 @@ func ensureStore(ctx context.Context, pool *pgxpool.Pool, s Store, hash string) 
 	return
 }
 
-func ensureProduct(ctx context.Context, pool *pgxpool.Pool, storeID, catID uuid.UUID, p Product) (id uuid.UUID, hasPhoto, created bool, err error) {
+// upsertProduct создаёт товар (черновик до появления фото: витрина не показывает
+// товары без картинки) или приводит существующий к каталогу. Статус существующего
+// товара не меняется: снятый с публикации вручную так и остаётся снятым.
+func upsertProduct(ctx context.Context, pool *pgxpool.Pool, storeID, catID uuid.UUID, p Product) (id uuid.UUID, created, updated bool, err error) {
 	err = db.Tx(ctx, pool, func(tx pgx.Tx) error {
-		err := tx.QueryRow(ctx, `
-			SELECT p.id, EXISTS (SELECT 1 FROM product_images i WHERE i.product_id = p.id)
-			FROM products p WHERE p.store_id = $1 AND p.sku = $2`, storeID, p.SKU).Scan(&id, &hasPhoto)
-		if err == nil || !errors.Is(err, pgx.ErrNoRows) {
-			return err
+		err := tx.QueryRow(ctx, `SELECT id FROM products WHERE store_id = $1 AND sku = $2 FOR UPDATE`, storeID, p.SKU).Scan(&id)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			created = true
+			err = tx.QueryRow(ctx, `
+				INSERT INTO products (store_id, category_id, sku, title, description, brand, price, in_stock, is_set, status)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8, 'draft') RETURNING id`,
+				storeID, catID, p.SKU, p.Title, p.Description, p.Brand, p.Price*100, p.Set).Scan(&id)
+		case err == nil:
+			var tag pgconn.CommandTag
+			tag, err = tx.Exec(ctx, `
+				UPDATE products SET category_id = $2, title = $3, description = $4, brand = $5, price = $6, is_set = $7
+				WHERE id = $1 AND (category_id, title, description, brand, price, is_set) IS DISTINCT FROM ($2, $3, $4, $5, $6, $7)`,
+				id, catID, p.Title, p.Description, p.Brand, p.Price*100, p.Set)
+			updated = tag.RowsAffected() > 0
 		}
-		created = true
-		// черновик до появления фото: витрина не показывает товары без картинки
-		if err := tx.QueryRow(ctx, `
-			INSERT INTO products (store_id, category_id, sku, title, description, brand, price, in_stock, is_set, status)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8, 'draft') RETURNING id`,
-			storeID, catID, p.SKU, p.Title, p.Description, p.Brand, p.Price*100, p.Set).Scan(&id); err != nil {
+		if err != nil {
 			return err
 		}
 		sizes := make([]products.SizeIn, len(p.Sizes))
@@ -265,33 +232,145 @@ func ensureProduct(ctx context.Context, pool *pgxpool.Pool, storeID, catID uuid.
 	return
 }
 
-func attachPhoto(ctx context.Context, pool *pgxpool.Pool, productID uuid.UUID, key string) error {
-	return db.Tx(ctx, pool, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, `INSERT INTO product_images (product_id, angle, key) VALUES ($1, 'front', $2)`, productID, key); err != nil {
+// sameObject — в хранилище по key лежит ровно want.
+func sameObject(ctx context.Context, store media.Storage, key string, want []byte) bool {
+	got, err := store.Get(ctx, key)
+	return err == nil && bytes.Equal(got, want)
+}
+
+// syncPhoto ставит товару фото «спереди», если его нет или оно отличается от img,
+// и публикует черновик. Старый файл удаляется после коммита.
+func syncPhoto(ctx context.Context, pool *pgxpool.Pool, store media.Storage, log *slog.Logger, productID, userID uuid.UUID, img []byte) (added, replaced bool, err error) {
+	var old string
+	err = pool.QueryRow(ctx, `SELECT key FROM product_images WHERE product_id = $1 AND angle = 'front'`, productID).Scan(&old)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return false, false, err
+	}
+	if old != "" && sameObject(ctx, store, old, img) {
+		return false, false, nil
+	}
+	key := media.NewKey(userID, media.PurposeProductImage)
+	if err := store.Put(ctx, key, img, "image/jpeg"); err != nil {
+		return false, false, fmt.Errorf("upload photo: %w", err)
+	}
+	err = db.Tx(ctx, pool, func(tx pgx.Tx) error {
+		var tag pgconn.CommandTag
+		var err error
+		if old == "" {
+			tag, err = tx.Exec(ctx, `INSERT INTO product_images (product_id, angle, key) VALUES ($1, 'front', $2)
+				ON CONFLICT DO NOTHING`, productID, key)
+		} else {
+			// смена ключа сбрасывает уменьшенные копии в pending — воркер сделает их заново
+			tag, err = tx.Exec(ctx, `UPDATE product_images SET key = $3 WHERE product_id = $1 AND angle = 'front' AND key = $2`,
+				productID, old, key)
+		}
+		if err != nil {
 			return err
 		}
-		// публикуем только черновики seed; товар, который сняли с публикации вручную, не трогаем
-		_, err := tx.Exec(ctx, `
+		if tag.RowsAffected() == 0 {
+			return errors.New("product photo was changed at the same time; run the command again")
+		}
+		// публикуем только черновики; товар, который сняли с публикации вручную, не трогаем
+		_, err = tx.Exec(ctx, `
 			UPDATE products SET status = 'published', published_at = COALESCE(published_at, now())
 			WHERE id = $1 AND status = 'draft'`, productID)
 		return err
 	})
+	if err != nil {
+		_ = store.Delete(ctx, key)
+		return false, false, err
+	}
+	if old != "" {
+		deleteUnreferenced(ctx, pool, store, log, []string{old})
+	}
+	return old == "", old != "", nil
 }
 
-func ensureCover(ctx context.Context, pool *pgxpool.Pool, store media.Storage, storeID, userID uuid.UUID, img []byte) error {
-	var has bool
-	if err := pool.QueryRow(ctx, `SELECT cover_key IS NOT NULL FROM stores WHERE id = $1`, storeID).Scan(&has); err != nil || has {
+// syncCover ставит обложкой магазина img (фото первого товара), если обложки нет
+// или она другая.
+func syncCover(ctx context.Context, pool *pgxpool.Pool, store media.Storage, log *slog.Logger, storeID, userID uuid.UUID, img []byte) error {
+	var old *string
+	if err := pool.QueryRow(ctx, `SELECT cover_key FROM stores WHERE id = $1`, storeID).Scan(&old); err != nil {
 		return err
+	}
+	if old != nil && sameObject(ctx, store, *old, img) {
+		return nil
 	}
 	key := media.NewKey(userID, media.PurposeStoreBranding)
 	if err := store.Put(ctx, key, img, "image/jpeg"); err != nil {
 		return err
 	}
-	tag, err := pool.Exec(ctx, `UPDATE stores SET cover_key = $2 WHERE id = $1 AND cover_key IS NULL`, storeID, key)
-	if err != nil || tag.RowsAffected() == 0 {
-		_ = store.Delete(ctx, key)
+	tag, err := pool.Exec(ctx, `UPDATE stores SET cover_key = $3 WHERE id = $1 AND cover_key IS NOT DISTINCT FROM $2`, storeID, old, key)
+	if err == nil && tag.RowsAffected() == 0 {
+		err = errors.New("store cover was changed at the same time; run the command again")
 	}
-	return err
+	if err != nil {
+		_ = store.Delete(ctx, key)
+		return err
+	}
+	if old != nil {
+		deleteUnreferenced(ctx, pool, store, log, []string{*old})
+	}
+	return nil
+}
+
+// retire удаляет из тестового магазина товары прошлых версий каталога (Retired).
+// Товары, которые добавили вручную, и заблокированные модерацией не трогаются.
+// Заказы хранят снимок товара, поэтому удалять можно и заказанные товары.
+func retire(ctx context.Context, pool *pgxpool.Pool, store media.Storage, storeID uuid.UUID, log *slog.Logger) (int, error) {
+	var keys []string
+	var n int
+	err := db.Tx(ctx, pool, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `SELECT i.key FROM product_images i JOIN products p ON p.id = i.product_id
+			WHERE p.store_id = $1 AND p.sku = ANY($2) AND p.status <> 'blocked'`, storeID, Retired)
+		if err != nil {
+			return err
+		}
+		if keys, err = pgx.CollectRows(rows, pgx.RowTo[string]); err != nil {
+			return err
+		}
+		rows, err = tx.Query(ctx, `DELETE FROM products WHERE store_id = $1 AND sku = ANY($2) AND status <> 'blocked' RETURNING id`, storeID, Retired)
+		if err != nil {
+			return err
+		}
+		ids, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+		n = len(ids)
+		return err
+	})
+	if err != nil {
+		return 0, err
+	}
+	deleteUnreferenced(ctx, pool, store, log, keys)
+	return n, nil
+}
+
+// deleteUnreferenced удаляет файлы (с уменьшенными копиями), на которые больше не
+// ссылаются ни товары, ни снимки заказов, ни магазины. Ошибка хранилища не
+// критична: осиротевший файл безопасен (ключ случайный).
+func deleteUnreferenced(ctx context.Context, pool *pgxpool.Pool, store media.Storage, log *slog.Logger, keys []string) {
+	if len(keys) == 0 {
+		return
+	}
+	rows, err := pool.Query(ctx, `SELECT k FROM unnest($1::text[]) AS k
+		WHERE NOT EXISTS (SELECT 1 FROM product_images WHERE key = k)
+		  AND NOT EXISTS (SELECT 1 FROM order_items WHERE image_key = k)
+		  AND NOT EXISTS (SELECT 1 FROM stores WHERE cover_key = k OR logo_key = k)`, keys)
+	if err != nil {
+		log.Warn("demo file cleanup skipped", slog.String("err", err.Error()))
+		return
+	}
+	free, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		log.Warn("demo file cleanup skipped", slog.String("err", err.Error()))
+		return
+	}
+	for _, k := range free {
+		for _, key := range append([]string{k}, variantKeys(k)...) {
+			if err := store.Delete(ctx, key); err != nil {
+				log.Warn("demo file delete failed", slog.String("key", key), slog.String("err", err.Error()))
+			}
+		}
+	}
 }
 
 // RemoveResult — что сделала команда remove.

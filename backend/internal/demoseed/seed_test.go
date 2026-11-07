@@ -3,10 +3,11 @@ package demoseed
 import (
 	"bytes"
 	"context"
-	"errors"
 	"image"
 	"image/color"
 	"image/jpeg"
+	"io/fs"
+	"os"
 	"strings"
 	"testing"
 
@@ -17,35 +18,33 @@ import (
 )
 
 func TestCatalogIsValid(t *testing.T) {
-	slugs, logins, photos := map[string]bool{}, map[string]bool{}, map[string]bool{}
-	zones := map[string]bool{"headwear": true, "tops": true, "bottoms": true, "shoes": true}
+	slugs, logins, skus := map[string]bool{}, map[string]bool{}, map[string]bool{}
+	zones := map[string]int{"headwear": 0, "tops": 0, "bottoms": 0, "shoes": 0}
+	notice, err := os.ReadFile("photos/NOTICE.md")
+	if err != nil {
+		t.Fatal(err)
+	}
 	sets := 0
 	for _, s := range Catalog {
 		if !strings.HasPrefix(s.Slug, SlugPrefix) || slugs[s.Slug] || logins[s.Login] {
 			t.Errorf("store %q: slug must start with %q, slug and login must be unique", s.Slug, SlugPrefix)
 		}
 		slugs[s.Slug], logins[s.Login] = true, true
-		skus := map[string]bool{}
 		for _, p := range s.Products {
+			// артикул уникален во всём каталоге: по нему называется файл фото
 			if skus[p.SKU] {
-				t.Errorf("%s: duplicate sku %s", s.Slug, p.SKU)
+				t.Errorf("%s: duplicate sku", p.SKU)
 			}
 			skus[p.SKU] = true
-			if !zones[p.Category] {
+			if _, ok := zones[p.Category]; !ok {
 				t.Errorf("%s: unknown category %q", p.SKU, p.Category)
 			}
+			zones[p.Category]++
 			if p.Set {
 				sets++
 				if p.Category != "tops" {
 					t.Errorf("%s: a set must be in the top zone", p.SKU)
 				}
-			}
-			if !photoIDRe.MatchString(p.Photo) || photos[p.Photo] {
-				t.Errorf("%s: photo id %q must be a unique 11-char Unsplash id", p.SKU, p.Photo)
-			}
-			photos[p.Photo] = true
-			if _, ok := shapes[p.Art.Shape]; !ok || len(p.Art.Color) != 7 {
-				t.Errorf("%s: fallback art %+v", p.SKU, p.Art)
 			}
 			if p.Price < 10_000 || p.Title == "" || p.Description == "" || p.Brand == "" || len(p.Sizes) == 0 {
 				t.Errorf("%s: incomplete product", p.SKU)
@@ -57,10 +56,43 @@ func TestCatalogIsValid(t *testing.T) {
 			if _, fields := products.NormalizeSizes(in); fields != nil {
 				t.Errorf("%s: invalid sizes %v", p.SKU, fields)
 			}
+			// фото есть, проходит ту же проверку, что и загрузки магазинов, и достаточно крупное для примерки
+			img, err := Photo(p.SKU)
+			if err != nil {
+				t.Errorf("%s: photo %s: %v", p.SKU, PhotoFile(p.SKU), err)
+				continue
+			}
+			cfg, err := jpeg.DecodeConfig(bytes.NewReader(img))
+			if err != nil || cfg.Width < 380 || cfg.Height < cfg.Width {
+				t.Errorf("%s: photo must be a portrait JPEG at least 380 px wide, got %dx%d (%v)", p.SKU, cfg.Width, cfg.Height, err)
+			}
+			if name := strings.TrimPrefix(PhotoFile(p.SKU), "photos/"); !bytes.Contains(notice, []byte(name)) {
+				t.Errorf("%s: photos/NOTICE.md must name the source of %s", p.SKU, name)
+			}
+		}
+	}
+	for z, n := range zones {
+		if n == 0 {
+			t.Errorf("fitting room zone %s has no products", z)
 		}
 	}
 	if sets == 0 {
 		t.Error("catalog needs at least one set for the fitting room")
+	}
+	// в папке нет лишних файлов: всё, что встроено в программу, используется
+	entries, err := fs.ReadDir(photoFiles, "photos")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if !skus[strings.ToUpper(strings.TrimSuffix(e.Name(), ".jpg"))] {
+			t.Errorf("photos/%s does not belong to any product", e.Name())
+		}
+	}
+	for _, sku := range Retired {
+		if skus[sku] {
+			t.Errorf("%s is both in the catalog and retired", sku)
+		}
 	}
 }
 
@@ -82,31 +114,13 @@ func TestSeedIdempotentAndRemove(t *testing.T) {
 	pool := testutil.DB(t)
 	ctx := context.Background()
 	store := media.NewMemory()
-	pic := jpegBytes(t)
-	failing := map[string]bool{Catalog[0].Products[0].Photo: true}
-	calls := 0
-	fetch := func(_ context.Context, id string) ([]byte, error) {
-		calls++
-		if failing[id] {
-			return nil, errors.New("network down")
-		}
-		return pic, nil
-	}
 	total := 0
+	var catalogSKUs []string
 	for _, s := range Catalog {
 		total += len(s.Products)
-	}
-
-	if _, err := Seed(ctx, pool, store, Options{Password: "short", Fetch: fetch}); err == nil {
-		t.Fatal("short password must be rejected")
-	}
-	res, err := Seed(ctx, pool, store, Options{Password: "demo-password-1", Fetch: fetch})
-	if err != nil {
-		t.Fatal(err)
-	}
-	// фото, которое не скачалось, заменяется нарисованным: товар всё равно опубликован
-	if res.StoresCreated != len(Catalog) || res.ProductsCreated != total || res.PhotosAdded != total || res.PhotosDrawn != 1 || len(res.PhotoFailures) != 0 {
-		t.Fatalf("first run: %+v", res)
+		for _, p := range s.Products {
+			catalogSKUs = append(catalogSKUs, p.SKU)
+		}
 	}
 	count := func(q string, args ...any) int {
 		t.Helper()
@@ -115,6 +129,38 @@ func TestSeedIdempotentAndRemove(t *testing.T) {
 			t.Fatal(err)
 		}
 		return n
+	}
+	str := func(q string, args ...any) string {
+		t.Helper()
+		var s string
+		if err := pool.QueryRow(ctx, q, args...).Scan(&s); err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+	photoKey := func(sku string) string {
+		return str(`SELECT i.key FROM product_images i JOIN products p ON p.id = i.product_id WHERE p.sku = $1 AND i.angle = 'front'`, sku)
+	}
+	mustEqualPhoto := func(key, sku string) {
+		t.Helper()
+		want, err := Photo(sku)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(store.Objs[key], want) {
+			t.Fatalf("%s: stored file %s is not the bundled photo", sku, key)
+		}
+	}
+
+	if _, err := Seed(ctx, pool, store, Options{Password: "short"}); err == nil {
+		t.Fatal("short password must be rejected")
+	}
+	res, err := Seed(ctx, pool, store, Options{Password: "demo-password-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res != (Result{StoresCreated: len(Catalog), ProductsCreated: total, PhotosAdded: total}) {
+		t.Fatalf("first run: %+v", res)
 	}
 	if n := count(`SELECT count(*) FROM products WHERE status = 'published'`); n != total {
 		t.Fatalf("published = %d, want %d", n, total)
@@ -136,23 +182,22 @@ func TestSeedIdempotentAndRemove(t *testing.T) {
 	if n := count(`SELECT count(*) FROM products WHERE sku = 'DL-HD-BLK' AND in_stock`); n != 1 {
 		t.Fatal("in_stock must follow sizes")
 	}
-	// ключи фото принадлежат учётной записи магазина, иначе кабинет не сохранит товар
-	rows, err := pool.Query(ctx, `SELECT u.id, i.key FROM product_images i JOIN products p ON p.id = i.product_id JOIN users u ON u.store_id = p.store_id`)
+	// в хранилище — именно фото из папки; ключи принадлежат учётной записи магазина,
+	// иначе кабинет не сохранит товар
+	rows, err := pool.Query(ctx, `SELECT u.id, p.sku, i.key FROM product_images i JOIN products p ON p.id = i.product_id JOIN users u ON u.store_id = p.store_id`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for rows.Next() {
 		var uid [16]byte
-		var key string
-		if err := rows.Scan(&uid, &key); err != nil {
+		var sku, key string
+		if err := rows.Scan(&uid, &sku, &key); err != nil {
 			t.Fatal(err)
 		}
 		if !media.OwnsKey(uid, media.PurposeProductImage, key) {
 			t.Fatalf("key %s is not owned by the store account", key)
 		}
-		if _, ok := store.Objs[key]; !ok {
-			t.Fatalf("file %s not uploaded", key)
-		}
+		mustEqualPhoto(key, sku)
 	}
 	rows.Close()
 	var hash string
@@ -163,45 +208,94 @@ func TestSeedIdempotentAndRemove(t *testing.T) {
 		t.Fatal("store password does not match")
 	}
 
-	// черновики без фото от прошлой версии команды (Unsplash не открылся) — как у пользователя
-	krows, err := pool.Query(ctx, `DELETE FROM product_images WHERE product_id IN (SELECT id FROM products WHERE sku IN ('DL-TEE-WHT', 'AM-SK-WHT')) RETURNING key`)
-	if err != nil {
+	// Состояние после прошлой версии команды (как у пользователя): нарисованная картинка
+	// вместо фото и такая же обложка, черновик без фото, старое описание магазина,
+	// товар, которого больше нет в каталоге, и товар, добавленный вручную.
+	drawn := jpegBytes(t)
+	oldTee := photoKey("DL-TEE-WHT")
+	drawnKey := strings.Replace(oldTee, ".jpg", "x.jpg", 1)
+	_ = store.Put(ctx, drawnKey, drawn, "image/jpeg")
+	_ = store.Delete(ctx, oldTee)
+	if _, err := pool.Exec(ctx, `UPDATE product_images SET key = $2 WHERE key = $1`, oldTee, drawnKey); err != nil {
 		t.Fatal(err)
 	}
-	for krows.Next() {
-		var k string
-		if err := krows.Scan(&k); err != nil {
+	oldCover := str(`SELECT cover_key FROM stores WHERE slug = $1`, Catalog[0].Slug)
+	drawnCover := strings.Replace(oldCover, ".jpg", "x.jpg", 1)
+	_ = store.Put(ctx, drawnCover, drawn, "image/jpeg")
+	_ = store.Delete(ctx, oldCover)
+	if _, err := pool.Exec(ctx, `UPDATE stores SET cover_key = $2, description = 'старое описание' WHERE slug = $1`, Catalog[0].Slug, drawnCover); err != nil {
+		t.Fatal(err)
+	}
+	oldSet := photoKey("AM-SET-PLT")
+	_ = store.Delete(ctx, oldSet)
+	if _, err := pool.Exec(ctx, `DELETE FROM product_images WHERE key = $1`, oldSet); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE products SET status = 'draft', published_at = NULL WHERE sku = 'AM-SET-PLT'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE products SET title = 'Топ с круглым вырезом, чёрный', price = 1 WHERE sku = 'AM-TOP-BLK'`); err != nil {
+		t.Fatal(err)
+	}
+	retiredKey := strings.Replace(oldTee, ".jpg", "r.jpg", 1)
+	_ = store.Put(ctx, retiredKey, drawn, "image/jpeg")
+	for _, sku := range []string{Retired[0], "MY-OWN-1"} {
+		if _, err := pool.Exec(ctx, `
+			INSERT INTO products (store_id, category_id, sku, title, description, brand, price, status)
+			SELECT s.id, c.id, $2, 'Старый товар', 'Описание', 'Brand', 100000, 'published'
+			FROM stores s, categories c WHERE s.slug = $1 AND c.slug = 'tops'`, Catalog[0].Slug, sku); err != nil {
 			t.Fatal(err)
 		}
-		_ = store.Delete(ctx, k)
 	}
-	krows.Close()
-	if _, err := pool.Exec(ctx, `UPDATE products SET status = 'draft', published_at = NULL WHERE sku IN ('DL-TEE-WHT', 'AM-SK-WHT')`); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO product_images (product_id, angle, key) SELECT id, 'front', $2 FROM products WHERE sku = $1`, Retired[0], retiredKey); err != nil {
 		t.Fatal(err)
 	}
-	// второй запуск без интернета: ничего не дублирует, черновикам рисует картинки и публикует их;
-	// после двух неудач подряд Unsplash больше не запрашивается
-	for _, s := range Catalog {
-		for _, p := range s.Products {
-			failing[p.Photo] = true
-		}
-	}
-	calls = 0
-	res, err = Seed(ctx, pool, store, Options{Password: "another-password", Fetch: fetch})
+
+	// повторный запуск: ничего не дублирует, заменяет картинки на фото, публикует черновик,
+	// возвращает описания из каталога и убирает старый товар
+	res, err = Seed(ctx, pool, store, Options{Password: "another-password"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.StoresCreated != 0 || res.ProductsCreated != 0 || res.PhotosAdded != 2 || res.PhotosDrawn != 2 || calls != maxFetchFailures {
-		t.Fatalf("second run: %+v, fetch calls %d", res, calls)
+	if res != (Result{ProductsUpdated: 1, ProductsRetired: 1, PhotosAdded: 1, PhotosReplaced: 1}) {
+		t.Fatalf("second run: %+v", res)
 	}
-	if n := count(`SELECT count(*) FROM products WHERE status = 'published'`); n != total {
+	if n := count(`SELECT count(*) FROM products WHERE status = 'published' AND sku = ANY($1)`, catalogSKUs); n != total {
 		t.Fatalf("published after rerun = %d, want %d", n, total)
+	}
+	mustEqualPhoto(photoKey("DL-TEE-WHT"), "DL-TEE-WHT")
+	mustEqualPhoto(photoKey("AM-SET-PLT"), "AM-SET-PLT")
+	mustEqualPhoto(str(`SELECT cover_key FROM stores WHERE slug = $1`, Catalog[0].Slug), Catalog[0].Products[0].SKU)
+	for _, k := range []string{drawnKey, drawnCover, retiredKey} {
+		if store.Has(k) {
+			t.Fatalf("old file %s was not deleted", k)
+		}
+	}
+	if n := count(`SELECT count(*) FROM products WHERE sku = 'AM-TOP-BLK' AND title = $1 AND price = $2`, Catalog[1].Products[7].Title, Catalog[1].Products[7].Price*100); n != 1 || Catalog[1].Products[7].SKU != "AM-TOP-BLK" {
+		t.Fatal("product fields must be restored from the catalog")
+	}
+	if d := str(`SELECT description FROM stores WHERE slug = $1`, Catalog[0].Slug); d != Catalog[0].Description {
+		t.Fatalf("store description = %q", d)
+	}
+	if n := count(`SELECT count(*) FROM products WHERE sku = $1`, Retired[0]); n != 0 {
+		t.Fatal("retired product must be deleted")
+	}
+	if n := count(`SELECT count(*) FROM products WHERE sku = 'MY-OWN-1' AND status = 'published'`); n != 1 {
+		t.Fatal("a product added by hand must not be touched")
 	}
 	if err := pool.QueryRow(ctx, `SELECT password_hash FROM users WHERE login = $1`, Catalog[1].Login).Scan(&hash); err != nil {
 		t.Fatal(err)
 	}
 	if ok, _ := auth.VerifyPassword("demo-password-1", hash); !ok {
 		t.Fatal("rerun must not change an existing password")
+	}
+	// третий запуск: всё уже как в каталоге, файлы не перезаливаются
+	objects := len(store.Objs)
+	if res, err = Seed(ctx, pool, store, Options{Password: "another-password"}); err != nil || res != (Result{}) {
+		t.Fatalf("third run: %+v, %v", res, err)
+	}
+	if len(store.Objs) != objects {
+		t.Fatalf("third run changed files: %d -> %d", objects, len(store.Objs))
 	}
 
 	// магазин с заказом архивируется, остальные удаляются вместе с файлами
@@ -237,21 +331,5 @@ func TestSeedIdempotentAndRemove(t *testing.T) {
 	}
 	if want := len(Catalog[2].Products) + 1; left != want { // фото архивного магазина + обложка
 		t.Fatalf("files left = %d, want %d", left, want)
-	}
-}
-
-func TestRenderArtAllShapes(t *testing.T) {
-	for name := range shapes {
-		b, err := RenderArt(Art{Shape: name, Color: "#3f6fa8", Color2: "#222222"})
-		if err != nil {
-			t.Fatal(name, err)
-		}
-		// картинка проходит ту же проверку, что и загрузки магазинов
-		if _, err := media.Process(bytes.NewReader(b), 10<<20); err != nil {
-			t.Fatal(name, err)
-		}
-	}
-	if _, err := RenderArt(Art{Shape: "nope", Color: "#000000"}); err == nil {
-		t.Fatal("unknown shape must fail")
 	}
 }
