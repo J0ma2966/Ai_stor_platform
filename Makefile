@@ -3,7 +3,7 @@ export TEST_DATABASE_URL ?= postgres://postgres@localhost:5432/postgres?sslmode=
 # Порты из .env (POSTGRES_HOST_PORT и т.д.) compose видит только через --env-file.
 COMPOSE := docker compose -f deploy/docker-compose.yml $(if $(wildcard .env),--env-file .env)
 
-.PHONY: up down test lint migrate backup verify-backup run demo demo-remove
+.PHONY: up down test lint migrate backup verify-backup run demo-remove
 
 up:            ## поднять всё окружение
 	$(COMPOSE) up -d --build
@@ -17,9 +17,7 @@ lint:
 	cd backend && go vet ./... && go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./... && go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
 migrate:       ## накатить миграции
 	cd backend && go run ./cmd/api migrate up
-demo:          ## тестовые магазины и товары: DEMO_STORE_PASSWORD=... make demo (docs/DEMO_DATA.md)
-	$(COMPOSE) exec -e DEMO_STORE_PASSWORD api /api demo-data
-demo-remove:   ## удалить тестовые магазины и товары
+demo-remove:   ## удалить тестовые магазины, загруженные прежней версией
 	$(COMPOSE) exec api /api demo-data remove
 backup:        ## разовый бэкап локальной базы
 	$(COMPOSE) exec backup backup.sh

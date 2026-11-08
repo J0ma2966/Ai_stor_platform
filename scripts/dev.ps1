@@ -6,8 +6,7 @@
   .\scripts\dev.ps1 up            # поднять postgres, redis, minio, api, backup
                                   # (занятые или зарезервированные Windows порты заменит сам, см. .env)
   .\scripts\dev.ps1 admin root    # создать администратора (спросит пароль)
-  .\scripts\dev.ps1 demo          # тестовые магазины и товары (спросит пароль для кабинетов магазинов)
-  .\scripts\dev.ps1 demo remove   # удалить тестовые магазины и товары
+  .\scripts\dev.ps1 demo remove   # удалить тестовые магазины, если они были загружены раньше
   .\scripts\dev.ps1 otp           # показать последние SMS-коды из логов (только dev)
   .\scripts\dev.ps1 web           # запустить сайт на http://localhost:3000
   .\scripts\dev.ps1 down          # остановить
@@ -236,12 +235,8 @@ switch ($Command) {
   }
   'demo'   {
     Assert-Docker
-    if ($Arg -eq 'remove') { Invoke-Compose exec api /api demo-data remove; break }
-    $secure = Read-Host 'Пароль для входа в кабинеты тестовых магазинов (минимум 10 символов)' -AsSecureString
-    $plain = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
-    $env:DEMO_STORE_PASSWORD = $plain
-    try { Invoke-Compose exec -e DEMO_STORE_PASSWORD api /api demo-data }
-    finally { Remove-Item Env:DEMO_STORE_PASSWORD -ErrorAction SilentlyContinue }
+    if ($Arg -ne 'remove') { throw 'Тестовые данные убраны перед запуском. Доступно только: .\scripts\dev.ps1 demo remove' }
+    Invoke-Compose exec api /api demo-data remove
   }
   'web'    {
     if (-not (Get-Command npm -ErrorAction SilentlyContinue)) { throw 'Не найден npm. Установите Node.js 20 LTS или новее: https://nodejs.org/' }

@@ -4,7 +4,7 @@
 
 | Папка | Что внутри |
 |---|---|
-| `backend/cmd/api` | точка входа: сервер, `migrate`, `create-admin`, `demo-data` ([тестовые магазины и товары](docs/DEMO_DATA.md)) |
+| `backend/cmd/api` | точка входа: сервер, `migrate`, `create-admin`, `demo-data remove` (удалить старые тестовые магазины, [подробнее](docs/DEMO_DATA.md)) |
 | `backend/internal/*` | модули: `auth`, `users`, `products`, `media`, `tokens`, `admin`, `orders`, `audit`, `httpx`, `ratelimit`, `platform/*` |
 | `backend/migrations` | SQL-миграции goose (встраиваются в бинарник и накатываются при старте) |
 | `web/` | сайт: Next.js 15, React 19, TypeScript, языки ru/uz ([подробнее](web/README.md)) |
@@ -112,7 +112,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\dev.ps1 up
 | `.\scripts\dev.ps1 up` | поднять postgres, redis, minio, api, backup и дождаться `/readyz` |
 | `.\scripts\dev.ps1 web` | запустить сайт на http://localhost:3000 |
 | `.\scripts\dev.ps1 admin <логин>` | создать администратора |
-| `.\scripts\dev.ps1 demo` | заполнить платформу тестовыми магазинами и товарами ([подробнее](docs/DEMO_DATA.md)); `demo remove` — удалить их |
+| `.\scripts\dev.ps1 demo remove` | удалить тестовые магазины, если они были загружены раньше ([подробнее](docs/DEMO_DATA.md)) |
 | `.\scripts\dev.ps1 otp` | показать последние SMS-коды для входа (только dev) |
 | `.\scripts\dev.ps1 logs [сервис]` | логи API или другого сервиса (`postgres`, `redis`, `minio`, `backup`) |
 | `.\scripts\dev.ps1 ps` | список контейнеров и их статус |

@@ -4,7 +4,7 @@
 //	api migrate up|down|status
 //	api create-admin <login> (пароль из ADMIN_PASSWORD)
 //	api worker               только воркер AI-примерки (prod: отдельный процесс/контейнер)
-//	api demo-data [remove]   тестовые магазины и товары (пароль магазинов из DEMO_STORE_PASSWORD)
+//	api demo-data remove     удалить тестовые магазины, загруженные прежней версией
 package main
 
 import (
@@ -258,8 +258,8 @@ func internalMux() http.Handler {
 	return m
 }
 
-// runDemoData — «api demo-data» наполняет платформу тестовыми магазинами и товарами,
-// «api demo-data remove» удаляет их. В prod — только с флагом --allow-prod.
+// runDemoData — «api demo-data remove» удаляет тестовые магазины, если они были
+// загружены прежней версией программы. В prod — только с флагом --allow-prod.
 func runDemoData(ctx context.Context, log *slog.Logger, cfg config.Config, pool *pgxpool.Pool, args []string) error {
 	remove, allowProd := false, false
 	for _, a := range args {
@@ -268,41 +268,27 @@ func runDemoData(ctx context.Context, log *slog.Logger, cfg config.Config, pool 
 			remove = true
 		case "--allow-prod":
 			allowProd = true
-		case "--offline":
-			// фото встроены в программу, интернет не нужен; флаг прошлой версии принимаем молча
 		default:
-			return fmt.Errorf("usage: api demo-data [remove] [--allow-prod]")
+			return errors.New("usage: api demo-data remove [--allow-prod]")
 		}
 	}
+	if !remove {
+		return errors.New("test data is no longer bundled; only «api demo-data remove [--allow-prod]» is available")
+	}
 	if cfg.IsProd() && !allowProd {
-		return errors.New("APP_ENV=prod: test data is not loaded into production; add --allow-prod if this is really intended")
+		return errors.New("APP_ENV=prod: add --allow-prod to remove the demo stores from production")
 	}
 	store, err := newStorage(cfg)
 	if err != nil {
 		return err
 	}
-	if remove {
-		res, err := demoseed.Remove(ctx, pool, store, log)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("demo stores deleted: %d\n", res.StoresDeleted)
-		if len(res.StoresArchived) > 0 {
-			fmt.Printf("stores with orders were archived instead of deleted: %v\n", res.StoresArchived)
-		}
-		return nil
-	}
-	if os.Getenv("DEMO_STORE_PASSWORD") == "" {
-		return errors.New("usage: DEMO_STORE_PASSWORD=... api demo-data (password for the demo store accounts, at least 10 characters)")
-	}
-	res, err := demoseed.Seed(ctx, pool, store, demoseed.Options{Password: os.Getenv("DEMO_STORE_PASSWORD"), Log: log})
+	res, err := demoseed.Remove(ctx, pool, store, log)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("stores created: %d, restored from archive: %d; products created: %d, updated: %d, retired: %d; photos added: %d, replaced: %d\n",
-		res.StoresCreated, res.StoresRestored, res.ProductsCreated, res.ProductsUpdated, res.ProductsRetired, res.PhotosAdded, res.PhotosReplaced)
-	for _, s := range demoseed.Catalog {
-		fmt.Printf("store %-22s login %s\n", s.Name, s.Login)
+	fmt.Printf("demo stores deleted: %d\n", res.StoresDeleted)
+	if len(res.StoresArchived) > 0 {
+		fmt.Printf("stores with orders were archived instead of deleted: %v\n", res.StoresArchived)
 	}
 	return nil
 }
