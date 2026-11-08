@@ -21,9 +21,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// Дизайн «Бенто», палитра «Лаванда и мята» (выбрана 2026-11-07).
-// Фон ни белый, ни чёрный; основной текст около 13:1 к фону; в тёмной теме акценты приглушены.
-// Пары «текст на фоне» проверяет PaletteContrastTest (не ниже 4,5:1, для иконок 3:1).
+// Дизайн по шаблону VESTA (выбран 2026-11-08): тёмная тема «Black Luxury» (графит и золото),
+// светлая «Fashion Social» (пудровый и малиновый). Заголовки с засечками, панели с тонкой рамкой,
+// кнопки-«таблетки». Пары «текст на фоне» проверяет PaletteContrastTest (не ниже 4,5:1, иконки 3:1).
 
 @Immutable
 data class BrandColors(
@@ -38,65 +38,75 @@ data class BrandColors(
     val muted: Color,
     val accentSoft: Color,
     val surface2: Color,
-    /** Лавандовая плитка (примерочная, главная кнопка) и тёмный текст на ней. */
-    val lavender: Color,
-    val onLavender: Color,
-    /** Мятная плитка. */
-    val mint: Color,
-    val onMint: Color,
-    /** Персиковая плитка. */
-    val peach: Color,
-    val onPeach: Color,
+    /** Тонкая рамка панелей и карточек. */
+    val line: Color,
+    /** Большая карточка с фото (примерочная на главной): тёмная подложка, светлый текст, надпись-«бровь». */
+    val hero: Color,
+    val onHero: Color,
+    val heroEyebrow: Color,
+    /** Кнопка на карточке с фото: заметна на тёмной подложке. */
+    val heroButton: Color,
+    val onHeroButton: Color,
+    /** Карточка кошелька токенов: градиент и текст на нём. */
+    val walletStart: Color,
+    val walletEnd: Color,
+    val walletEyebrow: Color,
+    val walletText: Color,
 )
 
+// Светлая: Fashion Social. Малиновый темнее, чем в шаблоне (#d45d78 → #B03F5C), чтобы белый текст на нём читался.
 private val LightBrand = BrandColors(
-    accent2 = Color(0xFFC94F6D), promo = Color(0xFFF5BFA3), promoText = Color(0xFF3A1E10),
+    accent2 = Color(0xFFB03F5C), promo = Color(0xFFF5C6D2), promoText = Color(0xFF3A1420),
     star = Color(0xFFE8A400), ok = Color(0xFF2F7A45), warn = Color(0xFF8A5F00), bad = Color(0xFFB23B2E),
-    info = Color(0xFF2C5D8A), muted = Color(0xFF5E6378), accentSoft = Color(0xFFE1DDFB), surface2 = Color(0xFFE6E8F2),
-    lavender = Color(0xFF9387F2), onLavender = Color(0xFF16142E),
-    mint = Color(0xFF93D3C3), onMint = Color(0xFF11302A),
-    peach = Color(0xFFF5BFA3), onPeach = Color(0xFF3A1E10),
+    info = Color(0xFF2C5D8A), muted = Color(0xFF74626A), accentSoft = Color(0xFFF9E5E8), surface2 = Color(0xFFF9E5E8),
+    line = Color(0xFFF0DCE0),
+    hero = Color(0xFF24201D), onHero = Color(0xFFFAF6F2), heroEyebrow = Color(0xFFF5C6D2),
+    heroButton = Color(0xFFF5C6D2), onHeroButton = Color(0xFF3A1420),
+    walletStart = Color(0xFF2B2022), walletEnd = Color(0xFF7A3346), walletEyebrow = Color(0xFFF5C6D2), walletText = Color(0xFFF3E3E7),
 )
+
+// Тёмная: Black Luxury. Фон как в шаблоне (#111111), текст чуть мягче (#EDE6DA), чтобы не резал глаз.
 private val DarkBrand = BrandColors(
-    accent2 = Color(0xFFF29BB0), promo = Color(0xFFDDA388), promoText = Color(0xFF2E170C),
+    accent2 = Color(0xFFC6A56B), promo = Color(0xFF5A4733), promoText = Color(0xFFF5EBDD),
     star = Color(0xFFFFC531), ok = Color(0xFF7CC792), warn = Color(0xFFE2B84F), bad = Color(0xFFEC8A7E),
-    info = Color(0xFF8DB8E0), muted = Color(0xFFA3A8BD), accentSoft = Color(0xFF3A3566), surface2 = Color(0xFF2E3243),
-    lavender = Color(0xFF9D92F2), onLavender = Color(0xFF16142E),
-    mint = Color(0xFF6FB5A4), onMint = Color(0xFF0E2420),
-    peach = Color(0xFFDDA388), onPeach = Color(0xFF2E170C),
+    info = Color(0xFF8DB8E0), muted = Color(0xFFAAA39A), accentSoft = Color(0xFF29251F), surface2 = Color(0xFF29251F),
+    line = Color(0xFF39352E),
+    hero = Color(0xFF24201D), onHero = Color(0xFFFAF6F2), heroEyebrow = Color(0xFFE5C99E),
+    heroButton = Color(0xFFC6A56B), onHeroButton = Color(0xFF111111),
+    walletStart = Color(0xFF29251F), walletEnd = Color(0xFF5A4733), walletEyebrow = Color(0xFFE4C99F), walletText = Color(0xFFE1D8CD),
 )
 
 internal val LightScheme = lightColorScheme(
-    primary = Color(0xFF5A4CC9), onPrimary = Color.White,
-    primaryContainer = Color(0xFF9387F2), onPrimaryContainer = Color(0xFF16142E),
-    secondary = Color(0xFF5A4CC9), onSecondary = Color.White,
-    secondaryContainer = Color(0xFFE1DDFB), onSecondaryContainer = Color(0xFF2B2470),
-    tertiary = Color(0xFF2F7A69), onTertiary = Color.White,
-    tertiaryContainer = Color(0xFF93D3C3), onTertiaryContainer = Color(0xFF11302A),
-    background = Color(0xFFF1F2F7), onBackground = Color(0xFF22253A),
-    surface = Color(0xFFFCFCFE), onSurface = Color(0xFF22253A),
-    surfaceVariant = Color(0xFFE6E8F2), onSurfaceVariant = Color(0xFF5E6378),
-    surfaceContainer = Color(0xFFFCFCFE), surfaceContainerLow = Color(0xFFF7F7FB), surfaceContainerHigh = Color(0xFFF7F7FB),
-    surfaceContainerHighest = Color(0xFFE6E8F2), surfaceContainerLowest = Color(0xFFFCFCFE),
-    inverseSurface = Color(0xFF2E3243), inverseOnSurface = Color(0xFFE4E6F0), inversePrimary = Color(0xFFB3AAF7),
-    outline = Color(0xFFD5D8E5), outlineVariant = Color(0xFFE2E4EE),
+    primary = Color(0xFFB03F5C), onPrimary = Color.White,
+    primaryContainer = Color(0xFFB03F5C), onPrimaryContainer = Color.White,
+    secondary = Color(0xFFB03F5C), onSecondary = Color.White,
+    secondaryContainer = Color(0xFFF9E5E8), onSecondaryContainer = Color(0xFF7A3346),
+    tertiary = Color(0xFF7A3346), onTertiary = Color.White,
+    tertiaryContainer = Color(0xFFF5C6D2), onTertiaryContainer = Color(0xFF3A1420),
+    background = Color(0xFFFFF4F0), onBackground = Color(0xFF2B2022),
+    surface = Color(0xFFFFFAF8), onSurface = Color(0xFF2B2022),
+    surfaceVariant = Color(0xFFF9E5E8), onSurfaceVariant = Color(0xFF74626A),
+    surfaceContainer = Color(0xFFFFFAF8), surfaceContainerLow = Color(0xFFFFF7F4), surfaceContainerHigh = Color(0xFFFCEFEC),
+    surfaceContainerHighest = Color(0xFFF9E5E8), surfaceContainerLowest = Color(0xFFFFFAF8),
+    inverseSurface = Color(0xFF2B2022), inverseOnSurface = Color(0xFFFFF4F0), inversePrimary = Color(0xFFF5C6D2),
+    outline = Color(0xFFDDBFC6), outlineVariant = Color(0xFFF0DCE0),
     error = Color(0xFFB23B2E), onError = Color.White,
 )
 internal val DarkScheme = darkColorScheme(
-    primary = Color(0xFFB3AAF7), onPrimary = Color(0xFF16142E),
-    primaryContainer = Color(0xFF9D92F2), onPrimaryContainer = Color(0xFF16142E),
-    secondary = Color(0xFFB3AAF7), onSecondary = Color(0xFF16142E),
-    secondaryContainer = Color(0xFF3A3566), onSecondaryContainer = Color(0xFFDCD8FC),
-    tertiary = Color(0xFF8FD1C0), onTertiary = Color(0xFF0E2420),
-    tertiaryContainer = Color(0xFF6FB5A4), onTertiaryContainer = Color(0xFF0E2420),
-    background = Color(0xFF1A1C26), onBackground = Color(0xFFE4E6F0),
-    surface = Color(0xFF242735), onSurface = Color(0xFFE4E6F0),
-    surfaceVariant = Color(0xFF2E3243), onSurfaceVariant = Color(0xFFA3A8BD),
-    surfaceContainer = Color(0xFF242735), surfaceContainerLow = Color(0xFF1F222E), surfaceContainerHigh = Color(0xFF2A2D3C),
-    surfaceContainerHighest = Color(0xFF2E3243), surfaceContainerLowest = Color(0xFF1A1C26),
-    inverseSurface = Color(0xFFE4E6F0), inverseOnSurface = Color(0xFF22253A), inversePrimary = Color(0xFF5A4CC9),
-    outline = Color(0xFF3A3F52), outlineVariant = Color(0xFF323646),
-    error = Color(0xFFEC8A7E), onError = Color(0xFF1A1C26),
+    primary = Color(0xFFC6A56B), onPrimary = Color(0xFF111111),
+    primaryContainer = Color(0xFFC6A56B), onPrimaryContainer = Color(0xFF111111),
+    secondary = Color(0xFFC6A56B), onSecondary = Color(0xFF111111),
+    secondaryContainer = Color(0xFF29251F), onSecondaryContainer = Color(0xFFE4C99F),
+    tertiary = Color(0xFFD9BE8C), onTertiary = Color(0xFF111111),
+    tertiaryContainer = Color(0xFF5A4733), onTertiaryContainer = Color(0xFFF5EBDD),
+    background = Color(0xFF111111), onBackground = Color(0xFFEDE6DA),
+    surface = Color(0xFF1D1D1D), onSurface = Color(0xFFEDE6DA),
+    surfaceVariant = Color(0xFF29251F), onSurfaceVariant = Color(0xFFAAA39A),
+    surfaceContainer = Color(0xFF1D1D1D), surfaceContainerLow = Color(0xFF171717), surfaceContainerHigh = Color(0xFF232220),
+    surfaceContainerHighest = Color(0xFF29251F), surfaceContainerLowest = Color(0xFF111111),
+    inverseSurface = Color(0xFFEDE6DA), inverseOnSurface = Color(0xFF1D1D1D), inversePrimary = Color(0xFF8C6332),
+    outline = Color(0xFF4A453C), outlineVariant = Color(0xFF39352E),
+    error = Color(0xFFEC8A7E), onError = Color(0xFF111111),
 )
 
 internal fun brandColors(dark: Boolean) = if (dark) DarkBrand else LightBrand
@@ -107,17 +117,17 @@ private fun rubik(weight: Int) = Font(R.font.rubik, weight = FontWeight(weight))
 
 val Rubik = FontFamily(rubik(400), rubik(500), rubik(600), rubik(700), rubik(800))
 
-/** Широкий акцентный шрифт для коротких надписей на плитках («ПРИМЕРЬ НА СЕБЕ», «−30%»). Не для длинного текста. */
-val RubikMono = FontFamily(Font(R.font.rubik_mono_one, weight = FontWeight.Normal))
+/** Заголовки с засечками, как Georgia в шаблоне VESTA. Системный шрифт: файл не нужен. */
+val Serif: FontFamily = FontFamily.Serif
 
-private fun style(size: Int, weight: Int, line: Int) =
-    TextStyle(fontFamily = Rubik, fontSize = size.sp, fontWeight = FontWeight(weight), lineHeight = line.sp)
+private fun style(size: Int, weight: Int, line: Int, family: FontFamily = Rubik) =
+    TextStyle(fontFamily = family, fontSize = size.sp, fontWeight = FontWeight(weight), lineHeight = line.sp)
 
 private val AppTypography = Typography(
-    displaySmall = style(30, 800, 36),
-    headlineMedium = style(26, 800, 32),
-    headlineSmall = style(22, 800, 28),
-    titleLarge = style(20, 700, 26),
+    displaySmall = style(32, 400, 36, Serif),
+    headlineMedium = style(28, 400, 32, Serif),
+    headlineSmall = style(24, 400, 28, Serif),
+    titleLarge = style(21, 400, 26, Serif),
     titleMedium = style(16, 700, 22),
     titleSmall = style(14, 700, 20),
     bodyLarge = style(16, 500, 23),
@@ -128,12 +138,15 @@ private val AppTypography = Typography(
     labelSmall = style(11, 600, 14),
 )
 
+/** Надпись-«бровь» над заголовком: мелкие заглавные с разрядкой, как в шаблоне. */
+val EyebrowStyle = TextStyle(fontFamily = Rubik, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 2.sp, lineHeight = 14.sp)
+
 private val AppShapes = Shapes(
     extraSmall = RoundedCornerShape(8.dp),
     small = RoundedCornerShape(12.dp),
-    medium = RoundedCornerShape(16.dp),
-    large = RoundedCornerShape(20.dp),
-    extraLarge = RoundedCornerShape(26.dp),
+    medium = RoundedCornerShape(14.dp),
+    large = RoundedCornerShape(18.dp),
+    extraLarge = RoundedCornerShape(22.dp),
 )
 
 val LocalBrand = staticCompositionLocalOf { LightBrand }

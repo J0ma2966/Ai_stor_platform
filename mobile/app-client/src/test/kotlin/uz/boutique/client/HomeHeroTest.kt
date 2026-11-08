@@ -13,30 +13,31 @@ import org.junit.runner.RunWith
 import uz.boutique.ui.BoutiqueTheme
 
 @RunWith(AndroidJUnit4::class)
-class HomeBentoTest {
+class HomeHeroTest {
     @get:Rule val rule = createComposeRule()
 
     private fun show(dark: Boolean = false, showFitting: Boolean = true, fitting: Int = 0, fav: Int = 0, clicks: MutableList<String> = mutableListOf()) {
         rule.setContent {
             BoutiqueTheme(dark = dark) {
-                HomeBento(
-                    showFitting = showFitting, fittingCount = fitting, favCount = fav,
+                HomeHero(
+                    showFitting = showFitting, fittingCount = fitting, favCount = fav, heroImage = null,
                     onFitting = { clicks += "fitting" }, onNew = { clicks += "new" }, onFavorites = { clicks += "fav" },
                 )
             }
         }
     }
 
-    @Test fun bigTileLeadsToFittingRoom() {
+    @Test fun heroLeadsToFittingRoom() {
         val clicks = mutableListOf<String>()
         show(clicks = clicks)
-        rule.onNodeWithText("ПРИМЕРЬ НА СЕБЕ").assertIsDisplayed()
-        rule.onNodeWithText("Открыть примерочную").assertIsDisplayed()
+        rule.onNodeWithText("Найдите свой стиль.").assertIsDisplayed()
+        rule.onNodeWithText("ВИРТУАЛЬНАЯ ПРИМЕРОЧНАЯ").assertIsDisplayed()
+        rule.onNodeWithText("ПРИМЕРИТЬ С AI").assertIsDisplayed()
         rule.onNodeWithTag("home_fitting").performClick()
         assertEquals(listOf("fitting"), clicks)
     }
 
-    @Test fun otherTilesWork() {
+    @Test fun panelsWork() {
         val clicks = mutableListOf<String>()
         show(fav = 3, clicks = clicks)
         rule.onNodeWithText("Сохранено: 3").assertIsDisplayed()
@@ -50,10 +51,13 @@ class HomeBentoTest {
         rule.onNodeWithText("В примерочной: 2").assertIsDisplayed()
     }
 
-    @Test fun noFittingTileWhenTryonIsOff() {
-        show(showFitting = false)
+    @Test fun heroShowsNewArrivalsWhenTryonIsOff() {
+        val clicks = mutableListOf<String>()
+        show(showFitting = false, clicks = clicks)
         rule.onNodeWithTag("home_fitting").assertDoesNotExist()
-        rule.onNodeWithTag("home_new").assertIsDisplayed()
+        rule.onNodeWithText("СМОТРЕТЬ НОВИНКИ").assertIsDisplayed()
+        rule.onNodeWithTag("home_hero_new").performClick()
+        assertEquals(listOf("new"), clicks)
     }
 
     @Test fun rendersInDarkTheme() {

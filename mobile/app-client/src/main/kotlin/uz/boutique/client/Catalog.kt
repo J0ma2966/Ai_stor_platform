@@ -1,5 +1,7 @@
 package uz.boutique.client
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,10 +19,10 @@ import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Checkroom
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.Checkroom
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.DropdownMenu
@@ -44,6 +46,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -64,6 +67,7 @@ import uz.boutique.ui.ErrorState
 import uz.boutique.ui.LocalGraph
 import uz.boutique.ui.PagedFooter
 import uz.boutique.ui.ProductImage
+import uz.boutique.ui.R as UiR
 import uz.boutique.ui.RatingRow
 import uz.boutique.ui.ThemeToggleButton
 import uz.boutique.ui.currentLang
@@ -71,7 +75,6 @@ import uz.boutique.ui.errorRes
 import uz.boutique.ui.money
 import uz.boutique.ui.rememberLoader
 import uz.boutique.ui.rememberPaged
-import uz.boutique.ui.R as UiR
 
 private val SORT_LABELS = mapOf(
     "popular" to UiR.string.sort_popular,
@@ -201,11 +204,12 @@ fun CatalogScreen(
                         modifier = Modifier.fillMaxSize().testTag("catalog_grid"),
                     ) {
                         if (showPromos) {
-                            item(span = { GridItemSpan(maxLineSpan) }, key = "home_bento") {
-                                HomeBento(
+                            item(span = { GridItemSpan(maxLineSpan) }, key = "home_hero") {
+                                HomeHero(
                                     showFitting = tryonEnabled,
                                     fittingCount = fittingCount,
                                     favCount = shop.favIds.size,
+                                    heroImage = paged.items.firstNotNullOfOrNull { it.cardImage },
                                     onFitting = onFitting,
                                     onNew = { sort = "new" },
                                     onFavorites = onFavorites,
@@ -267,15 +271,26 @@ fun FavoriteButton(productId: String, onNeedLogin: () -> Unit, modifier: Modifie
 
 @Composable
 fun ProductCard(p: Product, onClick: () -> Unit, onNeedLogin: () -> Unit, modifier: Modifier = Modifier) {
-    Column(modifier.clickable(onClick = onClick).testTag("product_${p.id}"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Box {
+    // VESTA: карточка-панель с тонкой рамкой, фото сверху, ниже название, магазин и цена.
+    Column(
+        modifier
+            .clip(MaterialTheme.shapes.large)
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, Brand.colors.line, MaterialTheme.shapes.large)
+            .clickable(onClick = onClick)
+            .testTag("product_${p.id}"),
+    ) {
+        Box(Modifier.padding(6.dp)) {
             ProductImage(p.cardImage, contentDescription = p.title, modifier = Modifier.fillMaxWidth().aspectRatio(3f / 4f))
             FavoriteButton(p.id, onNeedLogin, Modifier.align(Alignment.TopEnd).padding(6.dp))
         }
-        Text(money(p.price), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold)
-        if (p.brand.isNotBlank()) Text(p.brand, style = MaterialTheme.typography.labelMedium, color = Brand.colors.muted, maxLines = 1)
-        Text(p.title, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        RatingRow(p.ratingAvg, p.ratingCount)
-        if (!p.inStock) Text(stringResource(UiR.string.product_out_of_stock), style = MaterialTheme.typography.labelSmall, color = Brand.colors.bad)
+        Column(Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp, top = 2.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(p.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            val seller = listOf(p.brand, p.storeName).filter { it.isNotBlank() }.distinct().joinToString(" · ")
+            if (seller.isNotEmpty()) Text(seller, style = MaterialTheme.typography.labelSmall, color = Brand.colors.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            RatingRow(p.ratingAvg, p.ratingCount)
+            Text(money(p.price), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(top = 3.dp))
+            if (!p.inStock) Text(stringResource(UiR.string.product_out_of_stock), style = MaterialTheme.typography.labelSmall, color = Brand.colors.bad)
+        }
     }
 }

@@ -1,5 +1,6 @@
 package uz.boutique.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -59,6 +61,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import uz.boutique.core.model.OrderStatus
@@ -80,7 +83,7 @@ fun AppScaffold(
         floatingActionButton = floatingActionButton,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(title, style = MaterialTheme.typography.titleMedium) },
+                title = { Text(title, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
                     if (onBack != null) {
                         IconButton(onClick = onBack) {
@@ -149,7 +152,8 @@ fun SectionCard(modifier: Modifier = Modifier, padding: PaddingValues = PaddingV
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
-        shadowElevation = 0.dp, // бенто: плоская плитка, отличается от фона цветом, без тени
+        shadowElevation = 0.dp, // VESTA: плоская панель с тонкой рамкой, без тени
+        border = BorderStroke(1.dp, Brand.colors.line),
     ) {
         Column(Modifier.padding(padding), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
     }
@@ -321,8 +325,7 @@ fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifi
         onClick = onClick,
         enabled = enabled && !busy,
         modifier = modifier.fillMaxWidth().height(52.dp),
-        shape = MaterialTheme.shapes.medium,
-        // Бенто: пастельная лавандовая кнопка с тёмным текстом (контраст около 6:1).
+        shape = CircleShape, // VESTA: кнопка-«таблетка» акцентного цвета
         colors = ButtonDefaults.buttonColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer,
             contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -342,7 +345,8 @@ fun SecondaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modi
         onClick = onClick,
         enabled = enabled,
         modifier = modifier.fillMaxWidth().height(48.dp),
-        shape = MaterialTheme.shapes.medium,
+        shape = CircleShape,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
     ) {
         Text(text, style = MaterialTheme.typography.labelLarge, color = color ?: MaterialTheme.colorScheme.primary)
     }
@@ -409,7 +413,7 @@ fun ReasonDialog(
     var reason by rememberSaveable { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title, style = MaterialTheme.typography.titleMedium) },
+        title = { Text(title, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         text = {
             OutlinedTextField(
                 value = reason,
