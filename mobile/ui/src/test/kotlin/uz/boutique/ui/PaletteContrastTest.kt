@@ -6,8 +6,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Палитра «Лаванда и мята»: текст читается в обеих темах (WCAG AA 4,5:1, иконки 3:1),
- * но без режущего глаза чисто белого на чёрном (фон ни #FFF, ни #000, основной текст не выше 16:1).
+ * Палитры VESTA (светлая Fashion Social, тёмная Black Luxury): текст читается в обеих темах
+ * (WCAG AA 4,5:1, иконки 3:1), но без режущего глаза чисто белого на чёрном
+ * (фон ни #FFF, ни #000, основной текст не выше 16:1).
  */
 class PaletteContrastTest {
     private fun contrast(a: Color, b: Color): Double {
@@ -45,27 +46,37 @@ class PaletteContrastTest {
             check("$t: статус $n на плитке", fg, s.surface, 4.5)
         }
         check("$t: кнопка primary", s.onPrimary, s.primary, 4.5)
-        check("$t: главная кнопка (лаванда)", s.onPrimaryContainer, s.primaryContainer, 4.5)
+        check("$t: главная кнопка", s.onPrimaryContainer, s.primaryContainer, 4.5)
         check("$t: выбранный чип", s.onSecondaryContainer, s.secondaryContainer, 4.5)
-        check("$t: мятный контейнер", s.onTertiaryContainer, s.tertiaryContainer, 4.5)
+        check("$t: второй контейнер", s.onTertiaryContainer, s.tertiaryContainer, 4.5)
         check("$t: ошибка", s.onError, s.error, 4.5)
     }
 
-    @Test fun pastelTilesUseDarkText() = bothThemes { t, _, b ->
-        check("$t: лавандовая плитка", b.onLavender, b.lavender, 4.5)
-        check("$t: мятная плитка", b.onMint, b.mint, 4.5)
-        check("$t: персиковая плитка", b.onPeach, b.peach, 4.5)
+    @Test fun heroAndWalletCardsAreReadable() = bothThemes { t, s, b ->
+        // Текст карточки с фото лежит на затемнении снизу (цвет hero), кнопка — акцентная.
+        check("$t: заголовок на фото", b.onHero, b.hero, 4.5)
+        check("$t: надпись-бровь на фото", b.heroEyebrow, b.hero, 4.5)
+        check("$t: кнопка на фото видна", b.heroButton, b.hero, 3.0)
+        check("$t: текст кнопки на фото", b.onHeroButton, b.heroButton, 4.5)
+        for ((n, bg) in listOf("начало" to b.walletStart, "конец" to b.walletEnd)) {
+            check("$t: текст кошелька ($n)", b.walletText, bg, 4.5)
+            check("$t: бровь кошелька ($n)", b.walletEyebrow, bg, 4.5)
+        }
         check("$t: промо", b.promoText, b.promo, 4.5)
     }
 
     @Test fun iconsAreVisible() = bothThemes { t, s, b ->
         check("$t: сердечко избранного", b.accent2, s.surface, 3.0)
-        check("$t: иконка на лавандовой плитке", b.lavender, b.onLavender, 3.0)
+        check("$t: рамка поля ввода", s.outline, s.surface, 1.3)
     }
 
-    @Test fun darkAccentsAreMuted() {
-        // В тёмной теме пастельные плитки темнее светлых, чтобы не «светились».
-        assertTrue(brandColors(true).mint.luminance() < brandColors(false).mint.luminance())
-        assertTrue(brandColors(true).peach.luminance() < brandColors(false).peach.luminance())
+    @Test fun darkThemeIsBlackLuxury() {
+        // Тёмная: графит и золото; светлая: пудровый фон и малиновый акцент.
+        val dark = colorScheme(true)
+        val light = colorScheme(false)
+        assertTrue(dark.background.luminance() < 0.01f)
+        assertTrue(dark.primary.red > dark.primary.blue) // золото тёплое
+        assertTrue(light.background.red > light.background.blue) // пудровый, тёплый фон
+        assertTrue(light.primary.red > light.primary.green) // малиновый
     }
 }
