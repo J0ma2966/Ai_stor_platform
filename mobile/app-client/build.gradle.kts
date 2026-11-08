@@ -50,7 +50,11 @@ android {
             buildConfigField("boolean", "SERVER_OVERRIDE", "false")
             // В проде примерка выключена (как NEXT_PUBLIC_TRYON_ENABLED на сайте); включить: -Pboutique.tryonRelease=true
             buildConfigField("boolean", "TRYON_ENABLED", providers.gradleProperty("boutique.tryonRelease").getOrElse("false"))
-            signingConfigs.findByName("release")?.let { signingConfig = it }
+            // Без BOUTIQUE_KEYSTORE release-APK не подписан и не ставится на телефон. Для раздачи тестерам
+            // CI собирает его с -Pboutique.signWithDebug=true (debug-ключ); в магазин приложений так не выкладывать.
+            val signWithDebug = providers.gradleProperty("boutique.signWithDebug").getOrElse("false").toBoolean()
+            (signingConfigs.findByName("release") ?: signingConfigs.getByName("debug").takeIf { signWithDebug })
+                ?.let { signingConfig = it }
         }
     }
     compileOptions {

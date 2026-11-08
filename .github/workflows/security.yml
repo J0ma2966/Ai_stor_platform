@@ -80,7 +80,9 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Start stack
-        run: docker compose -f deploy/docker-compose.yml up -d --build --wait
+        run: |
+          cp .env.example .env
+          docker compose -f deploy/docker-compose.yml --env-file .env up -d --build --wait
       - uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25 # v0.15.0
         with:
           target: http://localhost:8080/v1/products

@@ -47,7 +47,11 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             buildConfigField("String", "API_URL", "\"$apiUrl\"")
             buildConfigField("boolean", "SERVER_OVERRIDE", "false")
-            signingConfigs.findByName("release")?.let { signingConfig = it }
+            // Без BOUTIQUE_KEYSTORE release-APK не подписан и не ставится на телефон. Для раздачи тестерам
+            // CI собирает его с -Pboutique.signWithDebug=true (debug-ключ); в магазин приложений так не выкладывать.
+            val signWithDebug = providers.gradleProperty("boutique.signWithDebug").getOrElse("false").toBoolean()
+            (signingConfigs.findByName("release") ?: signingConfigs.getByName("debug").takeIf { signWithDebug })
+                ?.let { signingConfig = it }
         }
     }
     compileOptions {
