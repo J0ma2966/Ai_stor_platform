@@ -140,13 +140,13 @@ export function GenerationView({ id }: { id: string }) {
             <li key={p.id} className="row">
               {p.image_url && <img src={p.image_url} alt="" width={56} height={56} className="thumb" />}
               <div className="grow">
-                <Link href={`/products/${p.id}`}>{p.title}</Link>
+                <Link href={`/product/${p.id}`}>{p.title}</Link>
                 <div className="small muted">{p.brand} · {p.store_name}</div>
               </div>
               <div className="stack-sm">
                 <span>{formatSum(p.price, locale)}</span>
                 {p.available ? (
-                  <Link href={`/products/${p.id}`} className="btn btn-secondary small">{t("toCart")}</Link>
+                  <Link href={`/product/${p.id}`} className="btn btn-secondary small">{t("toCart")}</Link>
                 ) : (
                   <span className="small muted">{t("unavailable")}</span>
                 )}

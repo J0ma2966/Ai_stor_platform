@@ -5,6 +5,15 @@ on:
     paths: ["mobile/**", ".github/workflows/android.yml"]
   pull_request:
     paths: ["mobile/**", ".github/workflows/android.yml"]
+  # Ручной запуск: APK для тестеров, настроенные на адрес вашего сервера (Actions → Android → Run workflow).
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: "Адрес API, только https (например https://api.example.uz)"
+        required: true
+      site_url:
+        description: "Адрес сайта (например https://example.uz)"
+        required: true
 
 permissions:
   contents: read
@@ -15,6 +24,7 @@ concurrency:
 
 jobs:
   core:
+    if: github.event_name != 'workflow_dispatch'
     name: core (JVM tests)
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -27,6 +37,7 @@ jobs:
       - run: ../gradlew test --console=plain
 
   apps:
+    if: github.event_name != 'workflow_dispatch'
     name: apps (build, unit/UI tests, lint)
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -59,3 +70,45 @@ jobs:
             mobile/**/build/reports/
             mobile/**/build/test-results/
           retention-days: 7
+
+  tester-apk:
+    if: github.event_name == 'workflow_dispatch'
+    name: tester APKs (release build, your server)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults: {run: {working-directory: mobile}}
+    env:
+      API_URL: ${{ inputs.api_url }}
+      SITE_URL: ${{ inputs.site_url }}
+      KEYSTORE_B64: ${{ secrets.BOUTIQUE_KEYSTORE_BASE64 }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with: {distribution: temurin, java-version: "17"}
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+      - name: Check addresses
+        run: |
+          for u in "$API_URL" "$SITE_URL"; do
+            [[ "$u" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?/?$ ]] || { echo "::error::нужен адрес вида https://host, получено: $u"; exit 1; }
+          done
+      - name: Release keystore from secret (if set)
+        if: env.KEYSTORE_B64 != ''
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          {
+            echo "BOUTIQUE_KEYSTORE=$RUNNER_TEMP/release.jks"
+            echo "BOUTIQUE_KEYSTORE_PASSWORD=${{ secrets.BOUTIQUE_KEYSTORE_PASSWORD }}"
+            echo "BOUTIQUE_KEY_ALIAS=${{ secrets.BOUTIQUE_KEY_ALIAS }}"
+            echo "BOUTIQUE_KEY_PASSWORD=${{ secrets.BOUTIQUE_KEY_PASSWORD }}"
+          } >> "$GITHUB_ENV"
+      - name: Build release APKs
+        run: >-
+          ./gradlew :app-client:assembleRelease :app-store:assembleRelease --console=plain
+          "-Pboutique.apiUrl=${API_URL%/}" "-Pboutique.siteUrl=${SITE_URL%/}" -Pboutique.signWithDebug=true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: apk-testers
+          path: |
+            mobile/app-client/build/outputs/apk/release/*.apk
+            mobile/app-store/build/outputs/apk/release/*.apk
+          retention-days: 30
