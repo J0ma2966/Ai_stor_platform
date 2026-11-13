@@ -1,0 +1,67 @@
+# AI-магазин (__SITE__). Файл создаёт ai-store-install; к «Платформе для заказов» не относится.
+# Удаление: rm /etc/nginx/sites-enabled/ai-store.conf && systemctl reload nginx
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __SITE__ __API__ __MEDIA__ __S3__;
+    location / { return 301 https://$host$request_uri; }
+}
+#TLS# # --- Сайт ---
+#TLS# server {
+#TLS#     listen 443 ssl;
+#TLS#     listen [::]:443 ssl;
+#TLS#     server_name __SITE__;
+#TLS#     include /etc/nginx/snippets/ai-store-tls.conf;
+#TLS#     location / {
+#TLS#         proxy_pass http://127.0.0.1:__WEB_PORT__;
+#TLS#         include /etc/nginx/snippets/ai-store-proxy.conf;
+#TLS#     }
+#TLS# }
+#TLS# # --- API ---
+#TLS# server {
+#TLS#     listen 443 ssl;
+#TLS#     listen [::]:443 ssl;
+#TLS#     server_name __API__;
+#TLS#     include /etc/nginx/snippets/ai-store-tls.conf;
+#TLS#     client_max_body_size 12m;
+#TLS#     # внутренние адреса не должны быть видны снаружи
+#TLS#     location ~ ^/(metrics|debug)(/|$) { return 404; }
+#TLS#     location / {
+#TLS#         proxy_pass http://127.0.0.1:__API_PORT__;
+#TLS#         include /etc/nginx/snippets/ai-store-proxy.conf;
+#TLS#         proxy_read_timeout 90s;
+#TLS#     }
+#TLS# }
+#TLS# # --- S3 (MinIO): подписанные ссылки на приватные фото ---
+#TLS# server {
+#TLS#     listen 443 ssl;
+#TLS#     listen [::]:443 ssl;
+#TLS#     server_name __S3__;
+#TLS#     include /etc/nginx/snippets/ai-store-tls.conf;
+#TLS#     client_max_body_size 25m;
+#TLS#     location = /minio/health/live { proxy_pass http://127.0.0.1:__S3_PORT__; }
+#TLS#     location /minio/ { return 404; }
+#TLS#     location / {
+#TLS#         proxy_pass http://127.0.0.1:__S3_PORT__;
+#TLS#         include /etc/nginx/snippets/ai-store-proxy.conf;
+#TLS#         proxy_request_buffering off;
+#TLS#         proxy_buffering off;
+#TLS#     }
+#TLS# }
+#TLS# # --- Публичные фото товаров (pub/), долгий кэш ---
+#TLS# server {
+#TLS#     listen 443 ssl;
+#TLS#     listen [::]:443 ssl;
+#TLS#     server_name __MEDIA__;
+#TLS#     include /etc/nginx/snippets/ai-store-tls.conf;
+#TLS#     location /pub/ {
+#TLS#         limit_except GET { deny all; }
+#TLS#         proxy_pass http://127.0.0.1:__S3_PORT__/__BUCKET__/pub/;
+#TLS#         include /etc/nginx/snippets/ai-store-proxy.conf;
+#TLS#         proxy_hide_header Set-Cookie;
+#TLS#         add_header Cache-Control "public, max-age=31536000, immutable" always;
+#TLS#         add_header Access-Control-Allow-Origin "*" always;
+#TLS#         add_header X-Content-Type-Options nosniff always;
+#TLS#     }
+#TLS#     location / { return 404; }
+#TLS# }

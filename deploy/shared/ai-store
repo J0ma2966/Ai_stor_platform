@@ -1,0 +1,272 @@
+#!/usr/bin/env bash
+# Управление AI-магазином на общем сервере (docs/SHARED_SERVER.md).
+#   ai-store install <домен> <email>   первая установка (root)
+#   ai-store status | update | restart | logs [сервис] | backup | create-admin <логин> | env
+# Всё лежит в одной папке (по умолчанию /opt/ai-store) и не трогает другие проекты сервера:
+# занимает только 127.0.0.1:3100/8180/9100 и один файл в настройках nginx.
+set -euo pipefail
+
+ROOT="${AI_STORE_ROOT:-/opt/ai-store}"
+SRC="$ROOT/src"
+ENV_FILE="$ROOT/.env"
+NGX_CONF=/etc/nginx/sites-available/ai-store.conf
+NGX_LINK=/etc/nginx/sites-enabled/ai-store.conf
+SNIP=/etc/nginx/snippets
+
+say() { printf '\n== %s\n' "$*"; }
+die() { printf 'ОШИБКА: %s\n' "$*" >&2; exit 1; }
+need_root() { [[ $EUID -eq 0 ]] || die "запустите от root: sudo ai-store $*"; }
+# AI_STORE_COMPOSE_EXTRA: дополнительный файл compose (используется только в tests/smoke.sh)
+dc() {
+  local files=(-f "$SRC/deploy/shared/compose.yml")
+  [[ -n ${AI_STORE_COMPOSE_EXTRA:-} ]] && files+=(-f "$AI_STORE_COMPOSE_EXTRA")
+  ENV_FILE="$ENV_FILE" docker compose -p ai-store --env-file "$ENV_FILE" "${files[@]}" "$@"
+}
+envget() { grep -E "^$1=" "$ENV_FILE" | head -1 | cut -d= -f2-; }
+rnd() { openssl rand -hex "${1:-24}"; }
+
+# Перед сборкой: сборка сайта на пике занимает около 2 ГБ; при нехватке памяти система
+# могла бы остановить соседний проект, поэтому лучше отказаться заранее.
+check_memory() {
+  local avail swap
+  avail=$(awk '/MemAvailable/{print int($2/1024)}' /proc/meminfo)
+  swap=$(awk '/SwapFree/{print int($2/1024)}' /proc/meminfo)
+  if (( avail + swap < ${MIN_FREE_MB:-2500} )); then
+    die "свободно ${avail} МБ памяти и ${swap} МБ подкачки, для сборки нужно ${MIN_FREE_MB:-2500} МБ. Добавьте подкачку: ai-store add-swap"
+  fi
+}
+
+render_nginx() { # $1 = http | tls
+  local site api media s3 f
+  site=$(envget SITE_DOMAIN); api=$(envget API_DOMAIN); media=$(envget MEDIA_DOMAIN); s3=$(envget S3_DOMAIN)
+  f=$(mktemp)
+  sed -e "s/__SITE__/$site/g; s/__API__/$api/g; s/__MEDIA__/$media/g; s/__S3__/$s3/g" \
+      -e "s/__WEB_PORT__/$(envget WEB_PORT)/g; s/__API_PORT__/$(envget API_PORT)/g; s/__S3_PORT__/$(envget S3_PORT)/g" \
+      -e "s/__BUCKET__/$(envget S3_BUCKET)/g" "$SRC/deploy/shared/nginx/ai-store.conf.tmpl" > "$f"
+  if [[ $1 == tls ]]; then sed -i 's/^#TLS# \{0,1\}//' "$f"; else sed -i '/^#TLS#/d' "$f"; fi
+  mkdir -p "$SNIP"
+  install -m 644 "$SRC/deploy/shared/nginx/ai-store-proxy.conf" "$SNIP/ai-store-proxy.conf"
+  sed "s/__SITE__/$site/g" "$SRC/deploy/shared/nginx/ai-store-tls.conf.tmpl" > "$SNIP/ai-store-tls.conf"
+  # прежний файл сохраняем: если новая настройка не проходит проверку, nginx остаётся как был
+  [[ -f $NGX_CONF ]] && cp -p "$NGX_CONF" "$NGX_CONF.bak"
+  install -m 644 "$f" "$NGX_CONF"; rm -f "$f"
+  ln -sfn "$NGX_CONF" "$NGX_LINK"
+  if ! nginx -t 2>/tmp/ai-store-nginx.err; then
+    cat /tmp/ai-store-nginx.err >&2
+    if [[ -f $NGX_CONF.bak ]]; then mv "$NGX_CONF.bak" "$NGX_CONF"; else rm -f "$NGX_CONF" "$NGX_LINK"; fi
+    die "nginx не принял настройку магазина; она отменена, остальные сайты не затронуты"
+  fi
+  rm -f "$NGX_CONF.bak"
+  systemctl reload nginx
+}
+
+cmd_install() {
+  need_root install
+  local domain="${1:-}" email="${2:-}"
+  [[ -n $domain && -n $email ]] || die "нужно: ai-store install <домен> <email>, например: ai-store install shop.optolink.uz admin@optolink.uz"
+  [[ -d $SRC/deploy/shared ]] || die "нет кода в $SRC (см. docs/SHARED_SERVER.md, шаг 1)"
+
+  say "Проверка сервера"
+  command -v nginx >/dev/null || die "nginx не найден: эта установка рассчитана на сервер, где сайты принимает nginx"
+  command -v certbot >/dev/null || die "certbot не найден (нужен для сертификатов)"
+  certbot plugins 2>/dev/null | grep -q nginx || die "у certbot нет модуля nginx: apt-get install -y python3-certbot-nginx"
+  command -v openssl >/dev/null || die "openssl не найден"
+  local web_port="${WEB_PORT:-3100}" api_port="${API_PORT:-8180}" s3_port="${S3_PORT:-9100}" p
+  if [[ ! -f $ENV_FILE ]]; then
+    for p in "$web_port" "$api_port" "$s3_port"; do
+      ! ss -tln | awk '{print $4}' | grep -qE "[:.]$p\$" || die "порт $p уже занят; задайте другой: WEB_PORT=… API_PORT=… S3_PORT=… ai-store install …"
+    done
+  fi
+  local free_gb; free_gb=$(df -BG --output=avail "$ROOT" | tail -1 | tr -dc 0-9)
+  (( free_gb >= ${MIN_DISK_GB:-8} )) || die "на диске свободно ${free_gb} ГБ, нужно не меньше ${MIN_DISK_GB:-8}"
+  check_memory
+  local myips name; myips=" $(hostname -I) "
+  for name in "$domain" "api.$domain" "media.$domain" "s3.$domain"; do
+    local ip; ip=$(getent ahostsv4 "$name" | awk 'NR==1{print $1}')
+    [[ -n $ip ]] || die "$name не находится в DNS: создайте A-записи (docs/SHARED_SERVER.md)"
+    [[ $myips == *" $ip "* || -n ${SKIP_DNS_CHECK:-} ]] || die "$name указывает на $ip, а не на этот сервер ($myips)"
+  done
+
+  if ! command -v docker >/dev/null || ! docker compose version >/dev/null 2>&1; then
+    say "Установка Docker"
+    apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker.io docker-compose-v2
+  fi
+
+  if [[ ! -f $ENV_FILE ]]; then
+    say "Создание $ENV_FILE (пароли генерируются случайно)"
+    umask 077
+    cat > "$ENV_FILE" <<EOF
+# Настройки AI-магазина. После правки: ai-store restart
+SITE_DOMAIN=$domain
+API_DOMAIN=api.$domain
+MEDIA_DOMAIN=media.$domain
+S3_DOMAIN=s3.$domain
+ACME_EMAIL=$email
+WEB_PORT=$web_port
+API_PORT=$api_port
+S3_PORT=$s3_port
+DATA_DIR=$ROOT/data
+S3_BUCKET=boutique-media
+POSTGRES_PASSWORD=$(rnd)
+REDIS_PASSWORD=$(rnd)
+MINIO_ROOT_USER=app$(rnd 8)
+MINIO_ROOT_PASSWORD=$(rnd)
+JWT_SECRET=$(rnd 32)
+OTP_PEPPER=$(rnd 24)
+INTERNAL_API_TOKEN=$(rnd 32)
+
+# staging = тестовый запуск: коды входа пишутся в журнал (ai-store logs api), письма и SMS не уходят.
+# Для реальных покупателей: APP_ENV=prod, MAIL_PROVIDER=smtp и заполненные SMTP_*.
+APP_ENV=staging
+SITE_URL=https://$domain
+OTP_ALLOWED_PREFIXES=+998
+EMAIL_AUTH_ENABLED=true
+MAIL_PROVIDER=log
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASSWORD=
+MAIL_FROM=Boutique <no-reply@$domain>
+GOOGLE_CLIENT_IDS=
+SMS_AUTH_ENABLED=false
+SMS_PROVIDER=log
+ORDER_SMS_ENABLED=false
+# AI-примерка выключена (включение: docs/TRYON.md и TRYON_ENABLED=true, затем ai-store update)
+TRYON_PROVIDER=off
+TRYON_ENABLED=false
+# Telegram-бот (docs/NOTIFICATIONS.md); включается, когда задан токен
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_BOT_USERNAME=
+TELEGRAM_WEBHOOK_SECRET=$(rnd 24)
+TELEGRAM_WEBHOOK_URL=https://api.$domain/v1/telegram/webhook
+# Оплата (docs/PAYMENTS.md); включается, когда заполнены ключи
+PAYMENT_RETURN_URL=https://$domain/account/balance
+CLICK_SERVICE_ID=
+CLICK_MERCHANT_ID=
+CLICK_SECRET_KEY=
+CLICK_ALLOWED_IPS=
+PAYME_MERCHANT_ID=
+PAYME_KEY=
+PAYME_ALLOWED_IPS=
+EOF
+    umask 022
+  else
+    say "$ENV_FILE уже есть, оставляю как есть"
+  fi
+  mkdir -p "$ROOT/data/postgres" "$ROOT/data/redis" "$ROOT/data/minio" "$ROOT/backups"
+  chmod 700 "$ROOT/data" "$ROOT/backups"
+  ln -sfn "$SRC/deploy/shared/ai-store" /usr/local/bin/ai-store
+
+  say "nginx и сертификаты"
+  local site; site=$(envget SITE_DOMAIN)
+  if [[ ! -f /etc/letsencrypt/live/$site/fullchain.pem ]]; then
+    render_nginx http
+    certbot certonly --nginx --non-interactive --agree-tos -m "$(envget ACME_EMAIL)" --cert-name "$site" \
+      -d "$site" -d "$(envget API_DOMAIN)" -d "$(envget MEDIA_DOMAIN)" -d "$(envget S3_DOMAIN)" \
+      --deploy-hook "systemctl reload nginx"
+  fi
+  render_nginx tls
+
+  say "Сборка и запуск (первый раз 5–10 минут)"
+  dc build
+  dc up -d
+  wait_ready
+
+  cat > /etc/cron.d/ai-store <<EOF
+# Ночная копия базы и фото AI-магазина в $ROOT/backups
+10 2 * * * root /usr/local/bin/ai-store backup >> $ROOT/backups/backup.log 2>&1
+EOF
+  cat > "$ROOT/README.txt" <<EOF
+AI-магазин (https://$site). Всё, что относится к проекту, лежит в этой папке:
+  src/       код из GitHub (обновление: ai-store update)
+  .env       настройки и пароли (после правки: ai-store restart)
+  data/      база (postgres), фото (minio), redis
+  backups/   ночные копии базы и фото, хранятся 7 дней
+Вне папки: /etc/nginx/sites-available/ai-store.conf, /etc/nginx/snippets/ai-store-*.conf,
+/etc/cron.d/ai-store, /usr/local/bin/ai-store, сертификат /etc/letsencrypt/live/$site.
+Команды: ai-store status | update | restart | logs [api|web|postgres|minio] | backup | create-admin <логин>
+EOF
+  say "Готово: https://$site"
+  echo "Дальше: ai-store create-admin <логин>   (вход в панель: https://$site/admin)"
+}
+
+wait_ready() {
+  local i api_port web_port; api_port=$(envget API_PORT); web_port=$(envget WEB_PORT)
+  for i in $(seq 1 60); do
+    if curl -fsS -m 3 "http://127.0.0.1:$api_port/readyz" >/dev/null 2>&1 &&
+       curl -fsS -m 3 "http://127.0.0.1:$web_port/api/healthz" >/dev/null 2>&1; then
+      echo "API и сайт отвечают"; return 0
+    fi
+    sleep 3
+  done
+  dc ps
+  die "сервисы не ответили за 3 минуты: ai-store logs api"
+}
+
+cmd_status() {
+  dc ps
+  local site; site=$(envget SITE_DOMAIN)
+  printf '\nAPI:  %s\n' "$(curl -sS -m 5 "http://127.0.0.1:$(envget API_PORT)/readyz" 2>&1)"
+  printf 'Сайт: %s\n' "$(curl -sS -m 5 -o /dev/null -w '%{http_code}' "http://127.0.0.1:$(envget WEB_PORT)/api/healthz" 2>&1)"
+  printf 'Снаружи: %s\n' "$(curl -sS -m 8 -o /dev/null -w '%{http_code}' "https://$site/api/healthz" 2>&1)"
+  printf 'Место: %s   Память, свободно: %s МБ\n' "$(du -sh "$ROOT" 2>/dev/null | cut -f1)" "$(awk '/MemAvailable/{print int($2/1024)}' /proc/meminfo)"
+}
+
+cmd_update() {
+  need_root update
+  check_memory
+  say "Копия базы перед обновлением"; cmd_backup db
+  say "Новый код"; git -C "$SRC" pull --ff-only
+  render_nginx tls
+  say "Сборка"; dc build
+  say "Запуск"; dc up -d
+  wait_ready
+  docker image prune -f >/dev/null
+}
+
+cmd_backup() {
+  need_root backup
+  local ts out; ts=$(date +%Y%m%d-%H%M%S); out="$ROOT/backups"
+  umask 077
+  dc exec -T postgres pg_dump -U boutique -Fc boutique > "$out/db-$ts.dump.tmp"
+  mv "$out/db-$ts.dump.tmp" "$out/db-$ts.dump"
+  echo "$(date -Is) база: $out/db-$ts.dump ($(du -h "$out/db-$ts.dump" | cut -f1))"
+  if [[ ${1:-all} != db ]]; then
+    tar -C "$ROOT/data" -czf "$out/media-$ts.tar.gz.tmp" minio
+    mv "$out/media-$ts.tar.gz.tmp" "$out/media-$ts.tar.gz"
+    echo "$(date -Is) фото: $out/media-$ts.tar.gz ($(du -h "$out/media-$ts.tar.gz" | cut -f1))"
+  fi
+  find "$out" -maxdepth 1 -type f \( -name 'db-*.dump' -o -name 'media-*.tar.gz' -o -name '*.tmp' \) -mtime +"${BACKUP_KEEP_DAYS:-7}" -delete
+}
+
+cmd_create_admin() {
+  need_root create-admin
+  local login="${1:-}" pw pw2
+  [[ -n $login ]] || die "нужно: ai-store create-admin <логин>"
+  read -rsp "Пароль администратора (не короче 10 символов): " pw; echo
+  read -rsp "Ещё раз: " pw2; echo
+  [[ $pw == "$pw2" ]] || die "пароли не совпали"
+  dc exec -T -e ADMIN_PASSWORD="$pw" api /api create-admin "$login"
+}
+
+cmd_add_swap() {
+  need_root add-swap
+  [[ $(swapon --noheadings | wc -l) -eq 0 ]] || die "подкачка уже есть: $(swapon --noheadings | awk '{print $1, $3}')"
+  fallocate -l 2G /swapfile-ai-store && chmod 600 /swapfile-ai-store && mkswap /swapfile-ai-store >/dev/null && swapon /swapfile-ai-store
+  echo '/swapfile-ai-store none swap sw 0 0' >> /etc/fstab
+  echo "Добавлено 2 ГБ подкачки (/swapfile-ai-store)"
+}
+
+[[ ${1:-} == install || -f $ENV_FILE ]] || die "магазин ещё не установлен (нет $ENV_FILE)"
+case "${1:-}" in
+  install) shift; cmd_install "$@" ;;
+  status) cmd_status ;;
+  update) cmd_update ;;
+  restart) need_root restart; dc up -d --force-recreate api web; wait_ready ;;
+  logs) shift; dc logs --tail "${TAIL:-200}" -f "$@" ;;
+  backup) cmd_backup all ;;
+  create-admin) shift; cmd_create_admin "$@" ;;
+  add-swap) cmd_add_swap ;;
+  env) echo "$ENV_FILE" ;;
+  *) sed -n '2,6p' "$0"; exit 1 ;;
+esac
