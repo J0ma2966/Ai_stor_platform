@@ -2,7 +2,7 @@
 # что и сайт, и при падении сервера сами ничего не пришлют. Эта проверка идёт из GitHub
 # раз в 5 минут и пишет в Telegram, если сайт или API не отвечают.
 # Настройка (Settings → Secrets and variables → Actions, уровень репозитория):
-#   Variables: UPTIME_URLS (через пробел, например https://api.shop.uz/readyz https://shop.uz/api/healthz),
+#   Variables: UPTIME_URLS (через пробел, например https://api.shop.optolink.uz/readyz https://shop.optolink.uz/api/healthz),
 #              UPTIME_TELEGRAM_CHAT_ID
 #   Secrets:   UPTIME_TELEGRAM_BOT_TOKEN (можно тот же бот, что и для алертов)
 # Без UPTIME_URLS проверка ничего не делает. GitHub может задерживать запуски по расписанию

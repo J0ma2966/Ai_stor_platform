@@ -22,11 +22,11 @@
    username (например, `butik_orders_bot`). Получите токен.
 2. В `app.env`:
    ```
-   SITE_URL=https://shop.uz
+   SITE_URL=https://shop.optolink.uz
    TELEGRAM_BOT_TOKEN=<токен>
    TELEGRAM_BOT_USERNAME=butik_orders_bot
    TELEGRAM_WEBHOOK_SECRET=<сгенерирован init-env.sh>
-   TELEGRAM_WEBHOOK_URL=https://api.shop.uz/v1/telegram/webhook
+   TELEGRAM_WEBHOOK_URL=https://api.shop.optolink.uz/v1/telegram/webhook
    ```
 3. Перезапустите API — он сам вызовет `setWebhook`. Проверка:
    `curl https://api.telegram.org/bot<токен>/getWebhookInfo` — `url` заполнен, `last_error_message` пуст.

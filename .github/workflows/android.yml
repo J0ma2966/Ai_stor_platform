@@ -9,10 +9,10 @@ on:
   workflow_dispatch:
     inputs:
       api_url:
-        description: "Адрес API, только https (например https://api.example.uz)"
+        description: "Адрес API, только https (например https://api.shop.optolink.uz)"
         required: true
       site_url:
-        description: "Адрес сайта (например https://example.uz)"
+        description: "Адрес сайта (например https://shop.optolink.uz)"
         required: true
 
 permissions:
