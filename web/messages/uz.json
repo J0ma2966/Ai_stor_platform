@@ -19,7 +19,11 @@
     "all": "Hammasi",
     "yes": "Ha",
     "no": "Yo‘q",
-    "skip": "Asosiy qismga o‘tish"
+    "skip": "Asosiy qismga o‘tish",
+    "theme": "Mavzu",
+    "themeSystem": "Tizimdagidek",
+    "themeLight": "Yorug‘",
+    "themeDark": "Qorong‘i"
   },
   "errors": {
     "requestId": "Qo‘llab-quvvatlash uchun kod: {id}",
@@ -357,7 +361,8 @@
     "promoStores": "Shahardagi barcha butiklar",
     "promoGo": "Ko‘rish",
     "adv5": "Qabul qilganda to‘lov",
-    "adv5t": "Buyurtma qo‘lingizga yetganda to‘laysiz."
+    "adv5t": "Buyurtma qo‘lingizga yetganda to‘laysiz.",
+    "heroEyebrow": "Yangi mavsum"
   },
   "catalog": {
     "title": "Katalog",

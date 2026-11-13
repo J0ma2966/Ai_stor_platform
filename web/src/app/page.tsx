@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { getLocale, getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
-import { catName, fetchCategories, fetchProducts, fetchStores, type Category, type Product, type Store } from "@/lib/catalog";
+import { catName, frontImage, fetchCategories, fetchProducts, fetchStores, type Category, type Product, type Store } from "@/lib/catalog";
 import { alternates, siteUrl } from "@/lib/site";
 import { ProductGrid } from "@/components/ProductGrid";
 import { StoreCard } from "@/components/StoreCard";
@@ -37,12 +37,19 @@ export default async function Home() {
     safe<Store[]>(fetchStores(), []),
     safe<Product[]>(fetchPromoted(), []),
   ]);
+  // фото для большой карточки, как в приложении: первый популярный товар (или новинка) с фото
+  const heroImg = [...popular.items, ...fresh.items].map(frontImage).find(Boolean) ?? "";
   return (
     <div className="stack-lg">
       <JsonLd data={{ "@context": "https://schema.org", "@type": "Organization", name: "Butik", url: siteUrl() }} />
       <div className="home-top">
         <section className="hero" aria-labelledby="h-hero">
-          <span className="hero-tag">{t("heroTag")}</span>
+          {heroImg && (
+            <div className="hero-photo" aria-hidden="true">
+              <img src={heroImg} alt="" fetchPriority="high" />
+            </div>
+          )}
+          <span className="eyebrow">{t("heroTag")}</span>
           <h1 id="h-hero">{TRYON_ENABLED ? t("heroTitle") : t("heroTitleShop")}</h1>
           <p>{TRYON_ENABLED ? t("heroText") : t("heroTextShop")}</p>
           <div className="row wrap">
@@ -61,6 +68,7 @@ export default async function Home() {
         </section>
         <div className="promo-col">
           <Link href="/catalog?sort=new" className="promo promo-yellow">
+            <span className="eyebrow">{t("heroEyebrow")}</span>
             <span className="promo-title">{t("promoNew")}</span>
             <span className="promo-go">{t("promoGo")} <Icon name="arrow" size={18} strokeWidth={2.2} /></span>
           </Link>

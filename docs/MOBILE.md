@@ -39,7 +39,7 @@ BOUTIQUE_IT_STORE_LOGIN=shop BOUTIQUE_IT_STORE_PASSWORD=... \
 ## Адрес API
 
 - debug: `http://10.0.2.2:8080` (localhost компьютера из эмулятора); в debug-сборке адрес меняется кнопкой «Сервер» на экране входа (и в профиле клиента).
-- release: `boutique.apiUrl` в `mobile/gradle.properties` (сейчас заглушка `https://api.boutique.uz`), только HTTPS.
+- release: `boutique.apiUrl` в `mobile/gradle.properties` (`https://api.shop.optolink.uz`), только HTTPS.
 
 ## Подпись release
 

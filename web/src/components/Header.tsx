@@ -9,13 +9,15 @@ import { api } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { TRYON_ENABLED } from "@/lib/fitting";
 import { Icon } from "./Icon";
+import { ThemeSwitch } from "./ThemeSwitch";
+import type { Theme } from "@/lib/theme";
 
 function Badge({ n }: { n: number }) {
   if (n <= 0) return null;
   return <span className="count-badge" aria-hidden="true">{n > 99 ? "99+" : n}</span>;
 }
 
-export function Header() {
+export function Header({ theme = "system" }: { theme?: Theme }) {
   const t = useTranslations();
   const locale = useLocale();
   const pathname = usePathname();
@@ -77,6 +79,7 @@ export function Header() {
         <div className="header-actions">
           {/* обычная ссылка на ту же страницу на другом языке (для роботов и «открыть в новой вкладке»),
               а по клику язык меняется на месте, без перехода */}
+          <ThemeSwitch initial={theme} />
           <a
             href={localizePath(pathname + (query ? `?${query}` : ""), other)}
             hrefLang={other}

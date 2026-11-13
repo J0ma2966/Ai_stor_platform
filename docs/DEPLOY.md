@@ -8,7 +8,7 @@
 
 ```
                         браузер клиента (UZ)
-   https://shop.uz · api.shop.uz · s3.shop.uz · media.shop.uz
+   https://shop.optolink.uz · api.shop.optolink.uz · s3.shop.optolink.uz · media.shop.optolink.uz
                                │
  ┌─────────────────────────────▼──────────── сервер, Узбекистан ─┐
  │ Caddy (TLS, Let's Encrypt) ─┬─► web1..web6 (сайт Next.js)      │
@@ -55,7 +55,7 @@
 
 ## 3. Что нужно от вас
 
-1. **Домен** (например, `shop.uz`) и доступ к его DNS.
+1. **Доступ к DNS домена `optolink.uz`**: проект работает на поддомене `shop.optolink.uz`.
 2. **Сервер в Узбекистане** с Ubuntu 24.04 LTS или Debian 12 (размер в разделе 2) и root-доступ по SSH-ключу.
 3. **S3-хранилище в Узбекистане у другого провайдера** для бэкапов: endpoint, ключ доступа, секрет. Включите на бакетах versioning (защита от удаления).
 4. **Telegram-бот для алертов**: создайте бота у @BotFather, добавьте его в группу дежурных, узнайте chat id группы (например, через @getidsbot).
@@ -65,19 +65,26 @@
 ## 4. Первый запуск по шагам
 
 ### 4.1. DNS
-| Запись | Куда |
-|---|---|
-| `shop.uz`, `www.shop.uz`, `api.shop.uz`, `s3.shop.uz`, `media.shop.uz` | A → публичный IP сервера |
+Проект живёт на поддомене `shop.optolink.uz` домена `optolink.uz`. В панели DNS домена `optolink.uz` создайте две записи:
+
+| Тип | Имя | Значение |
+|---|---|---|
+| A | `shop` | публичный IP сервера |
+| A | `*.shop` | публичный IP сервера |
+
+Вторая запись покрывает `api.`, `s3.`, `media.`, `www.` и тестовые адреса `staging.shop.optolink.uz`, `api.staging.shop.optolink.uz` и т.д. Если панель не умеет записи со звёздочкой, создайте вместо неё отдельные A-записи `api.shop`, `s3.shop`, `media.shop`, `www.shop`. Основной сайт `optolink.uz` эти записи не затрагивают.
+
+Переменные окружения `production` в GitHub: `SITE_DOMAIN=shop.optolink.uz`, `API_DOMAIN=api.shop.optolink.uz`, `S3_DOMAIN=s3.shop.optolink.uz`, `MEDIA_DOMAIN=media.shop.optolink.uz` (те же значения `init-env.sh` пишет в `.env`).
 
 Сертификаты Let's Encrypt Caddy получит сам при первом запуске; порты 80 и 443 должны быть открыты.
 
-**Не ставьте CDN или второй прокси перед `api.shop.uz`.** API определяет IP клиента по последнему адресу в `X-Forwarded-For`, а Caddy перезаписывает этот заголовок. От этого зависят лимиты запросов и allowlist IP вебхуков Click/Payme. CDN можно ставить только перед `media.shop.uz` (публичные фото товаров).
+**Не ставьте CDN или второй прокси перед `api.shop.optolink.uz`.** API определяет IP клиента по последнему адресу в `X-Forwarded-For`, а Caddy перезаписывает этот заголовок. От этого зависят лимиты запросов и allowlist IP вебхуков Click/Payme. CDN можно ставить только перед `media.shop.optolink.uz` (публичные фото товаров).
 
 ### 4.2. Секреты
 На своём компьютере (Windows, PowerShell, нужен Docker Desktop), в корне репозитория:
 
 ```powershell
-docker run --rm -it -v ${PWD}:/w -w /w alpine:3.22 sh -c "apk add -q bash openssl age && bash deploy/prod/scripts/init-env.sh secrets-out shop.uz admin@shop.uz"
+docker run --rm -it -v ${PWD}:/w -w /w alpine:3.22 sh -c "apk add -q bash openssl age && bash deploy/prod/scripts/init-env.sh secrets-out shop.optolink.uz admin@optolink.uz"
 ```
 
 В папке `secrets-out` появятся `app.env`, `db.env`, `edge.env`, `age-identity.txt` и `github-variables.txt` со случайными паролями (по умолчанию для одного сервера; для нескольких добавьте `TOPOLOGY=multi` перед `bash`, тогда появится и `replica.env`). В `db.env` впишите данные офсайт-S3 (строки `CHANGE-ME`), в `edge.env` впишите `TELEGRAM_CHAT_ID`, в `app.env` — SMTP, Telegram-бот и Google (docs/AUTH.md). Файл `age-identity.txt` дополнительно сохраните офлайн (в менеджере паролей): без него зашифрованные дампы не прочитать. Папку `secrets-out` не коммитьте и удалите, когда перенесёте всё в GitHub.
@@ -88,7 +95,7 @@ Settings → Environments → **New environment** `production` (и `staging`, е
 - **Secrets**: `ENV_APP`, `ENV_DB`, `ENV_EDGE` (содержимое файлов целиком), `AGE_IDENTITY` (содержимое `age-identity.txt`), `TELEGRAM_BOT_TOKEN`, `SSH_PRIVATE_KEY` (новый ключ только для деплоя: `ssh-keygen -t ed25519 -f deploy_key`), `SSH_KNOWN_HOSTS` (`ssh-keyscan <ip сервера>`).
 - **Variables**: из `github-variables.txt`, плюс `APP_SSH_HOST`, `DB_SSH_HOST`, `EDGE_SSH_HOST`: все три равны публичному IP сервера (по совпадению адресов CD понимает, что сервер один). `REPLICA_*` не задавайте.
 
-Внешняя проверка доступности (Settings → Secrets and variables → Actions, на уровне репозитория, не окружения): переменные `UPTIME_URLS` (`https://api.shop.uz/readyz https://shop.uz/api/healthz`) и `UPTIME_TELEGRAM_CHAT_ID`, секрет `UPTIME_TELEGRAM_BOT_TOKEN`. Раз в 5 минут GitHub проверяет сайт и API и пишет в Telegram, если они не отвечают. Это нужно, потому что встроенный мониторинг стоит на том же сервере и при его падении молчит.
+Внешняя проверка доступности (Settings → Secrets and variables → Actions, на уровне репозитория, не окружения): переменные `UPTIME_URLS` (`https://api.shop.optolink.uz/readyz https://shop.optolink.uz/api/healthz`) и `UPTIME_TELEGRAM_CHAT_ID`, секрет `UPTIME_TELEGRAM_BOT_TOKEN`. Раз в 5 минут GitHub проверяет сайт и API и пишет в Telegram, если они не отвечают. Это нужно, потому что встроенный мониторинг стоит на том же сервере и при его падении молчит.
 
 Секреты хранятся только в GitHub (зашифрованы) и на самих серверах в файлах `/opt/boutique/prod/<роль>/.env` с правами 600. В репозитории секретов нет; gitleaks в CI это проверяет.
 
@@ -111,7 +118,7 @@ ssh root@<сервер> 'cd /opt/boutique/prod/app && docker compose --profile t
 ```
 
 ### 4.7. Проверка
-- `https://api.shop.uz/readyz` отвечает `{"db":"ok","redis":"ok"}`, сайт открывается.
+- `https://api.shop.optolink.uz/readyz` отвечает `{"db":"ok","redis":"ok"}`, сайт открывается.
 - В Grafana (`http://10.77.0.10:3000` через WireGuard, пользователь `admin`, пароль `GRAFANA_ADMIN_PASSWORD` из `app.env`) на дашборде «Boutique — обзор» видны все сервисы.
 - В Telegram пришло тестовое сообщение: Alerts → любое правило → или временно остановите один `api` и через 2 минуты придёт `TargetDown`.
 - Через сутки в S3 появились `wal/` и `daily/`, алертов `BaseBackupTooOld` нет.
@@ -152,7 +159,7 @@ RPO ≤ 1 минута. RTO: на одном сервере 1–3 часа (но
 
 ## 8. Staging
 
-Те же файлы и та же схема, отдельное окружение `staging` в GitHub со своими серверами и доменами (`staging.shop.uz`, `api.staging.shop.uz`, …): `init-env.sh secrets-staging shop.uz admin@shop.uz staging`. Для staging хватит одного небольшого сервера (4 vCPU, 8 ГБ). `init-env.sh … staging` сам ставит `APP_ENV=staging` и `SMS_PROVIDER=log`: коды SMS пишутся в лог, а реальные SMS не отправляются.
+Те же файлы и та же схема, отдельное окружение `staging` в GitHub со своими серверами и доменами (`staging.shop.optolink.uz`, `api.staging.shop.optolink.uz`, …): `init-env.sh secrets-staging shop.optolink.uz admin@optolink.uz staging`. Для staging хватит одного небольшого сервера (4 vCPU, 8 ГБ). `init-env.sh … staging` сам ставит `APP_ENV=staging` и `SMS_PROVIDER=log`: коды SMS пишутся в лог, а реальные SMS не отправляются.
 
 ## 9. Рост: несколько серверов
 
