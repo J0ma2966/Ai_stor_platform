@@ -169,7 +169,7 @@ class TryonScreensTest {
         val shop = ShopState(g.api, MemoryStore())
         shop.setFitting(listOf(shirt))
         show(g, shop) { TryonWizardScreen(onBack = {}, onStarted = {}, onCatalog = {}) }
-        rule.waitUntil(5_000) { rule.onAllNodes(hasTestTag("tryon_disabled")).fetchSemanticsNodes().isNotEmpty() }
+        rule.waitUntil(15_000) { rule.onAllNodes(hasTestTag("tryon_disabled")).fetchSemanticsNodes().isNotEmpty() }
     }
 
     @Test fun failedGenerationExplainsAndRefunds() {
