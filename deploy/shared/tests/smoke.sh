@@ -52,7 +52,8 @@ step "install"
 mkdir -p $AI_STORE_ROOT && cp -r "$repo" $AI_STORE_ROOT/src
 bash $AI_STORE_ROOT/src/deploy/shared/ai-store install $D ops@$D
 check "ai-store command installed" test -x /usr/local/bin/ai-store
-check ".env is private" bash -c '[[ $(stat -c %a /opt/ai-store/.env) == 600 ]]'
+echo ".env mode: $(stat -c '%a %U' /opt/ai-store/.env)"
+check ".env is private" test "$(stat -c %a /opt/ai-store/.env)" = 600
 check "neighbour site still answers" bash -c '[[ $(curl -s http://127.0.0.1/) == neighbour-ok ]]'
 check "nothing listens on public addresses except nginx" bash -c "! ss -tlnH | awk '{print \$4}' | grep -E ':(3100|8180|9100)\$' | grep -v '^127\.0\.0\.1:'"
 

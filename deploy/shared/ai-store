@@ -154,6 +154,7 @@ EOF
   else
     say "$ENV_FILE уже есть, оставляю как есть"
   fi
+  chmod 600 "$ENV_FILE"
   mkdir -p "$ROOT/data/postgres" "$ROOT/data/redis" "$ROOT/data/minio" "$ROOT/backups"
   chmod 700 "$ROOT/data" "$ROOT/backups"
   ln -sfn "$SRC/deploy/shared/ai-store" /usr/local/bin/ai-store
