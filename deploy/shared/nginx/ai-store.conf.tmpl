@@ -3,8 +3,26 @@
 server {
     listen 80;
     listen [::]:80;
-    server_name __SITE__ __API__ __MEDIA__ __S3__;
-    location / { return 301 https://$host$request_uri; }
+    server_name __SITE__;
+    location / { return 301 https://$server_name$request_uri; }
+}
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __API__;
+    location / { return 301 https://$server_name$request_uri; }
+}
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __MEDIA__;
+    location / { return 301 https://$server_name$request_uri; }
+}
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __S3__;
+    location / { return 301 https://$server_name$request_uri; }
 }
 #TLS# # --- Сайт ---
 #TLS# server {
