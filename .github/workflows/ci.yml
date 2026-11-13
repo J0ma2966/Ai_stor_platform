@@ -124,3 +124,15 @@ jobs:
         run: |
           sudo apt-get install -y -qq age >/dev/null   # age-keygen для init-env.sh
           sudo env "PATH=$PATH" SMOKE_MODE=${{ matrix.mode }} REGISTRY=local/boutique TAG=smoke1 TAG2=smoke2 deploy/prod/tests/smoke.sh
+
+  # Установка на общий сервер (deploy/shared): рядом с чужим сайтом nginx ставится магазин
+  # командой ai-store install; проверяются сайт, API, загрузка фото и откат плохой настройки.
+  shared-server-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Static checks
+        run: shellcheck -S warning deploy/shared/ai-store deploy/shared/tests/smoke.sh
+      - name: Install next to an existing nginx site and test
+        run: sudo env "PATH=$PATH" deploy/shared/tests/smoke.sh
