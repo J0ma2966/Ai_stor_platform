@@ -180,11 +180,18 @@ class ClientScreensTest {
                 }
             }
         }
-        rule.waitUntil(10_000) { rule.onAllNodes(hasTestTag("telegram")).fetchSemanticsNodes().isNotEmpty() }
+        // в CI ответ /v1/auth/methods иногда приходит не сразу: двигаем main looper, пока ждём
+        rule.waitUntil(20_000) {
+            org.robolectric.shadows.ShadowLooper.idleMainLooper(50, java.util.concurrent.TimeUnit.MILLISECONDS)
+            rule.onAllNodes(hasTestTag("telegram")).fetchSemanticsNodes().isNotEmpty()
+        }
         rule.onNodeWithTag("email_login").assertExists()
         assertEquals(0, rule.onAllNodes(hasTestTag("phone")).fetchSemanticsNodes().size)
         rule.onNodeWithTag("telegram").performScrollTo().performClick()
-        rule.waitUntil(5_000) { rule.onAllNodes(hasTestTag("telegram_wait")).fetchSemanticsNodes().isNotEmpty() }
+        rule.waitUntil(20_000) {
+            org.robolectric.shadows.ShadowLooper.idleMainLooper(50, java.util.concurrent.TimeUnit.MILLISECONDS)
+            rule.onAllNodes(hasTestTag("telegram_wait")).fetchSemanticsNodes().isNotEmpty()
+        }
         // Сам опрос идёт через delay, а часы Robolectric в CI не двигаются надёжно:
         // здесь проверяем запуск входа, а опрос покрыт тестами бэкенда и сайта.
         val paths = generateSequence { server.takeRequest(1, java.util.concurrent.TimeUnit.SECONDS) }.take(50).map { it.path }.toList()
