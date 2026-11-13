@@ -145,7 +145,7 @@ fun ProfileScreen(onLogin: () -> Unit, onChangePassword: () -> Unit, onNotificat
             } else {
                 SectionCard {
                     Text(stringResource(UiR.string.profile_phone), style = MaterialTheme.typography.labelMedium, color = Brand.colors.muted)
-                    Text(Phone.display(me.value?.phone), style = MaterialTheme.typography.titleMedium)
+                    Text(me.value?.let { u -> if (u.phone == null && u.email != null) u.email!! else Phone.display(u.phone) } ?: "", style = MaterialTheme.typography.titleMedium)
                 }
                 SectionCard(Modifier.clickable(onClick = onNotifications)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -162,10 +162,14 @@ fun ProfileScreen(onLogin: () -> Unit, onChangePassword: () -> Unit, onNotificat
                         TextButton(onClick = onTryonPhotos) { Text(stringResource(UiR.string.tryon_my_photos)) }
                     }
                 }
-                SectionCard {
-                    SectionTitle(stringResource(UiR.string.profile_password))
-                    Text(stringResource(UiR.string.profile_password_text), color = Brand.colors.muted)
-                    SecondaryButton(stringResource(UiR.string.password_change_title), onClick = onChangePassword)
+                // Пароль нужен только для входа по почте (или по номеру, если включён SMS-вход).
+                val m = me.value
+                if (m != null && (m.email != null || m.hasPassword)) {
+                    SectionCard {
+                        SectionTitle(stringResource(UiR.string.profile_password))
+                        Text(stringResource(UiR.string.profile_password_text), color = Brand.colors.muted)
+                        SecondaryButton(stringResource(UiR.string.password_change_title), onClick = onChangePassword)
+                    }
                 }
             }
             SectionCard {

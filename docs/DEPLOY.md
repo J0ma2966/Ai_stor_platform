@@ -59,7 +59,7 @@
 2. **Сервер в Узбекистане** с Ubuntu 24.04 LTS или Debian 12 (размер в разделе 2) и root-доступ по SSH-ключу.
 3. **S3-хранилище в Узбекистане у другого провайдера** для бэкапов: endpoint, ключ доступа, секрет. Включите на бакетах versioning (защита от удаления).
 4. **Telegram-бот для алертов**: создайте бота у @BotFather, добавьте его в группу дежурных, узнайте chat id группы (например, через @getidsbot).
-5. Ключи SMS и оплаты. В `ENV_APP` уже есть пустые `ESKIZ_EMAIL`/`ESKIZ_PASSWORD`: без них API в prod не стартует. Click и Payme включаются, когда заполнены их ключи, и тогда обязательны `CLICK_ALLOWED_IPS`/`PAYME_ALLOWED_IPS` (адреса из договора с провайдером). Перед API не должно быть CDN, иначе проверка IP не сработает.
+5. Вход клиентов и оплата. В `ENV_APP` заполните SMTP (`SMTP_HOST`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM`) — без них API в prod не стартует, — токен Telegram-бота (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`) и `GOOGLE_CLIENT_IDS` (docs/AUTH.md). SMS-вход выключен, ключи Eskiz не нужны. Click и Payme включаются, когда заполнены их ключи, и тогда обязательны `CLICK_ALLOWED_IPS`/`PAYME_ALLOWED_IPS` (адреса из договора с провайдером). Перед API не должно быть CDN, иначе проверка IP не сработает.
 6. AI-примерка в первом релизе выключена: в `ENV_APP` стоит `TRYON_PROVIDER=off`, сайт собирается с `NEXT_PUBLIC_TRYON_ENABLED=false`. Воркер примерки, ключи Gemini/FASHN и биометрическое хранилище в UZ не нужны. Чтобы включить, укажите провайдера, `TRYON_API_KEY` и `BIOMETRIC_S3_*` в `ENV_APP`, добавьте сервис воркера и поставьте переменную окружения GitHub `TRYON_ENABLED=true`.
 
 ## 4. Первый запуск по шагам
@@ -80,7 +80,7 @@
 docker run --rm -it -v ${PWD}:/w -w /w alpine:3.22 sh -c "apk add -q bash openssl age && bash deploy/prod/scripts/init-env.sh secrets-out shop.uz admin@shop.uz"
 ```
 
-В папке `secrets-out` появятся `app.env`, `db.env`, `edge.env`, `age-identity.txt` и `github-variables.txt` со случайными паролями (по умолчанию для одного сервера; для нескольких добавьте `TOPOLOGY=multi` перед `bash`, тогда появится и `replica.env`). В `db.env` впишите данные офсайт-S3 (строки `CHANGE-ME`), в `edge.env` впишите `TELEGRAM_CHAT_ID`, в `app.env` — `ESKIZ_EMAIL` и `ESKIZ_PASSWORD`. Файл `age-identity.txt` дополнительно сохраните офлайн (в менеджере паролей): без него зашифрованные дампы не прочитать. Папку `secrets-out` не коммитьте и удалите, когда перенесёте всё в GitHub.
+В папке `secrets-out` появятся `app.env`, `db.env`, `edge.env`, `age-identity.txt` и `github-variables.txt` со случайными паролями (по умолчанию для одного сервера; для нескольких добавьте `TOPOLOGY=multi` перед `bash`, тогда появится и `replica.env`). В `db.env` впишите данные офсайт-S3 (строки `CHANGE-ME`), в `edge.env` впишите `TELEGRAM_CHAT_ID`, в `app.env` — SMTP, Telegram-бот и Google (docs/AUTH.md). Файл `age-identity.txt` дополнительно сохраните офлайн (в менеджере паролей): без него зашифрованные дампы не прочитать. Папку `secrets-out` не коммитьте и удалите, когда перенесёте всё в GitHub.
 
 ### 4.3. GitHub
 Settings → Environments → **New environment** `production` (и `staging`, если нужен):

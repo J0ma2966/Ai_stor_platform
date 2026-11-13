@@ -14,6 +14,12 @@ describe("csp", () => {
     const img = buildCsp("n", false).split("; ").find((d) => d.startsWith("img-src"))!;
     expect(img).toBe("img-src 'self' data: blob: https://cdn.example.com https://media.example.uz");
   });
+  it("allows only Google Identity Services for the Google button", () => {
+    const csp = buildCsp("n", false);
+    expect(csp).toContain("frame-src https://accounts.google.com/gsi/");
+    expect(csp).toContain("https://accounts.google.com/gsi/style");
+    expect(csp).not.toContain("frame-src *");
+  });
   it("generates unique nonces", () => {
     expect(newNonce()).not.toBe(newNonce());
   });

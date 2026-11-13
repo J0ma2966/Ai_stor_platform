@@ -72,6 +72,7 @@ class ClientScreensTest {
     @Test fun loginValidatesPhoneAndLogsIn() {
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse = when (request.path) {
+                "/v1/auth/methods" -> json(SMS_METHODS)
                 "/v1/auth/password/login" -> json("""{"data":{"access_token":"t","user":{"id":"u","role":"client"}}}""")
                     .addHeader("Set-Cookie", "rt=r; Path=/v1/auth; Max-Age=600; HttpOnly")
                 "/v1/me" -> json("""{"data":{"id":"u","role":"client","registration_complete":true,"has_password":true,"lang":"ru"}}""")
@@ -84,21 +85,24 @@ class ClientScreensTest {
         rule.setContent {
             CompositionLocalProvider(LocalGraph provides g, LocalShop provides ShopState(g.api)) {
                 BoutiqueTheme(dark = false) {
-                    LoginScreen(onBack = {}, onSms = {}, onForgot = {}, onDone = { done = true; next = it }, onRestart = {})
+                    LoginScreen(onBack = {}, onSms = {}, onForgot = {}, onEmail = {}, onDone = { done = true; next = it }, onRestart = {})
                 }
             }
         }
+        rule.waitUntil(5_000) { rule.onAllNodes(hasTestTag("phone")).fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithTag("phone").performTextClearance()
         rule.onNodeWithTag("phone").performTextInput("12345")
         rule.onNodeWithTag("password").performTextInput("secret-password")
         rule.onNodeWithTag("sign_in").performClick()
         rule.onNodeWithText("Введите номер Узбекистана: +998 XX XXX XX XX").assertExists()
 
+        rule.waitUntil(5_000) { rule.onAllNodes(hasTestTag("phone")).fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithTag("phone").performTextClearance()
         rule.onNodeWithTag("phone").performTextInput("90 123 45 67")
         rule.onNodeWithTag("sign_in").performClick()
         rule.waitUntil(5_000) { done }
         assertNull(next)
+        server.takeRequest() // /v1/auth/methods
         val login = server.takeRequest()
         assertEquals("""{"phone":"+998901234567","password":"secret-password"}""", login.body.readUtf8())
     }
@@ -106,6 +110,7 @@ class ClientScreensTest {
     @Test fun newSmsUserGoesToWelcome() {
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse = when (request.path) {
+                "/v1/auth/methods" -> json(SMS_METHODS)
                 "/v1/auth/password/login" -> json("""{"data":{"access_token":"t","user":{"id":"u","role":"client"}}}""")
                 "/v1/me" -> json("""{"data":{"id":"u","role":"client","registration_complete":false,"has_password":false}}""")
                 else -> MockResponse().setResponseCode(404)
@@ -116,10 +121,11 @@ class ClientScreensTest {
         rule.setContent {
             CompositionLocalProvider(LocalGraph provides g, LocalShop provides ShopState(g.api)) {
                 BoutiqueTheme(dark = false) {
-                    LoginScreen(onBack = {}, onSms = {}, onForgot = {}, onDone = { next = it }, onRestart = {})
+                    LoginScreen(onBack = {}, onSms = {}, onForgot = {}, onEmail = {}, onDone = { next = it }, onRestart = {})
                 }
             }
         }
+        rule.waitUntil(5_000) { rule.onAllNodes(hasTestTag("phone")).fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithTag("phone").performTextClearance()
         rule.onNodeWithTag("phone").performTextInput("901234567")
         rule.onNodeWithTag("password").performTextInput("secret-password")
@@ -129,20 +135,97 @@ class ClientScreensTest {
     }
 
     @Test fun wrongPasswordShowsServerError() {
-        server.enqueue(json("""{"error":{"code":"bad_credentials","message":"x"},"request_id":"r1"}""").setResponseCode(401))
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when (request.path) {
+                "/v1/auth/methods" -> json(SMS_METHODS)
+                else -> json("""{"error":{"code":"bad_credentials","message":"x"},"request_id":"r1"}""").setResponseCode(401)
+            }
+        }
         val g = graph()
         rule.setContent {
             CompositionLocalProvider(LocalGraph provides g, LocalShop provides ShopState(g.api)) {
                 BoutiqueTheme(dark = false) {
-                    LoginScreen(onBack = {}, onSms = {}, onForgot = {}, onDone = {}, onRestart = {})
+                    LoginScreen(onBack = {}, onSms = {}, onForgot = {}, onEmail = {}, onDone = {}, onRestart = {})
                 }
             }
         }
+        rule.waitUntil(5_000) { rule.onAllNodes(hasTestTag("phone")).fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithTag("phone").performTextClearance()
         rule.onNodeWithTag("phone").performTextInput("901234567")
         rule.onNodeWithTag("password").performTextInput("wrong-password")
         rule.onNodeWithTag("sign_in").performClick()
         rule.waitUntil(5_000) { rule.onAllNodes(hasTestTag("error_banner")).fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithText("Неверный номер, логин или пароль.").assertExists()
+    }
+
+    @Test fun prodLoginShowsTelegramAndEmailWithoutPhone() {
+        val polls = java.util.concurrent.atomic.AtomicInteger()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when (request.path) {
+                "/v1/auth/methods" -> json(PROD_METHODS)
+                "/v1/auth/telegram/start" -> json("""{"data":{"login_id":"L1","poll_token":"P1","url":"https://t.me/shop_bot?start=login_L1","expires_at":""}}""")
+                "/v1/auth/telegram/poll" ->
+                    if (polls.incrementAndGet() < 2) json("""{"data":{"status":"pending"}}""")
+                    else json("""{"data":{"access_token":"t","is_new_user":true,"user":{"id":"u","role":"client"}}}""")
+                "/v1/me" -> json("""{"data":{"id":"u","role":"client","registration_complete":false,"has_password":false,"has_telegram":true}}""")
+                else -> MockResponse().setResponseCode(404)
+            }
+        }
+        val g = graph()
+        var next: String? = "unset"
+        rule.setContent {
+            CompositionLocalProvider(LocalGraph provides g, LocalShop provides ShopState(g.api)) {
+                BoutiqueTheme(dark = false) {
+                    LoginScreen(onBack = {}, onSms = {}, onForgot = {}, onEmail = {}, onDone = { next = it }, onRestart = {})
+                }
+            }
+        }
+        rule.waitUntil(5_000) { rule.onAllNodes(hasTestTag("telegram")).fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithTag("email_login").assertExists()
+        assertEquals(0, rule.onAllNodes(hasTestTag("phone")).fetchSemanticsNodes().size)
+        rule.onNodeWithTag("telegram").performClick()
+        rule.waitUntil(5_000) { rule.onAllNodes(hasTestTag("telegram_wait")).fetchSemanticsNodes().isNotEmpty() }
+        rule.waitUntil(15_000) { next != "unset" }
+        assertEquals(Routes.WELCOME, next)
+    }
+
+    @Test fun emailRegistrationSendsCodeThenRegisters() {
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when (request.path) {
+                "/v1/auth/email/code" -> MockResponse().setResponseCode(202).setHeader("Content-Type", "application/json").setBody("""{"data":{"sent":true}}""")
+                "/v1/auth/email/register" -> json("""{"data":{"access_token":"t","is_new_user":true,"user":{"id":"u","role":"client"}}}""")
+                "/v1/me" -> json("""{"data":{"id":"u","role":"client","registration_complete":false,"has_password":true,"email":"anna@test.uz"}}""")
+                else -> MockResponse().setResponseCode(404)
+            }
+        }
+        val g = graph()
+        var next: String? = "unset"
+        rule.setContent {
+            CompositionLocalProvider(LocalGraph provides g, LocalShop provides ShopState(g.api)) {
+                BoutiqueTheme(dark = false) { EmailScreen(initialMode = "register", onBack = {}, onDone = { next = it }) }
+            }
+        }
+        rule.onNodeWithTag("email").performTextInput("bad-address")
+        rule.onNodeWithTag("send_code").performClick()
+        rule.onNodeWithText("Проверьте адрес почты").assertExists()
+        rule.onNodeWithTag("email").performTextClearance()
+        rule.onNodeWithTag("email").performTextInput("Anna@Test.uz")
+        rule.onNodeWithTag("send_code").performClick()
+        rule.waitUntil(5_000) { rule.onAllNodes(hasTestTag("code")).fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithTag("code").performTextInput("123456")
+        rule.onNodeWithTag("new_password").performTextInput("long-password-1")
+        rule.onNodeWithTag("repeat_password").performTextInput("long-password-1")
+        rule.onNodeWithTag("submit").performClick()
+        rule.waitUntil(5_000) { next != "unset" }
+        assertEquals(Routes.WELCOME, next)
+        val code = server.takeRequest()
+        assertEquals("/v1/auth/email/code", code.path)
+        assertEquals("""{"email":"anna@test.uz","purpose":"register","lang":"ru"}""", code.body.readUtf8())
+        assertEquals("""{"email":"anna@test.uz","code":"123456","password":"long-password-1"}""", server.takeRequest().body.readUtf8())
+    }
+
+    private companion object {
+        const val SMS_METHODS = """{"data":{"email":true,"sms":true,"google":null,"telegram":null}}"""
+        const val PROD_METHODS = """{"data":{"email":true,"sms":false,"google":null,"telegram":{"bot_username":"shop_bot"}}}"""
     }
 }

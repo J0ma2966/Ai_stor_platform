@@ -85,7 +85,10 @@
     "promotion_exists": "Mahsulotda allaqachon reklama arizasi yoki faol reklama bor.",
     "promotion_decided": "Ariza allaqachon ko‘rib chiqilgan — uni o‘zgartirib bo‘lmaydi.",
     "promotion_not_running": "Bu reklama hozir ko‘rsatilmayapti.",
-    "product_not_published": "Faqat e’lon qilingan mahsulotni reklama qilish mumkin."
+    "product_not_published": "Faqat e’lon qilingan mahsulotni reklama qilish mumkin.",
+    "telegram_login_expired": "Telegram orqali kirish vaqti tugadi. Tugmani qayta bosing.",
+    "google_token_invalid": "Google orqali kirib bo'lmadi. Qayta urinib ko'ring.",
+    "account_blocked": "Akkaunt bloklangan."
   },
   "fieldErrors": {
     "required": "Majburiy maydon",
@@ -133,7 +136,7 @@
     "cancelled": "Buyurtmani bekor qilish"
   },
   "login": {
-    "title": "Kirish",
+    "title": "Kirish va ro'yxatdan o'tish",
     "phone": "Telefon raqami",
     "sendCode": "Kod olish",
     "code": "SMS kodi",
@@ -151,11 +154,19 @@
     "toSms": "SMS orqali ro‘yxatdan o‘tish / kirish",
     "toPassword": "Parol bilan kirish",
     "forgot": "Parolni unutdingizmi?",
-    "noPasswordHint": "Hali parol o‘rnatmaganmisiz? SMS orqali kiring — kirgandan so‘ng sayt uni yaratishni so‘raydi."
+    "subtitle": "Qulay usulda kiring — akkaunt avtomatik yaratiladi.",
+    "loading": "Kirish usullari yuklanmoqda",
+    "or": "yoki pochta orqali",
+    "tabEmail": "Pochta",
+    "tabPhone": "Telefon",
+    "phoneTitle": "Raqam va parol bilan kirish",
+    "noMethods": "Kirish vaqtincha mavjud emas. Keyinroq urinib ko'ring.",
+    "legal": "Davom etib, siz maxfiylik siyosati va do'kon shartlariga rozilik bildirasiz.",
+    "googleUnavailable": "Google tugmasi yuklanmadi. Telegram yoki pochta orqali kiring."
   },
   "password": {
     "setTitle": "Parol o‘ylab toping",
-    "setText": "Keyingi safar telefon raqami va parol bilan kirasiz. SMS kodi faqat parolni unutsangiz kerak bo‘ladi.",
+    "setText": "Parol bilan pochta (yoki SMS orqali kirgan bo'lsangiz, telefon raqami) orqali kira olasiz.",
     "changeTitle": "Parolni o‘zgartirish",
     "changeText": "Parol o‘zgargach, boshqa qurilmalarda qayta kirish kerak bo‘ladi.",
     "current": "Joriy parol",
@@ -169,15 +180,27 @@
   },
   "emailAuth": {
     "loginTitle": "Pochta orqali kirish",
-    "registerTitle": "Pochta orqali ro‘yxatdan o‘tish",
-    "testingNote": "Sinov davri uchun vaqtinchalik kirish usuli.",
+    "registerTitle": "Pochta orqali ro'yxatdan o'tish",
+    "resetTitle": "Parolni tiklash",
+    "registerHint": "Pochtangizga 6 xonali kod yuboramiz, so'ng parol o'ylab toping.",
+    "resetHint": "Pochtangizga kod yuboramiz, so'ng yangi parol o'rnating.",
     "email": "Elektron pochta",
     "password": "Parol",
+    "newPassword": "Parol",
+    "repeat": "Parolni takrorlang",
     "passwordHint": "Kamida 10 ta belgi",
+    "mismatch": "Parollar mos kelmadi",
+    "code": "Xatdagi kod",
+    "codeSent": "Kod {email} manziliga yuborildi. «Spam» papkasini ham tekshiring.",
+    "sendCode": "Kod olish",
+    "resend": "Kodni qayta yuborish",
+    "resent": "Kod qayta yuborildi",
     "signIn": "Kirish",
-    "register": "Ro‘yxatdan o‘tish",
-    "toRegister": "Akkauntingiz yo‘qmi? Ro‘yxatdan o‘ting",
-    "toLogin": "Akkauntingiz bormi? Kiring"
+    "register": "Ro'yxatdan o'tish",
+    "resetSubmit": "Parolni saqlash va kirish",
+    "toRegister": "Akkauntingiz yo'qmi? Ro'yxatdan o'ting",
+    "toLogin": "Akkauntingiz bormi? Kiring",
+    "forgot": "Parolni unutdingizmi?"
   },
   "checkout": {
     "title": "Buyurtmani rasmiylashtirish",
@@ -480,8 +503,12 @@
     "deleteBtn": "Akkauntni butunlay o‘chirish",
     "deleted": "Akkaunt o‘chirildi.",
     "passwordTitle": "Parol",
-    "passwordText": "Parol SMSsiz telefon raqami bilan kirish uchun kerak.",
-    "passwordLink": "Parolni o‘zgartirish"
+    "passwordText": "Parol pochta orqali kirish uchun kerak. Telegram va Google orqali parolsiz kirasiz.",
+    "passwordLink": "Parolni o‘zgartirish",
+    "signInTitle": "Kirish usullari",
+    "viaTelegram": "Telegram",
+    "viaGoogle": "Google",
+    "viaEmail": "Pochta {email}"
   },
   "notifications": {
     "title": "Bildirishnomalar",
@@ -998,5 +1025,12 @@
     "empty": "Hozircha arizalar yo‘q.",
     "cancel": "Arizani qaytarib olish",
     "promote": "Reklama"
+  },
+  "tgAuth": {
+    "button": "Telegram orqali kirish",
+    "waitTitle": "Telegram'da kirishni tasdiqlang",
+    "waitText": "Botimizni ochdik. Unda «Kirish» tugmasini bosing, birinchi marta bo'lsangiz — «Raqamni yuborish». Sahifa o'zi yangilanadi.",
+    "openAgain": "Telegram'ni qayta ochish",
+    "cancel": "Bekor qilish"
   }
 }

@@ -14,6 +14,30 @@ enum class Role {
     @SerialName("admin") ADMIN,
 }
 
+/** Способы входа клиента, которые включены на сервере (GET /v1/auth/methods). */
+@Serializable
+data class AuthMethods(
+    val email: Boolean = false,
+    val sms: Boolean = false,
+    val google: GoogleMethod? = null,
+    val telegram: TelegramMethod? = null,
+)
+
+@Serializable
+data class GoogleMethod(@SerialName("client_id") val clientId: String)
+
+@Serializable
+data class TelegramMethod(@SerialName("bot_username") val botUsername: String)
+
+/** Начатый вход через Telegram-бота: ссылку открываем, по poll_token ждём подтверждения. */
+@Serializable
+data class TelegramStart(
+    @SerialName("login_id") val loginId: String,
+    @SerialName("poll_token") val pollToken: String,
+    val url: String,
+    @SerialName("expires_at") val expiresAt: String = "",
+)
+
 @Serializable
 data class SessionUser(val id: String = "", val role: Role = Role.CLIENT)
 
@@ -37,6 +61,11 @@ data class Me(
     @SerialName("token_balance") val tokenBalance: Long = 0,
     @SerialName("registration_complete") val registrationComplete: Boolean = false,
     @SerialName("has_password") val hasPassword: Boolean = false,
+    /** Вошёл по SMS и не задал пароль (только при включённом SMS-входе на сервере). */
+    @SerialName("needs_password") val needsPassword: Boolean = false,
+    val email: String? = null,
+    @SerialName("has_telegram") val hasTelegram: Boolean = false,
+    @SerialName("has_google") val hasGoogle: Boolean = false,
     @SerialName("height_cm") val heightCm: Int? = null,
     @SerialName("weight_kg") val weightKg: Double? = null,
     @SerialName("body_params") val bodyParams: Map<String, Double> = emptyMap(),

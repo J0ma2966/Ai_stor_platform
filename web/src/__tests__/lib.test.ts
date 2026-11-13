@@ -105,13 +105,13 @@ describe("api client", () => {
 import { clientNextStep } from "@/lib/onboarding";
 
 describe("clientNextStep", () => {
-  const base = { role: "client" as const, registration_complete: true, has_password: true };
-  it("ведёт нового клиента на завершение регистрации, затем на пароль", () => {
-    expect(clientNextStep({ ...base, registration_complete: false, has_password: false }, "/checkout")).toBe("/account/welcome?next=%2Fcheckout");
-    expect(clientNextStep({ ...base, has_password: false }, "/checkout")).toBe("/account/password?next=%2Fcheckout");
+  const base = { role: "client" as const, registration_complete: true, needs_password: false };
+  it("ведёт нового клиента на завершение регистрации, затем на пароль (только после SMS)", () => {
+    expect(clientNextStep({ ...base, registration_complete: false, needs_password: true }, "/checkout")).toBe("/account/welcome?next=%2Fcheckout");
+    expect(clientNextStep({ ...base, needs_password: true }, "/checkout")).toBe("/account/password?next=%2Fcheckout");
     expect(clientNextStep(base, "/checkout")).toBe("/checkout");
   });
   it("не трогает сотрудников", () => {
-    expect(clientNextStep({ ...base, role: "store", has_password: false }, "/store")).toBe("/store");
+    expect(clientNextStep({ ...base, role: "store", needs_password: true }, "/store")).toBe("/store");
   });
 });
