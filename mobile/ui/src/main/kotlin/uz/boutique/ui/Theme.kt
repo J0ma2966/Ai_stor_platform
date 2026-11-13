@@ -52,6 +52,16 @@ data class BrandColors(
     val walletEnd: Color,
     val walletEyebrow: Color,
     val walletText: Color,
+    /** Объём (как на сайте): градиент акцентной кнопки сверху вниз, цвет её свечения. */
+    val accentTop: Color,
+    val accentBottom: Color,
+    val glow: Color,
+    /** Градиент панелей и вторичных кнопок, фон полей ввода, блик по верхнему краю, цвет тени. */
+    val surfaceTop: Color,
+    val surfaceBottom: Color,
+    val field: Color,
+    val highlight: Color,
+    val shadow: Color,
 )
 
 // Светлая: Fashion Social. Малиновый темнее, чем в шаблоне (#d45d78 → #B03F5C), чтобы белый текст на нём читался.
@@ -63,6 +73,9 @@ private val LightBrand = BrandColors(
     hero = Color(0xFF24201D), onHero = Color(0xFFFAF6F2), heroEyebrow = Color(0xFFF5C6D2),
     heroButton = Color(0xFFF5C6D2), onHeroButton = Color(0xFF3A1420),
     walletStart = Color(0xFF2B2022), walletEnd = Color(0xFF7A3346), walletEyebrow = Color(0xFFF5C6D2), walletText = Color(0xFFF3E3E7),
+    accentTop = Color(0xFFC24E6B), accentBottom = Color(0xFF983350), glow = Color(0xFFB03F5C),
+    surfaceTop = Color(0xFFFFFFFF), surfaceBottom = Color(0xFFFFF7F4), field = Color(0xFFFFFDFC),
+    highlight = Color(0xF2FFFFFF), shadow = Color(0xFF7A3346),
 )
 
 // Тёмная: Black Luxury. Фон как в шаблоне (#111111), текст чуть мягче (#EDE6DA), чтобы не резал глаз.
@@ -74,6 +87,9 @@ private val DarkBrand = BrandColors(
     hero = Color(0xFF24201D), onHero = Color(0xFFFAF6F2), heroEyebrow = Color(0xFFE5C99E),
     heroButton = Color(0xFFC6A56B), onHeroButton = Color(0xFF111111),
     walletStart = Color(0xFF29251F), walletEnd = Color(0xFF5A4733), walletEyebrow = Color(0xFFE4C99F), walletText = Color(0xFFE1D8CD),
+    accentTop = Color(0xFFE6CB98), accentBottom = Color(0xFFA4824A), glow = Color(0xFFC6A56B),
+    surfaceTop = Color(0xFF262524), surfaceBottom = Color(0xFF1C1C1C), field = Color(0xFF151515),
+    highlight = Color(0x12FFFFFF), shadow = Color(0xFF000000),
 )
 
 internal val LightScheme = lightColorScheme(

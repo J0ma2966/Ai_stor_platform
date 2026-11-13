@@ -65,6 +65,15 @@ class PaletteContrastTest {
         check("$t: промо", b.promoText, b.promo, 4.5)
     }
 
+    @Test fun depthGradientsKeepTextReadable() = bothThemes { t, s, b ->
+        // Объёмная кнопка: текст читается по всей высоте градиента; поле ввода отличается от панели.
+        check("$t: текст кнопки вверху градиента", s.onPrimaryContainer, b.accentTop, 4.5)
+        check("$t: текст кнопки внизу градиента", s.onPrimaryContainer, b.accentBottom, 4.5)
+        check("$t: текст на панели вверху", s.onSurface, b.surfaceTop, 4.5)
+        check("$t: текст на панели внизу", s.onSurface, b.surfaceBottom, 4.5)
+        check("$t: текст в поле ввода", s.onSurface, b.field, 4.5)
+    }
+
     @Test fun iconsAreVisible() = bothThemes { t, s, b ->
         check("$t: сердечко избранного", b.accent2, s.surface, 3.0)
         check("$t: рамка поля ввода", s.outline, s.surface, 1.3)

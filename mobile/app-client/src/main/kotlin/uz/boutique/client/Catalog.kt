@@ -1,7 +1,5 @@
 package uz.boutique.client
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -75,6 +73,7 @@ import uz.boutique.ui.errorRes
 import uz.boutique.ui.money
 import uz.boutique.ui.rememberLoader
 import uz.boutique.ui.rememberPaged
+import uz.boutique.ui.surfaceDepth
 
 private val SORT_LABELS = mapOf(
     "popular" to UiR.string.sort_popular,
@@ -272,11 +271,11 @@ fun FavoriteButton(productId: String, onNeedLogin: () -> Unit, modifier: Modifie
 @Composable
 fun ProductCard(p: Product, onClick: () -> Unit, onNeedLogin: () -> Unit, modifier: Modifier = Modifier) {
     // VESTA: карточка-панель с тонкой рамкой, фото сверху, ниже название, магазин и цена.
+    // объём как на сайте: мягкая тень и блик по верхнему краю
     Column(
         modifier
+            .surfaceDepth(Brand.colors, MaterialTheme.shapes.large, elevation = 4.dp)
             .clip(MaterialTheme.shapes.large)
-            .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, Brand.colors.line, MaterialTheme.shapes.large)
             .clickable(onClick = onClick)
             .testTag("product_${p.id}"),
     ) {
