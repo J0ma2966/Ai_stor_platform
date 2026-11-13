@@ -5,7 +5,7 @@ import { useRouter } from "@/i18n/navigation";
 import { catName, SORTS, type CatalogFilters as F, type Category, type Store } from "@/lib/catalog";
 
 // Фильтры каталога живут в URL: ссылкой можно поделиться, «назад» работает.
-export function CatalogFilters({ filters, categories, stores, fixed = {} }: { filters: F; categories: Category[]; stores: Store[]; fixed?: Partial<F> }) {
+export function CatalogFilters({ filters, categories, stores, fixed = {} }: { filters: F; categories: Category[]; stores: Pick<Store, "id" | "name">[]; fixed?: Partial<F> }) {
   const t = useTranslations("catalog");
   const locale = useLocale();
   const router = useRouter();

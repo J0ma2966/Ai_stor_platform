@@ -55,6 +55,8 @@ export const moderateReview = (id: string, status: "visible" | "hidden", reason:
   api<{ status: string }>(`/v1/admin/reviews/${id}/status`, { method: "POST", body: { status, reason } });
 
 // Средняя оценка с одним знаком после запятой: 4.33 → «4,3» (ru-RU для обоих языков, как и деньги).
+// Форматтер один на модуль: toLocaleString создавал бы новый на каждую карточку товара.
+const ratingFormat = new Intl.NumberFormat("ru-RU", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 export function formatRating(avg: number): string {
-  return avg.toLocaleString("ru-RU", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  return ratingFormat.format(avg);
 }
