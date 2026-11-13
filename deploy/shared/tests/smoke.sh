@@ -110,6 +110,23 @@ ai-store status
 bash $AI_STORE_ROOT/src/deploy/shared/ai-store install $D ops@$D >/dev/null && pass "repeated install is safe" || bad "repeated install"
 check "passwords survive repeated install" test "$(code https://api.$D/readyz)" = 200
 
+step "production mode: refused without mail, rolled back when the API cannot start, then switched"
+if ai-store prod >/dev/null 2>&1; then bad "prod without SMTP must be refused"; else pass "prod without SMTP refused"; fi
+check "still staging and healthy" bash -c "grep -q '^APP_ENV=staging' $AI_STORE_ROOT/.env && [[ \$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8180/readyz) == 200 ]]"
+sed -i -e 's/^MAIL_PROVIDER=.*/MAIL_PROVIDER=smtp/' -e 's/^SMTP_HOST=.*/SMTP_HOST=smtp.smoke.test/' -e 's/^SMTP_USER=.*/SMTP_USER=u@smoke.test/' \
+  -e 's/^SMTP_PASSWORD=.*/SMTP_PASSWORD=x/' -e 's/^MAIL_FROM=.*/MAIL_FROM=u@smoke.test/' $AI_STORE_ROOT/.env
+# SMS-вход с SMS_PROVIDER=log в prod запрещён: API не стартует, режим должен вернуться
+if READY_TRIES=10 ai-store prod >/dev/null 2>&1; then bad "prod with invalid config must fail"; else pass "prod with invalid config rolled back"; fi
+check "back to staging and healthy after failed switch" bash -c "grep -q '^APP_ENV=staging' $AI_STORE_ROOT/.env && [[ \$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8180/readyz) == 200 ]]"
+sed -i 's/^SMS_AUTH_ENABLED=.*/SMS_AUTH_ENABLED=false/' $AI_STORE_ROOT/.env
+ai-store prod && pass "switched to prod" || bad "switch to prod"
+check "prod mode saved and API ready" bash -c "grep -q '^APP_ENV=prod' $AI_STORE_ROOT/.env && [[ \$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8180/readyz) == 200 ]]"
+check "site answers in prod" test "$(code https://$D/api/healthz)" = 200
+sed -i -e 's/^BACKUP_TELEGRAM_BOT_TOKEN=.*/BACKUP_TELEGRAM_BOT_TOKEN=1:invalid/' -e 's/^BACKUP_TELEGRAM_CHAT_ID=.*/BACKUP_TELEGRAM_CHAT_ID=1/' $AI_STORE_ROOT/.env
+ai-store backup 2>&1 | tee /tmp/backup.out
+check "failed offsite upload is reported but the local backup is kept" grep -q 'ВНИМАНИЕ' /tmp/backup.out
+check "no encrypted leftovers" bash -c '! ls /opt/ai-store/backups/*.enc >/dev/null 2>&1'
+
 step "a broken nginx config is rolled back"
 cp $AI_STORE_ROOT/src/deploy/shared/nginx/ai-store.conf.tmpl /tmp/tmpl.bak
 echo 'this is not nginx syntax;' >> $AI_STORE_ROOT/src/deploy/shared/nginx/ai-store.conf.tmpl
