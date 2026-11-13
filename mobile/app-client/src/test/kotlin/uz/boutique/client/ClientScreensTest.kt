@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
@@ -90,16 +91,16 @@ class ClientScreensTest {
             }
         }
         rule.waitUntil(5_000) { rule.onAllNodes(hasTestTag("phone")).fetchSemanticsNodes().isNotEmpty() }
-        rule.onNodeWithTag("phone").performTextClearance()
-        rule.onNodeWithTag("phone").performTextInput("12345")
-        rule.onNodeWithTag("password").performTextInput("secret-password")
-        rule.onNodeWithTag("sign_in").performClick()
+        rule.onNodeWithTag("phone").performScrollTo().performTextClearance()
+        rule.onNodeWithTag("phone").performScrollTo().performTextInput("12345")
+        rule.onNodeWithTag("password").performScrollTo().performTextInput("secret-password")
+        rule.onNodeWithTag("sign_in").performScrollTo().performClick()
         rule.onNodeWithText("Введите номер Узбекистана: +998 XX XXX XX XX").assertExists()
 
         rule.waitUntil(5_000) { rule.onAllNodes(hasTestTag("phone")).fetchSemanticsNodes().isNotEmpty() }
-        rule.onNodeWithTag("phone").performTextClearance()
-        rule.onNodeWithTag("phone").performTextInput("90 123 45 67")
-        rule.onNodeWithTag("sign_in").performClick()
+        rule.onNodeWithTag("phone").performScrollTo().performTextClearance()
+        rule.onNodeWithTag("phone").performScrollTo().performTextInput("90 123 45 67")
+        rule.onNodeWithTag("sign_in").performScrollTo().performClick()
         rule.waitUntil(5_000) { done }
         assertNull(next)
         server.takeRequest() // /v1/auth/methods
@@ -126,10 +127,10 @@ class ClientScreensTest {
             }
         }
         rule.waitUntil(5_000) { rule.onAllNodes(hasTestTag("phone")).fetchSemanticsNodes().isNotEmpty() }
-        rule.onNodeWithTag("phone").performTextClearance()
-        rule.onNodeWithTag("phone").performTextInput("901234567")
-        rule.onNodeWithTag("password").performTextInput("secret-password")
-        rule.onNodeWithTag("sign_in").performClick()
+        rule.onNodeWithTag("phone").performScrollTo().performTextClearance()
+        rule.onNodeWithTag("phone").performScrollTo().performTextInput("901234567")
+        rule.onNodeWithTag("password").performScrollTo().performTextInput("secret-password")
+        rule.onNodeWithTag("sign_in").performScrollTo().performClick()
         rule.waitUntil(5_000) { next != "unset" }
         assertEquals(Routes.WELCOME, next)
     }
@@ -150,10 +151,10 @@ class ClientScreensTest {
             }
         }
         rule.waitUntil(5_000) { rule.onAllNodes(hasTestTag("phone")).fetchSemanticsNodes().isNotEmpty() }
-        rule.onNodeWithTag("phone").performTextClearance()
-        rule.onNodeWithTag("phone").performTextInput("901234567")
-        rule.onNodeWithTag("password").performTextInput("wrong-password")
-        rule.onNodeWithTag("sign_in").performClick()
+        rule.onNodeWithTag("phone").performScrollTo().performTextClearance()
+        rule.onNodeWithTag("phone").performScrollTo().performTextInput("901234567")
+        rule.onNodeWithTag("password").performScrollTo().performTextInput("wrong-password")
+        rule.onNodeWithTag("sign_in").performScrollTo().performClick()
         rule.waitUntil(5_000) { rule.onAllNodes(hasTestTag("error_banner")).fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithText("Неверный номер, логин или пароль.").assertExists()
     }
@@ -183,9 +184,10 @@ class ClientScreensTest {
         rule.waitUntil(5_000) { rule.onAllNodes(hasTestTag("telegram")).fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithTag("email_login").assertExists()
         assertEquals(0, rule.onAllNodes(hasTestTag("phone")).fetchSemanticsNodes().size)
-        rule.onNodeWithTag("telegram").performClick()
+        rule.onNodeWithTag("telegram").performScrollTo().performClick()
         rule.waitUntil(5_000) { rule.onAllNodes(hasTestTag("telegram_wait")).fetchSemanticsNodes().isNotEmpty() }
-        rule.waitUntil(15_000) { next != "unset" }
+        // опрос идёт раз в 2 секунды: двигаем часы теста, а не ждём по-настоящему
+        rule.waitUntil(15_000) { rule.mainClock.advanceTimeBy(1_000); next != "unset" }
         assertEquals(Routes.WELCOME, next)
     }
 
@@ -205,17 +207,17 @@ class ClientScreensTest {
                 BoutiqueTheme(dark = false) { EmailScreen(initialMode = "register", onBack = {}, onDone = { next = it }) }
             }
         }
-        rule.onNodeWithTag("email").performTextInput("bad-address")
-        rule.onNodeWithTag("send_code").performClick()
+        rule.onNodeWithTag("email").performScrollTo().performTextInput("bad-address")
+        rule.onNodeWithTag("send_code").performScrollTo().performClick()
         rule.onNodeWithText("Проверьте адрес почты").assertExists()
-        rule.onNodeWithTag("email").performTextClearance()
-        rule.onNodeWithTag("email").performTextInput("Anna@Test.uz")
-        rule.onNodeWithTag("send_code").performClick()
+        rule.onNodeWithTag("email").performScrollTo().performTextClearance()
+        rule.onNodeWithTag("email").performScrollTo().performTextInput("Anna@Test.uz")
+        rule.onNodeWithTag("send_code").performScrollTo().performClick()
         rule.waitUntil(5_000) { rule.onAllNodes(hasTestTag("code")).fetchSemanticsNodes().isNotEmpty() }
-        rule.onNodeWithTag("code").performTextInput("123456")
-        rule.onNodeWithTag("new_password").performTextInput("long-password-1")
-        rule.onNodeWithTag("repeat_password").performTextInput("long-password-1")
-        rule.onNodeWithTag("submit").performClick()
+        rule.onNodeWithTag("code").performScrollTo().performTextInput("123456")
+        rule.onNodeWithTag("new_password").performScrollTo().performTextInput("long-password-1")
+        rule.onNodeWithTag("repeat_password").performScrollTo().performTextInput("long-password-1")
+        rule.onNodeWithTag("submit").performScrollTo().performClick()
         rule.waitUntil(5_000) { next != "unset" }
         assertEquals(Routes.WELCOME, next)
         val code = server.takeRequest()
