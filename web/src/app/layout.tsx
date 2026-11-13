@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from "next";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getTranslations } from "next-intl/server";
 import { cookies, headers } from "next/headers";
+import { ClientMessages } from "@/i18n/ClientMessages";
 import { LocaleSync } from "@/i18n/switch";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -48,7 +49,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         <StaleWorkerGuard />
       </head>
       <body>
-        <NextIntlClientProvider>
+        {/* messages={null}: словарь не сериализуется в HTML, его даёт <ClientMessages> из JS-файла */}
+        <NextIntlClientProvider messages={null}>
+          <ClientMessages>
           <LocaleSync />
           <SessionProvider>
             <Suspense fallback={<div className="site-header" />}>
@@ -59,6 +62,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
             </main>
             <Footer />
           </SessionProvider>
+          </ClientMessages>
         </NextIntlClientProvider>
       </body>
     </html>

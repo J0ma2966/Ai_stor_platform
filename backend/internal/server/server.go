@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -132,6 +133,10 @@ func New(d Deps) http.Handler {
 			// Сайт рендерит страницы на сервере: все его запросы приходят с одного IP,
 			// поэтому с общим секретом общий лимит по IP к ним не применяется.
 			r.Use(limiter.ByIPExcept(ratelimit.Rule{Name: "global_ip", Limit: 600, Window: time.Minute}, internalRequest(d.Cfg.InternalAPIToken)))
+			// JSON браузерам и приложениям уходит сжатым (страница каталога: 22 КБ → около 3 КБ),
+			// даже если прокси перед API сам не сжимает. Сайту при серверном рендеринге
+			// сжатие не нужно: он рядом, это была бы лишняя работа процессора с обеих сторон.
+			r.Use(compressExcept(internalRequest(d.Cfg.InternalAPIToken)))
 			r.Use(auth.Authenticate(signer, revoker))
 
 			// Загрузка файлов — отдельно: медленный мобильный интернет, свой таймаут 60 с.
@@ -247,6 +252,22 @@ func internalRequest(token string) func(*http.Request) bool {
 	return func(r *http.Request) bool {
 		got := r.Header.Get(InternalTokenHeader)
 		return token != "" && got != "" && subtle.ConstantTimeCompare([]byte(got), []byte(token)) == 1
+	}
+}
+
+// compressExcept сжимает JSON-ответы (gzip, если клиент его принимает), кроме запросов,
+// для которых skip вернул true.
+func compressExcept(skip func(*http.Request) bool) func(http.Handler) http.Handler {
+	compress := middleware.Compress(5, "application/json")
+	return func(next http.Handler) http.Handler {
+		compressed := compress(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if skip(r) {
+				next.ServeHTTP(w, r)
+				return
+			}
+			compressed.ServeHTTP(w, r)
+		})
 	}
 }
 

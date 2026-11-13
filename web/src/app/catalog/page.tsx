@@ -52,6 +52,9 @@ export default async function CatalogPage({ searchParams }: { searchParams: SP }
     page = null;
   }
   const cat = cats.find((c) => c.id === f.category);
+  // Фильтру нужны только id и название: остальные поля магазинов (описание, контакты, адрес)
+  // иначе уезжали бы в HTML каждой страницы каталога как свойства клиентского компонента.
+  const storeOptions = stores.map(({ id, name }) => ({ id, name }));
   const heading = f.q ? t("resultsFor", { q: f.q }) : cat ? catName(cat, locale) : t("title");
   const hasFilters = Object.keys(f).some((k) => k !== "sort");
   return (
@@ -59,7 +62,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: SP }
       <h1>{heading}</h1>
       <div className="catalog-layout">
         <aside>
-          <CatalogFilters key={JSON.stringify(f)} filters={f} categories={cats} stores={stores} />
+          <CatalogFilters key={JSON.stringify(f)} filters={f} categories={cats} stores={storeOptions} />
         </aside>
         <section aria-live="polite">
           {!page ? (

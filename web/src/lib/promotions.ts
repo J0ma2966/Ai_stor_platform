@@ -78,7 +78,8 @@ export function isoToDate(iso: string | Date): string {
 export function addDays(iso: string | Date, days: number): Date {
   return new Date(new Date(iso).getTime() + days * 86400_000);
 }
+const dayFormat = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Tashkent" });
 export function formatDay(iso: string | null): string {
   if (!iso) return "";
-  return new Date(iso).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Tashkent" });
+  return dayFormat.format(new Date(iso));
 }
