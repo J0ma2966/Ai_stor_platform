@@ -49,12 +49,12 @@ func (c *captureSMS) last(phone string) string {
 }
 
 type env struct {
-	t   *testing.T
-	srv *httptest.Server
+	t    *testing.T
+	srv  *httptest.Server
 	sms  *captureSMS
 	mail *captureMail
 	mr   *miniredis.Miniredis
-	d   Deps
+	d    Deps
 }
 
 func setup(t *testing.T, mods ...func(*Deps)) *env {
