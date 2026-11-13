@@ -35,6 +35,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -50,6 +51,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -147,13 +149,15 @@ fun <T> LoadContent(loader: Loader<T>, modifier: Modifier = Modifier, content: @
 
 @Composable
 fun SectionCard(modifier: Modifier = Modifier, padding: PaddingValues = PaddingValues(16.dp), content: @Composable ColumnScope.() -> Unit) {
+    val shape = MaterialTheme.shapes.large
     Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surface,
+        // объём как на сайте: мягкая тень, светлый верх панели, блик по верхнему краю
+        modifier = modifier.fillMaxWidth().surfaceDepth(Brand.colors, shape),
+        shape = shape,
+        color = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onSurface,
         tonalElevation = 0.dp,
-        shadowElevation = 0.dp, // VESTA: плоская панель с тонкой рамкой, без тени
-        border = BorderStroke(1.dp, Brand.colors.line),
+        shadowElevation = 0.dp,
     ) {
         Column(Modifier.padding(padding), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
     }
@@ -272,7 +276,8 @@ fun FormField(
         value = value,
         onValueChange = { v -> onChange(if (maxLength != null) v.take(maxLength) else v) },
         label = { Text(label) },
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().insetDepth(Brand.colors),
+        colors = fieldColors(),
         isError = error != null,
         supportingText = supporting(error ?: hint),
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
@@ -282,6 +287,16 @@ fun FormField(
         shape = MaterialTheme.shapes.medium,
     )
 }
+
+/** Поле «утоплено»: свой фон чуть светлее (темнее в тёмной теме) панели, рамка заметнее. */
+@Composable
+private fun fieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedContainerColor = Brand.colors.field,
+    unfocusedContainerColor = Brand.colors.field,
+    disabledContainerColor = Brand.colors.field.copy(alpha = 0.6f),
+    errorContainerColor = Brand.colors.field,
+    unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+)
 
 private fun supporting(text: String?): (@Composable () -> Unit)? =
     if (text == null) null else { { Text(text) } }
@@ -301,7 +316,8 @@ fun PasswordField(
         value = value,
         onValueChange = { onChange(it.take(128)) },
         label = { Text(label) },
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().insetDepth(Brand.colors),
+        colors = fieldColors(),
         isError = error != null,
         supportingText = supporting(error ?: hint),
         singleLine = true,
@@ -321,14 +337,18 @@ fun PasswordField(
 
 @Composable
 fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, busy: Boolean = false, enabled: Boolean = true) {
+    val on = enabled && !busy
     Button(
         onClick = onClick,
-        enabled = enabled && !busy,
-        modifier = modifier.fillMaxWidth().height(52.dp),
-        shape = CircleShape, // VESTA: кнопка-«таблетка» акцентного цвета
+        enabled = on,
+        // VESTA + объём: «таблетка» с градиентом, бликом и цветным свечением
+        modifier = modifier.fillMaxWidth().height(52.dp).alpha(if (on || busy) 1f else 0.55f).accentDepth(Brand.colors, CircleShape, enabled = on),
+        shape = CircleShape,
         colors = ButtonDefaults.buttonColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            containerColor = Color.Transparent,
             contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            disabledContainerColor = Color.Transparent,
+            disabledContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
         ),
     ) {
         if (busy) {
@@ -344,7 +364,7 @@ fun SecondaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modi
     OutlinedButton(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier.fillMaxWidth().height(48.dp),
+        modifier = modifier.fillMaxWidth().height(48.dp).alpha(if (enabled) 1f else 0.55f).surfaceDepth(Brand.colors, CircleShape, elevation = 4.dp),
         shape = CircleShape,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
     ) {

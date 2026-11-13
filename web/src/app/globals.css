@@ -39,7 +39,7 @@
   --mannequin: #ecdcd6;
   --pg-skin: #d9b49b; --pg-hair: #3b2f3a; --pg-top: #b03f5c; --pg-bottom: #3a2b2e; --pg-shoe: #2b2022; --pg-wall: #f6e8e6; --pg-floor: #ead6d4;
   /* объём: градиенты, блики, многослойные тени */
-  --grad-accent: linear-gradient(180deg, #c95a75 0%, #b03f5c 52%, #983350 100%);
+  --grad-accent: linear-gradient(180deg, #c24e6b 0%, #b03f5c 52%, #983350 100%);
   --grad-accent-hover: linear-gradient(180deg, #bd4d69 0%, #9e3652 55%, #7a3346 100%);
   --accent-glow: rgba(176,63,92,.38);
   --grad-surface: linear-gradient(180deg, #ffffff 0%, #fff7f4 100%);

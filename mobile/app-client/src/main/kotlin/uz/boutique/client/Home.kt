@@ -3,7 +3,6 @@ package uz.boutique.client
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -40,10 +39,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -55,6 +56,7 @@ import uz.boutique.ui.Brand
 import uz.boutique.ui.EyebrowStyle
 import uz.boutique.ui.R as UiR
 import uz.boutique.ui.Serif
+import uz.boutique.ui.surfaceDepth
 
 private val HeroShape = RoundedCornerShape(22.dp)
 private val PanelShape = RoundedCornerShape(16.dp)
@@ -123,7 +125,7 @@ fun HomeHero(
 
 /** Пружинящее нажатие: карточка чуть сжимается под пальцем. */
 @Composable
-private fun Modifier.pressable(shape: Shape, onClick: () -> Unit): Modifier {
+private fun Modifier.pressable(shape: Shape, onClick: () -> Unit, depth: Modifier = Modifier): Modifier {
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
     val scale by animateFloatAsState(
@@ -133,6 +135,7 @@ private fun Modifier.pressable(shape: Shape, onClick: () -> Unit): Modifier {
     )
     return this
         .graphicsLayer { scaleX = scale; scaleY = scale }
+        .then(depth) // тень и фон до обрезки по форме, иначе тень срежется
         .clip(shape)
         .clickable(interactionSource = source, indication = LocalIndication.current, role = Role.Button, onClick = onClick)
 }
@@ -142,9 +145,7 @@ private fun Panel(onClick: () -> Unit, modifier: Modifier = Modifier, content: @
     Column(
         modifier
             .heightIn(min = 112.dp)
-            .pressable(PanelShape, onClick)
-            .background(MaterialTheme.colorScheme.surface)
-            .border(BorderStroke(1.dp, Brand.colors.line), PanelShape)
+            .pressable(PanelShape, onClick, Modifier.surfaceDepth(Brand.colors, PanelShape))
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
@@ -168,7 +169,7 @@ private fun HeroCard(
         modifier
             .fillMaxWidth()
             .height(320.dp)
-            .pressable(HeroShape, onClick)
+            .pressable(HeroShape, onClick, Modifier.shadow(16.dp, HeroShape, ambientColor = b.shadow.copy(alpha = 0.45f), spotColor = b.shadow.copy(alpha = 0.6f)))
             .background(b.hero),
     ) {
         if (image != null) {
@@ -191,8 +192,10 @@ private fun HeroCard(
             Row(
                 Modifier
                     .padding(top = 6.dp)
+                    .shadow(8.dp, CircleShape, ambientColor = Color.Black.copy(alpha = 0.5f), spotColor = Color.Black.copy(alpha = 0.6f))
+                    .background(Brush.verticalGradient(listOf(lerp(b.heroButton, Color.White, 0.25f), b.heroButton, lerp(b.heroButton, Color.Black, 0.12f))), CircleShape)
+                    .border(1.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.55f), Color.Transparent)), CircleShape)
                     .clip(CircleShape)
-                    .background(b.heroButton)
                     .heightIn(min = 44.dp)
                     .padding(horizontal = 18.dp),
                 verticalAlignment = Alignment.CenterVertically,
