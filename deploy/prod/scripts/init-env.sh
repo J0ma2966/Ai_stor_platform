@@ -10,7 +10,7 @@
 #   multi                 — app/db/replica в UZ + edge в Германии (адреса ниже).
 #
 # Windows (PowerShell, нужен Docker Desktop):
-#   docker run --rm -it -v ${PWD}:/w -w /w alpine:3.22 sh -c "apk add -q bash openssl age && bash deploy/prod/scripts/init-env.sh secrets-out shop.uz admin@shop.uz"
+#   docker run --rm -it -v ${PWD}:/w -w /w alpine:3.22 sh -c "apk add -q bash openssl age && bash deploy/prod/scripts/init-env.sh secrets-out shop.optolink.uz admin@optolink.uz"
 #
 # Адреса WireGuard по умолчанию (как в ansible/inventory.example.yml):
 #   APP 10.77.0.10, DB 10.77.0.20, REPLICA 10.77.0.21, EDGE 10.77.0.30
