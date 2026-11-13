@@ -71,7 +71,7 @@ for f in "${dbenvs[@]}"; do
   printf 'PG_IMAGE_TAG=smoke\nBACKUP_IMAGE_TAG=smoke\nMETRICS_HOST_DIR=%s/metrics-%s\n' "$work" "$f" >> "$work/env/$f.env"
 done
 multi && echo "COMPOSE_PROJECT_NAME=boutique-db-replica" >> "$work/env/replica.env"
-sed -i -e "s/^TLS_MODE=.*/TLS_MODE=internal/" -e "s/^APP_ENV=.*/APP_ENV=staging/" -e "s/^SMS_PROVIDER=.*/SMS_PROVIDER=log/" "$work/env/app.env"
+sed -i -e "s/^TLS_MODE=.*/TLS_MODE=internal/" -e "s/^APP_ENV=.*/APP_ENV=staging/" -e "s/^SMS_PROVIDER=.*/SMS_PROVIDER=log/" -e "s/^MAIL_PROVIDER=.*/MAIL_PROVIDER=log/" "$work/env/app.env"
 sed -i -e "s/^TLS_MODE=.*/TLS_MODE=internal/" -e "s/^TELEGRAM_CHAT_ID=.*/TELEGRAM_CHAT_ID=-1001/" "$work/env/edge.env"
 multi && printf 'HTTP_PORT=8088\nHTTPS_PORT=8443\n' >> "$work/env/edge.env"
 SITE_PORT=443; multi && SITE_PORT=8443
