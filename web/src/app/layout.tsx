@@ -2,14 +2,15 @@ import { Suspense, type ReactNode } from "react";
 import type { Metadata, Viewport } from "next";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getTranslations } from "next-intl/server";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { LocaleSync } from "@/i18n/switch";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { StaleWorkerGuard } from "@/components/StaleWorkerGuard";
 import { SessionProvider } from "@/lib/session";
 import { alternates, siteUrl } from "@/lib/site";
-import "@fontsource-variable/manrope";
+import { parseTheme, themeAttr, THEME_COOKIE } from "@/lib/theme";
+import "@fontsource-variable/rubik";
 import "./globals.css";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -25,7 +26,14 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#3f1f6e" };
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#fff4f0" },
+    { media: "(prefers-color-scheme: dark)", color: "#111111" },
+  ],
+};
 
 // Корневой layout общий для обоих языков: при смене языка он не пересоздаётся,
 // а только получает новые сообщения (см. src/i18n/switch.tsx).
@@ -33,8 +41,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const locale = await getLocale();
   // страницы рендерятся на каждый запрос: иначе в статическом HTML не будет nonce для CSP
   await headers();
+  const theme = parseTheme((await cookies()).get(THEME_COOKIE)?.value);
   return (
-    <html lang={locale}>
+    <html lang={locale} data-theme={themeAttr(theme)}>
       <head>
         <StaleWorkerGuard />
       </head>
@@ -43,7 +52,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           <LocaleSync />
           <SessionProvider>
             <Suspense fallback={<div className="site-header" />}>
-              <Header />
+              <Header theme={theme} />
             </Suspense>
             <main id="main" className="container main">
               {children}
