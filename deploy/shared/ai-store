@@ -20,7 +20,8 @@ need_root() { [[ $EUID -eq 0 ]] || die "запустите от root: sudo ai-st
 dc() {
   local files=(-f "$SRC/deploy/shared/compose.yml")
   [[ -n ${AI_STORE_COMPOSE_EXTRA:-} ]] && files+=(-f "$AI_STORE_COMPOSE_EXTRA")
-  ENV_FILE="$ENV_FILE" docker compose -p ai-store --env-file "$ENV_FILE" "${files[@]}" "$@"
+  export ENV_FILE
+  docker compose -p ai-store --env-file "$ENV_FILE" "${files[@]}" "$@"
 }
 envget() { grep -E "^$1=" "$ENV_FILE" | head -1 | cut -d= -f2-; }
 rnd() { openssl rand -hex "${1:-24}"; }
@@ -191,8 +192,8 @@ EOF
 }
 
 wait_ready() {
-  local i api_port web_port; api_port=$(envget API_PORT); web_port=$(envget WEB_PORT)
-  for i in $(seq 1 60); do
+  local api_port web_port; api_port=$(envget API_PORT); web_port=$(envget WEB_PORT)
+  for _ in $(seq 1 60); do
     if curl -fsS -m 3 "http://127.0.0.1:$api_port/readyz" >/dev/null 2>&1 &&
        curl -fsS -m 3 "http://127.0.0.1:$web_port/api/healthz" >/dev/null 2>&1; then
       echo "API и сайт отвечают"; return 0
