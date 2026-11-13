@@ -177,17 +177,20 @@ class ClientScreensTest {
         rule.setContent {
             CompositionLocalProvider(LocalGraph provides g, LocalShop provides ShopState(g.api)) {
                 BoutiqueTheme(dark = false) {
-                    LoginScreen(onBack = {}, onSms = {}, onForgot = {}, onEmail = {}, onDone = { next = it }, onRestart = {})
+                    LoginScreen(onBack = {}, onSms = {}, onForgot = {}, onEmail = {}, onDone = { next = it }, onRestart = {}, telegramPollMs = 50)
                 }
             }
         }
-        rule.waitUntil(5_000) { rule.onAllNodes(hasTestTag("telegram")).fetchSemanticsNodes().isNotEmpty() }
+        rule.waitUntil(10_000) { rule.onAllNodes(hasTestTag("telegram")).fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithTag("email_login").assertExists()
         assertEquals(0, rule.onAllNodes(hasTestTag("phone")).fetchSemanticsNodes().size)
         rule.onNodeWithTag("telegram").performScrollTo().performClick()
         rule.waitUntil(5_000) { rule.onAllNodes(hasTestTag("telegram_wait")).fetchSemanticsNodes().isNotEmpty() }
-        // опрос идёт раз в 2 секунды: двигаем часы теста, а не ждём по-настоящему
-        rule.waitUntil(15_000) { rule.mainClock.advanceTimeBy(1_000); next != "unset" }
+        // опрос — через delay на главном потоке: в Robolectric часы looper'а двигаем сами
+        rule.waitUntil(10_000) {
+            org.robolectric.shadows.ShadowLooper.idleMainLooper(100, java.util.concurrent.TimeUnit.MILLISECONDS)
+            next != "unset"
+        }
         assertEquals(Routes.WELCOME, next)
     }
 

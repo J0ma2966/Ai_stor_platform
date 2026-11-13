@@ -96,6 +96,7 @@ fun LoginScreen(
     onEmail: (mode: String) -> Unit,
     onDone: (next: String?) -> Unit,
     onRestart: () -> Unit,
+    telegramPollMs: Long = 2_000,
 ) {
     val graph = LocalGraph.current
     val api = graph.api
@@ -123,7 +124,7 @@ fun LoginScreen(
     LaunchedEffect(tg) {
         val attempt = tg ?: return@LaunchedEffect
         while (true) {
-            delay(2_000)
+            delay(telegramPollMs)
             try {
                 if (api.auth.telegramPoll(attempt) != null) {
                     tg = null
