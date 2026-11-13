@@ -5,6 +5,8 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -181,9 +183,15 @@ class ClientScreensTest {
             }
         }
         // в CI ответ /v1/auth/methods иногда приходит не сразу: двигаем main looper, пока ждём
-        rule.waitUntil(20_000) {
-            org.robolectric.shadows.ShadowLooper.idleMainLooper(50, java.util.concurrent.TimeUnit.MILLISECONDS)
-            rule.onAllNodes(hasTestTag("telegram")).fetchSemanticsNodes().isNotEmpty()
+        try {
+            rule.waitUntil(20_000) {
+                org.robolectric.shadows.ShadowLooper.idleMainLooper(50, java.util.concurrent.TimeUnit.MILLISECONDS)
+                rule.onAllNodes(hasTestTag("telegram")).fetchSemanticsNodes().isNotEmpty()
+            }
+        } catch (e: androidx.compose.ui.test.ComposeTimeoutException) {
+            // подробности для лога CI: дошёл ли запрос до сервера и что на экране
+            throw AssertionError("no telegram button; server requests=${server.requestCount}; screen:\n" +
+                rule.onRoot(useUnmergedTree = true).printToString(), e)
         }
         rule.onNodeWithTag("email_login").assertExists()
         assertEquals(0, rule.onAllNodes(hasTestTag("phone")).fetchSemanticsNodes().size)

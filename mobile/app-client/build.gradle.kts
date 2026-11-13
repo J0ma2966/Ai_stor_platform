@@ -98,3 +98,8 @@ dependencies {
     testImplementation(libs.okhttp.mockwebserver)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
+
+// в логе CI — полный текст ошибки упавшего теста (Robolectric-отчёты из артефакта открывать неудобно)
+tasks.withType<Test>().configureEach {
+    testLogging { exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
+}
