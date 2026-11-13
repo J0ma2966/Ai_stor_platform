@@ -71,7 +71,7 @@ for f in "${dbenvs[@]}"; do
   printf 'PG_IMAGE_TAG=smoke\nBACKUP_IMAGE_TAG=smoke\nMETRICS_HOST_DIR=%s/metrics-%s\n' "$work" "$f" >> "$work/env/$f.env"
 done
 multi && echo "COMPOSE_PROJECT_NAME=boutique-db-replica" >> "$work/env/replica.env"
-sed -i -e "s/^TLS_MODE=.*/TLS_MODE=internal/" -e "s/^APP_ENV=.*/APP_ENV=staging/" -e "s/^SMS_PROVIDER=.*/SMS_PROVIDER=log/" "$work/env/app.env"
+sed -i -e "s/^TLS_MODE=.*/TLS_MODE=internal/" -e "s/^APP_ENV=.*/APP_ENV=staging/" -e "s/^SMS_PROVIDER=.*/SMS_PROVIDER=log/" -e "s/^MAIL_PROVIDER=.*/MAIL_PROVIDER=log/" -e "s/^SMS_AUTH_ENABLED=.*/SMS_AUTH_ENABLED=true/" "$work/env/app.env"
 sed -i -e "s/^TLS_MODE=.*/TLS_MODE=internal/" -e "s/^TELEGRAM_CHAT_ID=.*/TELEGRAM_CHAT_ID=-1001/" "$work/env/edge.env"
 multi && printf 'HTTP_PORT=8088\nHTTPS_PORT=8443\n' >> "$work/env/edge.env"
 SITE_PORT=443; multi && SITE_PORT=8443
@@ -140,7 +140,7 @@ check "boutique_app cannot DELETE audit_log" bash -c "$(declare -f asapp); apppw
 check "boutique_app cannot disable triggers" bash -c "$(declare -f asapp); apppw=$apppw; IP=$IP; ! asapp 'alter table token_ledger disable trigger all'"
 check "boutique_app cannot create tables" bash -c "$(declare -f asapp); apppw=$apppw; IP=$IP; ! asapp 'create table x(i int)'"
 
-step "client: OTP login, private photo upload, presigned URL via s3 domain"
+step "client: OTP login (SMS auth switched on for this test), private photo upload, presigned URL via s3 domain"
 phone="+998901112233"
 "${CURL[@]}" -f -o /dev/null -H 'Content-Type: application/json' -d "{\"phone\":\"$phone\"}" "$API/v1/auth/otp/request" || bad "otp request"
 code=""; for _ in $(seq 1 10); do

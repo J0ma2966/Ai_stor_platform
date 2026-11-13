@@ -13,7 +13,7 @@ export default function AccountLayout({ children }: { children: ReactNode }) {
   const nav = useAccountNav();
   const pathname = usePathname();
   const { me } = useSession();
-  const needsPassword = !!me && me.role === "client" && me.registration_complete && !me.has_password;
+  const needsPassword = !!me && me.role === "client" && me.registration_complete && !!me.needs_password;
   const onboarding = pathname.startsWith("/account/welcome") || (pathname.startsWith("/account/password") && needsPassword);
   if (onboarding) return <AuthGate role="client">{children}</AuthGate>;
   return (

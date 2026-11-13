@@ -27,9 +27,14 @@ var publicRoutes = map[string]bool{
 	"POST /v1/auth/logout":             true,
 	"POST /v1/auth/password/login":     true,
 	"POST /v1/auth/password/reset":     true,
-	"GET /v1/auth/email/status":        true, // ВРЕМЕННО: вход по почте на время тестирования
+	"GET /v1/auth/methods":             true, // какие способы входа показывать
+	"POST /v1/auth/email/code":         true,
 	"POST /v1/auth/email/register":     true,
 	"POST /v1/auth/email/login":        true,
+	"POST /v1/auth/email/reset":        true,
+	"POST /v1/auth/google/":            true,
+	"POST /v1/auth/telegram/start":     true,
+	"POST /v1/auth/telegram/poll":      true,
 	"GET /v1/categories":               true,
 	"GET /v1/products":                 true,
 	"GET /v1/products/{id}":            true,

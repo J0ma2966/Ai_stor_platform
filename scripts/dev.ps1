@@ -7,7 +7,7 @@
                                   # (занятые или зарезервированные Windows порты заменит сам, см. .env)
   .\scripts\dev.ps1 admin root    # создать администратора (спросит пароль)
   .\scripts\dev.ps1 demo remove   # удалить тестовые магазины, если они были загружены раньше
-  .\scripts\dev.ps1 otp           # показать последние SMS-коды из логов (только dev)
+  .\scripts\dev.ps1 otp           # показать последние коды из SMS и писем (только dev)
   .\scripts\dev.ps1 web           # запустить сайт на http://localhost:3000
   .\scripts\dev.ps1 down          # остановить
 
@@ -221,7 +221,7 @@ switch ($Command) {
   'logs'   { Assert-Docker; if ($Arg) { Invoke-Compose logs -f --tail 200 $Arg } else { Invoke-Compose logs -f --tail 200 api } }
   'otp'    {
     Assert-Docker
-    Invoke-Compose logs --tail 500 api | Select-String 'DEV OTP' | Select-Object -Last 5
+    Invoke-Compose logs --tail 500 api | Select-String 'DEV OTP|DEV EMAIL CODE' | Select-Object -Last 5
   }
   'health' { Invoke-WebRequest -UseBasicParsing "$(Get-ApiProbeUrl)/readyz" | Select-Object StatusCode, Content }
   'admin'  {

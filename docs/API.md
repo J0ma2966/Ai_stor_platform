@@ -34,18 +34,21 @@
 
 ## Аутентификация
 
-1. `POST /v1/auth/otp/request {"phone":"+998901234567"}` → 202.
-2. `POST /v1/auth/otp/verify {"phone":"...","code":"123456"}` → `{access_token, expires_at, is_new_user, user}` + cookie `rt`.
+Клиенты входят через Telegram-бота, по почте и через Google — подробно в [AUTH.md](AUTH.md).
+Каждый способ возвращает одинаковую сессию `{access_token, expires_at, is_new_user, user}` + cookie `rt`.
+
+1. `GET /v1/auth/methods` — какие способы включены; затем, например,
+   `POST /v1/auth/email/login {"email","password"}` или Telegram/Google (AUTH.md).
 3. Новый клиент: `POST /v1/me/complete-registration {"gender":"female","pd_consent":true,"lang":"ru"}` → начисляется 20 токенов (один раз).
 4. Запросы: `Authorization: Bearer <access_token>`.
 5. При `401 token_invalid`: `POST /v1/auth/refresh` (cookie отправляется автоматически, `credentials: "include"`) → новый access-токен. Если и он 401 — на экран входа.
 6. `POST /v1/auth/logout`.
 
-### Пароль клиента (вход без SMS)
+### Пароль клиента и вход по SMS (только при `SMS_AUTH_ENABLED=true`, в prod выключено)
 
 SMS стоит денег, поэтому код нужен только для регистрации и восстановления пароля.
 
-- После регистрации по SMS клиент обязан задать пароль: `GET /v1/me` → `has_password: false`,
+- После регистрации по SMS клиент обязан задать пароль: `GET /v1/me` → `needs_password: true`,
   фронт ведёт на `/account/password` (после `/account/welcome`).
 - `POST /v1/auth/password {"password"}` (client) — первый пароль, 10–128 символов.
   Смена: `{"password","current_password"}`; без текущего → `422 current_password_required`,
@@ -80,10 +83,12 @@ SMS стоит денег, поэтому код нужен только для 
 | Метод | Путь | Роль |
 |---|---|---|
 | GET | `/healthz`, `/readyz` | — |
-| POST | `/v1/auth/otp/request`, `/v1/auth/otp/verify`, `/v1/auth/login`, `/v1/auth/refresh`, `/v1/auth/logout` | — |
-| POST | `/v1/auth/password/login`, `/v1/auth/password/reset` | — |
+| GET | `/v1/auth/methods` | — |
+| POST | `/v1/auth/login`, `/v1/auth/refresh`, `/v1/auth/logout` | — |
+| POST | `/v1/auth/email/code`, `/v1/auth/email/register`, `/v1/auth/email/login`, `/v1/auth/email/reset` (при `EMAIL_AUTH_ENABLED`) | — |
+| POST | `/v1/auth/google/` (при `GOOGLE_CLIENT_IDS`), `/v1/auth/telegram/start`, `/v1/auth/telegram/poll` (при настроенном боте) | — |
+| POST | `/v1/auth/otp/request`, `/v1/auth/otp/verify`, `/v1/auth/password/login`, `/v1/auth/password/reset` (только при `SMS_AUTH_ENABLED`) | — |
 | POST | `/v1/auth/password` | client |
-| POST | `/v1/auth/email/register`, `/v1/auth/email/login` (ВРЕМЕННО, при `EMAIL_AUTH_ENABLED`, см. docs/EMAIL_AUTH.md); GET `/v1/auth/email/status` | — |
 | GET | `/v1/categories`, `/v1/products`, `/v1/products/{id}` | — |
 | POST | `/v1/products/{id}/view` — браузер отмечает открытие карточки (204; 60/мин с IP). `GET /v1/products/{id}` просмотры не считает: его кэширует серверный рендеринг сайта | — |
 | GET | `/v1/me` | любая |

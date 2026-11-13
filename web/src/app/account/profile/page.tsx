@@ -129,9 +129,18 @@ export default function Profile() {
       </form>
 
       <section className="card stack-sm">
-        <h2>{t("passwordTitle")}</h2>
-        <p className="muted">{t("passwordText")}</p>
-        <p><Link href="/account/password">{t("passwordLink")}</Link></p>
+        <h2>{t("signInTitle")}</h2>
+        <ul className="plain stack-sm">
+          {me.has_telegram && <li>✓ {t("viaTelegram")}{me.phone ? ` · ${me.phone}` : ""}</li>}
+          {me.has_google && <li>✓ {t("viaGoogle")}</li>}
+          {me.email && <li>✓ {t("viaEmail", { email: me.email })}</li>}
+        </ul>
+        {(me.email || me.has_password) && (
+          <>
+            <p className="muted">{t("passwordText")}</p>
+            <p><Link href="/account/password">{t("passwordLink")}</Link></p>
+          </>
+        )}
       </section>
 
       <section className="card stack-sm">

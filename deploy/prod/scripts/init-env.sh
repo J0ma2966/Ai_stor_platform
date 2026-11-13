@@ -36,9 +36,9 @@ AGE_RECIPIENT=$(age-keygen -y "$out/age-identity.txt")
 
 if [[ "$envname" == "staging" ]]; then
   site="staging.$domain"; api="api.staging.$domain"; s3="s3.staging.$domain"; media="media.staging.$domain"
-  appenv=staging; sms=log
+  appenv=staging; mailp=log
 else
-  appenv=prod; sms=eskiz
+  appenv=prod; mailp=smtp
   site="$domain"; api="api.$domain"; s3="s3.$domain"; media="media.$domain"
 fi
 
@@ -75,17 +75,29 @@ UPLOAD_CONCURRENCY=4
 TRYON_PROVIDER=off
 API_CPUS=2
 API_MEMORY=2g
-# SMS-коды входа через Eskiz: без логина и пароля API в prod не стартует (так и задумано)
-SMS_PROVIDER=$sms
+# Вход клиентов (docs/AUTH.md): Telegram-бот, почта, Google. SMS-вход выключен.
+# Письма с кодами регистрации: в prod без SMTP API не стартует (так и задумано).
+EMAIL_AUTH_ENABLED=true
+MAIL_PROVIDER=$mailp
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASSWORD=
+MAIL_FROM=Boutique <no-reply@$domain>
+# OAuth client ID из Google Cloud Console (веб-клиент первым); пусто — кнопки Google нет
+GOOGLE_CLIENT_IDS=
+SMS_AUTH_ENABLED=false
+# SMS нужны только при SMS_AUTH_ENABLED или ORDER_SMS_ENABLED (тогда SMS_PROVIDER=eskiz)
+SMS_PROVIDER=log
 ESKIZ_EMAIL=
 ESKIZ_PASSWORD=
 ESKIZ_FROM=4546
-# Уведомления о заказах (docs/NOTIFICATIONS.md): бот магазинов включается, когда задан токен.
+# Telegram-бот: вход клиентов и уведомления магазинам (docs/NOTIFICATIONS.md); включается, когда задан токен.
 SITE_URL=https://$site
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_BOT_USERNAME=
 TELEGRAM_WEBHOOK_SECRET=$(rnd 24)
-TELEGRAM_WEBHOOK_URL=
+TELEGRAM_WEBHOOK_URL=https://$api/v1/telegram/webhook
 ORDER_SMS_ENABLED=false
 # Оплата: куда вернуть клиента после оплаты. Click/Payme включаются, когда заполнены их ключи;
 # тогда *_ALLOWED_IPS обязательны (адреса из договора с провайдером).

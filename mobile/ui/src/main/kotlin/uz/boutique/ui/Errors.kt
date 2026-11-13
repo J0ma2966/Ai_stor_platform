@@ -21,6 +21,9 @@ fun errorRes(code: String, appRole: Role): Int? = when (code) {
     "otp_cooldown" -> R.string.err_otp_cooldown
     "otp_invalid" -> R.string.err_otp_invalid
     "bad_credentials" -> R.string.err_bad_credentials
+    "telegram_login_expired" -> R.string.err_telegram_login_expired
+    "google_token_invalid" -> R.string.err_google_token_invalid
+    "email_taken" -> R.string.err_email_taken
     "store_not_active" -> R.string.err_store_not_active
     "phone_not_allowed" -> R.string.err_phone_not_allowed
     "products_unavailable" -> R.string.err_products_unavailable

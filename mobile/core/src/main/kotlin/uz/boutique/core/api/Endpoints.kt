@@ -6,6 +6,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
+import uz.boutique.core.model.AuthMethods
 import uz.boutique.core.model.Cart
 import uz.boutique.core.model.CartItem
 import uz.boutique.core.model.Category
@@ -25,6 +26,7 @@ import uz.boutique.core.model.Review
 import uz.boutique.core.model.Role
 import uz.boutique.core.model.SessionResp
 import uz.boutique.core.model.Store
+import uz.boutique.core.model.TelegramStart
 import uz.boutique.core.model.StoreStats
 import uz.boutique.core.model.UnreadCount
 import uz.boutique.core.model.UploadResult
@@ -39,6 +41,42 @@ internal fun query(vararg pairs: Pair<String, String?>): String {
 
 /** Вход и аккаунт. [appRole] — роль, для которой сделано приложение. */
 class AuthApi(private val c: ApiClient, private val appRole: Role) {
+    /** Какие способы входа показывать (Telegram, Google, почта; SMS — если включён на сервере). */
+    suspend fun methods(): AuthMethods = c.get("/v1/auth/methods", AuthMethods.serializer())
+
+    /** Код на почту: purpose = register | reset. */
+    suspend fun sendEmailCode(email: String, purpose: String, lang: String) =
+        c.exec("POST", "/v1/auth/email/code", buildJsonObject { put("email", email); put("purpose", purpose); put("lang", lang) })
+
+    suspend fun emailRegister(email: String, code: String, password: String): SessionResp =
+        guard(c.startSession("/v1/auth/email/register", buildJsonObject { put("email", email); put("code", code); put("password", password) }))
+
+    suspend fun emailLogin(email: String, password: String): SessionResp =
+        guard(c.startSession("/v1/auth/email/login", buildJsonObject { put("email", email); put("password", password) }))
+
+    suspend fun emailReset(email: String, code: String, password: String): SessionResp =
+        guard(c.startSession("/v1/auth/email/reset", buildJsonObject { put("email", email); put("code", code); put("password", password) }))
+
+    /** ID-токен Google из Credential Manager (serverClientId = веб-клиент из [methods]). */
+    suspend fun google(idToken: String): SessionResp =
+        guard(c.startSession("/v1/auth/google/", buildJsonObject { put("id_token", idToken) }))
+
+    suspend fun telegramStart(): TelegramStart = c.send("POST", "/v1/auth/telegram/start", null, TelegramStart.serializer())
+
+    /**
+     * null — вход ещё не подтверждён в боте. ApiException telegram_login_expired —
+     * попытка истекла, нужно начать заново.
+     */
+    suspend fun telegramPoll(t: TelegramStart): SessionResp? {
+        val r = c.send("POST", "/v1/auth/telegram/poll", buildJsonObject {
+            put("login_id", t.loginId); put("poll_token", t.pollToken)
+        }, JsonObject.serializer())
+        if (r["access_token"] == null) return null
+        val s = ApiJson.decodeFromJsonElement(SessionResp.serializer(), r)
+        c.session.set(s)
+        return guard(s)
+    }
+
     suspend fun requestOtp(phone: String) = c.exec("POST", "/v1/auth/otp/request", buildJsonObject { put("phone", phone) })
 
     suspend fun verifyOtp(phone: String, code: String): SessionResp =

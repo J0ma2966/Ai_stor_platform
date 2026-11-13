@@ -185,6 +185,44 @@ export async function setPassword(password: string, currentPassword?: string) {
   setSession(s.access_token, s.user.role);
   return s;
 }
+// ---- вход клиента: Telegram-бот, почта, Google (docs/AUTH.md) ----
+export type AuthMethods = {
+  email: boolean;
+  sms: boolean;
+  google: { client_id: string } | null;
+  telegram: { bot_username: string } | null;
+};
+export function getAuthMethods() {
+  return api<AuthMethods>("/v1/auth/methods");
+}
+async function signIn(path: string, body: unknown) {
+  const s = await api<SessionResp>(path, { method: "POST", body });
+  setSession(s.access_token, s.user.role);
+  return s;
+}
+export async function sendEmailCode(email: string, purpose: "register" | "reset", lang: string) {
+  await api("/v1/auth/email/code", { method: "POST", body: { email, purpose, lang } });
+}
+export const registerEmail = (email: string, code: string, password: string) =>
+  signIn("/v1/auth/email/register", { email, code, password });
+export const loginEmail = (email: string, password: string) => signIn("/v1/auth/email/login", { email, password });
+export const resetEmailPassword = (email: string, code: string, password: string) =>
+  signIn("/v1/auth/email/reset", { email, code, password });
+export const loginGoogle = (idToken: string) => signIn("/v1/auth/google/", { id_token: idToken });
+
+export type TelegramStart = { login_id: string; poll_token: string; url: string; expires_at: string };
+export const startTelegramLogin = () => api<TelegramStart>("/v1/auth/telegram/start", { method: "POST" });
+// null — вход ещё не подтверждён в боте; ApiError telegram_login_expired — начать заново.
+export async function pollTelegramLogin(t: Pick<TelegramStart, "login_id" | "poll_token">) {
+  const r = await api<SessionResp | { status: "pending" }>("/v1/auth/telegram/poll", {
+    method: "POST",
+    body: { login_id: t.login_id, poll_token: t.poll_token },
+  });
+  if ("status" in r) return null;
+  setSession(r.access_token, r.user.role);
+  return r;
+}
+
 export async function loginStaff(login: string, password: string) {
   const s = await api<SessionResp>("/v1/auth/login", { method: "POST", body: { login, password } });
   setSession(s.access_token, s.user.role);

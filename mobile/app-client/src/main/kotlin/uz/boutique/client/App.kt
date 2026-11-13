@@ -154,6 +154,7 @@ object Routes {
     const val PROFILE = "profile"
     const val LOGIN = "login"
     const val SMS = "sms/{mode}"
+    const val EMAIL = "email/{mode}"
     const val WELCOME = "welcome"
     const val PASSWORD = "password/{mode}"
     const val PRODUCT = "product/{id}"
@@ -168,6 +169,7 @@ object Routes {
     const val TRYON_PHOTOS = "tryon/photos"
 
     fun sms(mode: String) = "sms/$mode"
+    fun email(mode: String) = "email/$mode"
     fun password(mode: String) = "password/$mode"
     fun product(id: String) = "product/$id"
     fun order(id: String) = "order/$id"
@@ -187,12 +189,12 @@ private val tabs = listOf(
     Tab(Routes.PROFILE, UiR.string.nav_profile, Icons.Filled.Person),
 )
 
-/** Куда вести после входа: незавершённая регистрация и пароль обязательны (как на сайте). */
+/** Куда вести после входа: незавершённая регистрация обязательна; пароль — только после SMS (как на сайте). */
 suspend fun nextAfterLogin(api: Api): String? {
     val me = api.auth.me()
     return when {
         !me.registrationComplete -> Routes.WELCOME
-        !me.hasPassword -> Routes.password("set")
+        me.needsPassword -> Routes.password("set")
         else -> null
     }
 }
@@ -256,7 +258,7 @@ fun ClientNav(onRestart: () -> Unit) {
             shop.sync()
             // старый аккаунт без пароля или незавершённая регистрация — довести до конца
             runCatching { nextAfterLogin(api) }.getOrNull()?.let { next ->
-                if (nav.currentDestination?.route !in listOf(Routes.WELCOME, Routes.PASSWORD, Routes.LOGIN, Routes.SMS)) nav.navigate(next)
+                if (nav.currentDestination?.route !in listOf(Routes.WELCOME, Routes.PASSWORD, Routes.LOGIN, Routes.SMS, Routes.EMAIL)) nav.navigate(next)
             }
         } else {
             shop.clear()
@@ -418,8 +420,16 @@ fun ClientNav(onRestart: () -> Unit) {
                     onBack = { nav.popBackStack() },
                     onSms = { nav.navigate(Routes.sms("signup")) },
                     onForgot = { nav.navigate(Routes.sms("reset")) },
+                    onEmail = { mode -> nav.navigate(Routes.email(mode)) },
                     onDone = { next -> nav.finishLogin(next) },
                     onRestart = onRestart,
+                )
+            }
+            composable(Routes.EMAIL, arguments = listOf(navArgument("mode") { type = NavType.StringType })) { e ->
+                EmailScreen(
+                    initialMode = e.arguments?.getString("mode") ?: "login",
+                    onBack = { nav.popBackStack() },
+                    onDone = { next -> nav.finishLogin(next) },
                 )
             }
             composable(Routes.SMS, arguments = listOf(navArgument("mode") { type = NavType.StringType })) { e ->

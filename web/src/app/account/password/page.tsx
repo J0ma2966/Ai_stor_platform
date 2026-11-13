@@ -8,7 +8,7 @@ import { safeNext } from "@/lib/safeNext";
 import { useSession, type Me } from "@/lib/session";
 import { ErrorBox } from "@/components/ErrorBox";
 
-// Пароль клиента. После регистрации по SMS это обязательный шаг (has_password=false):
+// Пароль клиента. После регистрации по SMS это обязательный шаг (needs_password=true):
 // дальше клиент входит по телефону и паролю, а SMS нужна только для сброса пароля.
 // Если пароль уже есть — смена с вводом текущего.
 export default function PasswordPage() {

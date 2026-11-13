@@ -30,6 +30,7 @@ import (
 	"github.com/boutique-market/backend/internal/config"
 	"github.com/boutique-market/backend/internal/demoseed"
 	"github.com/boutique-market/backend/internal/janitor"
+	"github.com/boutique-market/backend/internal/mail"
 	"github.com/boutique-market/backend/internal/media"
 	"github.com/boutique-market/backend/internal/notify"
 	"github.com/boutique-market/backend/internal/orders"
@@ -133,13 +134,18 @@ func run(log *slog.Logger, args []string) error {
 	if cfg.TryOn.InProcess && provider != nil {
 		go worker.Run(ctx)
 	}
-	// config.Load уже запретил SMS_PROVIDER=log в prod.
+	// config.Load уже запретил SMS_PROVIDER=log в prod (когда SMS вообще нужны)
+	// и MAIL_PROVIDER=log при включённом входе по почте.
+	var mailSender mail.Sender = mail.LogSender{Log: log}
+	if cfg.MailProvider == "smtp" {
+		mailSender = &mail.SMTP{Host: cfg.SMTPHost, Port: cfg.SMTPPort, User: cfg.SMTPUser, Password: cfg.SMTPPassword, From: cfg.MailFrom}
+	}
 	var smsSender auth.SMSSender = auth.LogSender{Log: log}
 	if cfg.SMSProvider == "eskiz" {
 		smsSender = &sms.Eskiz{BaseURL: cfg.EskizURL, Email: cfg.EskizEmail, Password: cfg.EskizPassword,
 			From: cfg.EskizFrom, Template: cfg.SMSTemplate}
 	}
-	log.Info("providers", slog.String("sms", cfg.SMSProvider), slog.Bool("click", cfg.ClickEnabled()),
+	log.Info("providers", slog.String("sms", cfg.SMSProvider), slog.String("mail", cfg.MailProvider), slog.Bool("click", cfg.ClickEnabled()),
 		slog.Bool("payme", cfg.PaymeEnabled()), slog.Bool("payme_test", cfg.PaymeTest), slog.String("tryon", cfg.TryOn.Provider))
 
 	// Telegram-бот магазинов и SMS клиентам о заказах — через очередь outbound_messages.
@@ -218,7 +224,7 @@ func run(log *slog.Logger, args []string) error {
 
 	api := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           server.New(server.Deps{Cfg: cfg, Log: log, DB: pool, Redis: rdb, Storage: store, SMS: smsSender, Views: views, Fitting: fitting, Telegram: bot}),
+		Handler:           server.New(server.Deps{Cfg: cfg, Log: log, DB: pool, Redis: rdb, Storage: store, SMS: smsSender, Mail: mailSender, Views: views, Fitting: fitting, Telegram: bot}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       60 * time.Second,
 		WriteTimeout:      75 * time.Second,

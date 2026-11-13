@@ -16,10 +16,12 @@ export function buildCsp(nonce: string, dev = process.env.NODE_ENV === "developm
   const media = origins(process.env.NEXT_PUBLIC_MEDIA_ORIGIN, "http://localhost:9000");
   return [
     "default-src 'self'",
-    `connect-src 'self' ${api}`,
+    // Google Identity Services (кнопка «Войти с Google» на /login)
+    `connect-src 'self' ${api} https://accounts.google.com/gsi/`,
+    "frame-src https://accounts.google.com/gsi/",
     `img-src 'self' data: blob: ${media}`,
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${dev ? " 'unsafe-eval'" : ""}`,
-    "style-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style",
     "font-src 'self'",
     "object-src 'none'",
     "frame-ancestors 'none'",

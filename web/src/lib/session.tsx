@@ -20,6 +20,11 @@ export type Me = {
   body_params: Record<string, number>;
   registration_complete: boolean;
   has_password: boolean;
+  // клиент вошёл по SMS и ещё не задал пароль (только при включённом SMS-входе)
+  needs_password?: boolean;
+  email?: string;
+  has_telegram?: boolean;
+  has_google?: boolean;
   pd_consent_at: string | null;
   created_at: string;
 };

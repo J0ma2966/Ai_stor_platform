@@ -1,8 +1,35 @@
 package uz.boutique.client
 
+import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.Color
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import uz.boutique.core.api.ApiException
+import uz.boutique.core.model.AuthMethods
+import uz.boutique.core.model.TelegramStart
+import uz.boutique.ui.SecondaryButton
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -56,53 +83,140 @@ private fun FormColumn(pad: androidx.compose.foundation.layout.PaddingValues, co
     ) { content() }
 }
 
-/** Вход покупателя по номеру и паролю (SMS — только для регистрации и сброса пароля). */
+/**
+ * Вход и регистрация покупателя: Telegram-бот, Google, почта (docs/AUTH.md).
+ * Способы берутся с сервера (/v1/auth/methods). Вход по номеру и паролю
+ * показывается, только если на сервере включён SMS-вход.
+ */
 @Composable
 fun LoginScreen(
     onBack: () -> Unit,
     onSms: () -> Unit,
     onForgot: () -> Unit,
+    onEmail: (mode: String) -> Unit,
     onDone: (next: String?) -> Unit,
     onRestart: () -> Unit,
+    telegramPollMs: Long = 2_000,
 ) {
     val graph = LocalGraph.current
     val api = graph.api
-    var phone by rememberSaveable { mutableStateOf("+998 ") }
-    var password by rememberSaveable { mutableStateOf("") }
-    var phoneError by rememberSaveable { mutableStateOf(false) }
+    val context = LocalContext.current
+    var methods by remember { mutableStateOf<AuthMethods?>(null) }
+    var methodsError by remember { mutableStateOf<Throwable?>(null) }
+    var reload by remember { mutableIntStateOf(0) }
     var showServer by rememberSaveable { mutableStateOf(false) }
-    val action = rememberAction()
+    var tg by remember { mutableStateOf<TelegramStart?>(null) }
+    val tgAction = rememberAction()
+    val google = rememberAction()
+    var googleUnavailable by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(reload) {
+        methodsError = null
+        try {
+            methods = api.auth.methods()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            methodsError = e
+        }
+    }
+    // Ждём подтверждения в боте: опрос раз в 2 секунды, пока экран открыт.
+    LaunchedEffect(tg) {
+        val attempt = tg ?: return@LaunchedEffect
+        while (true) {
+            delay(telegramPollMs)
+            try {
+                if (api.auth.telegramPoll(attempt) != null) {
+                    tg = null
+                    onDone(nextAfterLogin(api))
+                    return@LaunchedEffect
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: ApiException) {
+                if (e.code == "telegram_login_expired" || e.code == "account_blocked" || e.code == ApiException.WRONG_APP) {
+                    tg = null
+                    tgAction.error = e
+                    return@LaunchedEffect
+                }
+            } catch (_: Exception) {
+                // нет сети — пробуем ещё раз, ссылка живёт 5 минут
+            }
+        }
+    }
 
     AppScaffold(title = stringResource(UiR.string.login_title), onBack = onBack) { pad ->
         FormColumn(pad) {
-            FormField(
-                phone, { phone = it; phoneError = false }, stringResource(UiR.string.login_phone),
-                keyboardType = KeyboardType.Phone,
-                error = if (phoneError) stringResource(UiR.string.login_phone_invalid) else null,
-                modifier = Modifier.testTag("phone"),
-            )
-            PasswordField(password, { password = it }, stringResource(UiR.string.login_password), modifier = Modifier.testTag("password"))
-            ErrorBanner(action.error)
-            PrimaryButton(
-                stringResource(UiR.string.login_sign_in),
-                busy = action.busy,
-                enabled = password.isNotEmpty(),
-                modifier = Modifier.testTag("sign_in"),
-                onClick = {
-                    val p = Phone.normalizeUz(phone)
-                    if (p == null) {
-                        phoneError = true
-                    } else {
-                        action.run {
-                            api.auth.passwordLogin(p, password)
-                            onDone(nextAfterLogin(api))
+            Text(stringResource(UiR.string.login_heading), style = MaterialTheme.typography.headlineSmall)
+            Text(stringResource(UiR.string.login_subtitle), color = Brand.colors.muted)
+            val m = methods
+            if (m == null) {
+                if (methodsError != null) {
+                    ErrorBanner(methodsError)
+                    SecondaryButton(stringResource(UiR.string.app_retry), onClick = { reload++ })
+                } else {
+                    Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                }
+            } else {
+                if (m.telegram != null) {
+                    val attempt = tg
+                    if (attempt == null) {
+                        Button(
+                            onClick = {
+                                tgAction.run {
+                                    val a = api.auth.telegramStart()
+                                    openUrl(context, a.url)
+                                    tg = a
+                                }
+                            },
+                            enabled = !tgAction.busy,
+                            colors = ButtonDefaults.buttonColors(containerColor = TelegramBlue, contentColor = Color.White),
+                            shape = RoundedCornerShape(50),
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("telegram"),
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Text(stringResource(UiR.string.login_telegram), style = MaterialTheme.typography.titleSmall)
                         }
+                    } else {
+                        TelegramWaitCard(onOpenAgain = { openUrl(context, attempt.url) }, onCancel = { tg = null })
                     }
-                },
-            )
-            TextButton(onClick = onForgot, modifier = Modifier.fillMaxWidth()) { Text(stringResource(UiR.string.login_forgot)) }
-            TextButton(onClick = onSms, modifier = Modifier.fillMaxWidth().testTag("to_sms")) { Text(stringResource(UiR.string.login_to_sms)) }
-            Text(stringResource(UiR.string.login_no_password_hint), style = MaterialTheme.typography.bodySmall, color = Brand.colors.muted)
+                    ErrorBanner(tgAction.error)
+                }
+                if (m.google != null) {
+                    OutlinedButton(
+                        onClick = {
+                            google.run {
+                                val token = googleIdToken(context, m.google!!.clientId)
+                                if (token == null) {
+                                    googleUnavailable = true
+                                } else if (token.isNotEmpty()) {
+                                    api.auth.google(token)
+                                    onDone(nextAfterLogin(api))
+                                }
+                            }
+                        },
+                        enabled = !google.busy,
+                        shape = RoundedCornerShape(50),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("google"),
+                    ) {
+                        Text("G", style = MaterialTheme.typography.titleMedium, color = GoogleBlue)
+                        Spacer(Modifier.width(10.dp))
+                        Text(stringResource(UiR.string.login_google), style = MaterialTheme.typography.titleSmall)
+                    }
+                    if (googleUnavailable) Text(stringResource(UiR.string.login_google_unavailable), color = Brand.colors.muted, style = MaterialTheme.typography.bodySmall)
+                    ErrorBanner(google.error)
+                }
+                if (m.email) {
+                    if (m.telegram != null || m.google != null) OrDivider()
+                    PrimaryButton(stringResource(UiR.string.login_email), onClick = { onEmail("login") }, modifier = Modifier.testTag("email_login"))
+                    TextButton(onClick = { onEmail("register") }, modifier = Modifier.fillMaxWidth().testTag("email_register")) {
+                        Text(stringResource(UiR.string.login_email_register))
+                    }
+                }
+                if (m.sms) PhonePasswordSection(onSms = onSms, onForgot = onForgot, onDone = onDone)
+                Text(stringResource(UiR.string.login_legal), style = MaterialTheme.typography.bodySmall, color = Brand.colors.muted)
+            }
             if (graph.allowServerOverride) {
                 TextButton(onClick = { showServer = true }) { Text(stringResource(UiR.string.app_server) + ": " + graph.baseUrl) }
             }
@@ -110,6 +224,178 @@ fun LoginScreen(
     }
     if (showServer) ServerDialog(onDismiss = { showServer = false }, onSaved = { showServer = false; onRestart() })
 }
+
+private val TelegramBlue = Color(0xFF229ED9)
+private val GoogleBlue = Color(0xFF4285F4)
+
+private fun openUrl(context: Context, url: String) {
+    try {
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    } catch (_: ActivityNotFoundException) {
+        // нет ни Telegram, ни браузера — ссылку можно открыть кнопкой «ещё раз» после установки
+    }
+}
+
+@Composable
+private fun OrDivider() {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        HorizontalDivider(Modifier.weight(1f), color = Brand.colors.line)
+        Text(stringResource(UiR.string.login_or), color = Brand.colors.muted, modifier = Modifier.padding(horizontal = 12.dp), style = MaterialTheme.typography.bodySmall)
+        HorizontalDivider(Modifier.weight(1f), color = Brand.colors.line)
+    }
+}
+
+@Composable
+private fun TelegramWaitCard(onOpenAgain: () -> Unit, onCancel: () -> Unit) {
+    Surface(color = TelegramBlue.copy(alpha = 0.10f), shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().testTag("telegram_wait")) {
+        Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            CircularProgressIndicator(color = TelegramBlue, strokeWidth = 3.dp, modifier = Modifier.size(22.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(stringResource(UiR.string.login_tg_wait_title), style = MaterialTheme.typography.titleSmall)
+                Text(stringResource(UiR.string.login_tg_wait_text), style = MaterialTheme.typography.bodySmall, color = Brand.colors.muted)
+                Row {
+                    TextButton(onClick = onOpenAgain) { Text(stringResource(UiR.string.login_tg_open_again)) }
+                    TextButton(onClick = onCancel) { Text(stringResource(UiR.string.app_cancel)) }
+                }
+            }
+        }
+    }
+}
+
+/** Вход по номеру и паролю — только при включённом на сервере SMS-входе. */
+@Composable
+private fun PhonePasswordSection(onSms: () -> Unit, onForgot: () -> Unit, onDone: (next: String?) -> Unit) {
+    val api = LocalGraph.current.api
+    var phone by rememberSaveable { mutableStateOf("+998 ") }
+    var password by rememberSaveable { mutableStateOf("") }
+    var phoneError by rememberSaveable { mutableStateOf(false) }
+    val action = rememberAction()
+    OrDivider()
+    Text(stringResource(UiR.string.login_phone_section), style = MaterialTheme.typography.titleSmall)
+    FormField(
+        phone, { phone = it; phoneError = false }, stringResource(UiR.string.login_phone),
+        keyboardType = KeyboardType.Phone,
+        error = if (phoneError) stringResource(UiR.string.login_phone_invalid) else null,
+        modifier = Modifier.testTag("phone"),
+    )
+    PasswordField(password, { password = it }, stringResource(UiR.string.login_password), modifier = Modifier.testTag("password"))
+    ErrorBanner(action.error)
+    SecondaryButton(
+        stringResource(UiR.string.login_sign_in),
+        enabled = password.isNotEmpty() && !action.busy,
+        modifier = Modifier.fillMaxWidth().testTag("sign_in"),
+        onClick = {
+            val p = Phone.normalizeUz(phone)
+            if (p == null) {
+                phoneError = true
+            } else {
+                action.run {
+                    api.auth.passwordLogin(p, password)
+                    onDone(nextAfterLogin(api))
+                }
+            }
+        },
+    )
+    TextButton(onClick = onForgot, modifier = Modifier.fillMaxWidth()) { Text(stringResource(UiR.string.login_forgot)) }
+    TextButton(onClick = onSms, modifier = Modifier.fillMaxWidth().testTag("to_sms")) { Text(stringResource(UiR.string.login_to_sms)) }
+}
+
+/** Почта: вход по паролю, регистрация и восстановление пароля по коду из письма. */
+@Composable
+fun EmailScreen(initialMode: String, onBack: () -> Unit, onDone: (next: String?) -> Unit) {
+    val api = LocalGraph.current.api
+    val lang = currentLang()
+    var mode by rememberSaveable { mutableStateOf(initialMode) }
+    var email by rememberSaveable { mutableStateOf("") }
+    var sentTo by rememberSaveable { mutableStateOf<String?>(null) }
+    var code by rememberSaveable { mutableStateOf("") }
+    var password by rememberSaveable { mutableStateOf("") }
+    var repeat by rememberSaveable { mutableStateOf("") }
+    var emailError by rememberSaveable { mutableStateOf(false) }
+    var pwError by rememberSaveable { mutableStateOf<String?>(null) }
+    val action = rememberAction()
+    val tooShort = stringResource(UiR.string.password_hint)
+    val mismatch = stringResource(UiR.string.password_mismatch)
+
+    fun switch(m: String) {
+        mode = m; sentTo = null; code = ""; password = ""; repeat = ""; pwError = null; action.error = null
+    }
+
+    val title = when (mode) {
+        "register" -> UiR.string.email_register_title
+        "reset" -> UiR.string.email_reset_title
+        else -> UiR.string.email_login_title
+    }
+    AppScaffold(title = stringResource(title), onBack = onBack) { pad ->
+        FormColumn(pad) {
+            if (mode != "login" && sentTo == null) {
+                InfoBanner(stringResource(if (mode == "register") UiR.string.email_register_hint else UiR.string.email_reset_hint))
+            }
+            FormField(
+                email, { email = it.trim(); emailError = false }, stringResource(UiR.string.email_address),
+                keyboardType = KeyboardType.Email,
+                enabled = sentTo == null,
+                error = if (emailError) stringResource(UiR.string.email_invalid) else fieldErrorText(action.error.fields()["email"]),
+                modifier = Modifier.testTag("email"),
+            )
+            val addr = email.trim().lowercase()
+            val valid = EMAIL_RE.matches(addr)
+            when {
+                mode == "login" -> {
+                    PasswordField(password, { password = it }, stringResource(UiR.string.login_password), modifier = Modifier.testTag("password"))
+                    ErrorBanner(action.error)
+                    PrimaryButton(stringResource(UiR.string.login_sign_in), busy = action.busy, enabled = password.isNotEmpty(), modifier = Modifier.testTag("sign_in"), onClick = {
+                        if (!valid) emailError = true else action.run {
+                            api.auth.emailLogin(addr, password)
+                            onDone(nextAfterLogin(api))
+                        }
+                    })
+                    TextButton(onClick = { switch("register") }, modifier = Modifier.fillMaxWidth().testTag("to_register")) { Text(stringResource(UiR.string.email_to_register)) }
+                    TextButton(onClick = { switch("reset") }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(UiR.string.login_forgot)) }
+                }
+                sentTo == null -> {
+                    ErrorBanner(action.error)
+                    PrimaryButton(stringResource(UiR.string.login_send_code), busy = action.busy, modifier = Modifier.testTag("send_code"), onClick = {
+                        if (!valid) emailError = true else action.run {
+                            api.auth.sendEmailCode(addr, mode, lang)
+                            sentTo = addr
+                        }
+                    })
+                    TextButton(onClick = { switch("login") }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(UiR.string.email_to_login)) }
+                }
+                else -> {
+                    Text(stringResource(UiR.string.email_code_sent, sentTo!!), color = Brand.colors.muted)
+                    FormField(
+                        code, { v -> code = v.filter { it.isDigit() }.take(6) }, stringResource(UiR.string.email_code),
+                        keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Next, modifier = Modifier.testTag("code"),
+                    )
+                    PasswordField(password, { password = it; pwError = null }, stringResource(UiR.string.password_new), hint = tooShort, error = pwError, imeAction = ImeAction.Next, modifier = Modifier.testTag("new_password"))
+                    PasswordField(repeat, { repeat = it; pwError = null }, stringResource(UiR.string.password_repeat), modifier = Modifier.testTag("repeat_password"))
+                    ErrorBanner(action.error)
+                    PrimaryButton(
+                        stringResource(if (mode == "register") UiR.string.email_register_submit else UiR.string.login_reset_submit),
+                        busy = action.busy, enabled = code.length == 6, modifier = Modifier.testTag("submit"),
+                        onClick = {
+                            when {
+                                Passwords.check(password) != null -> pwError = tooShort
+                                password != repeat -> pwError = mismatch
+                                else -> action.run {
+                                    if (mode == "register") api.auth.emailRegister(sentTo!!, code, password) else api.auth.emailReset(sentTo!!, code, password)
+                                    onDone(nextAfterLogin(api))
+                                }
+                            }
+                        },
+                    )
+                    TextButton(onClick = { action.run { api.auth.sendEmailCode(sentTo!!, mode, lang) } }, enabled = !action.busy, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(UiR.string.login_resend))
+                    }
+                }
+            }
+        }
+    }
+}
+
+private val EMAIL_RE = Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")
 
 /** Регистрация/вход по SMS-коду или восстановление пароля (код + новый пароль). */
 @Composable
@@ -222,7 +508,7 @@ fun WelcomeScreen(onDone: (next: String?) -> Unit) {
             PrimaryButton(stringResource(UiR.string.welcome_submit), busy = action.busy, enabled = gender != null && consent, onClick = {
                 action.run {
                     val me = api.auth.completeRegistration(gender!!, AppLang.current())
-                    onDone(if (!me.hasPassword) Routes.password("set") else null)
+                    onDone(if (me.needsPassword) Routes.password("set") else null)
                 }
             })
         }

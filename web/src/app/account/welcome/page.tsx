@@ -10,7 +10,7 @@ import { useSession, type Me } from "@/lib/session";
 import { ErrorBox } from "@/components/ErrorBox";
 
 // Завершение регистрации: пол (обязательно) + согласие на обработку ПД → приветственные токены,
-// затем пароль (/account/password), если его ещё нет.
+// затем пароль (/account/password) — только тем, кто вошёл по SMS (needs_password).
 export default function Welcome() {
   const t = useTranslations("welcome");
   const locale = useLocale();

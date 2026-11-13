@@ -169,7 +169,11 @@ class TryonScreensTest {
         val shop = ShopState(g.api, MemoryStore())
         shop.setFitting(listOf(shirt))
         show(g, shop) { TryonWizardScreen(onBack = {}, onStarted = {}, onCatalog = {}) }
-        rule.waitUntil(5_000) { rule.onAllNodes(hasTestTag("tryon_disabled")).fetchSemanticsNodes().isNotEmpty() }
+        // ответ сервера возвращается через main looper: в CI двигаем его сами, пока ждём
+        rule.waitUntil(20_000) {
+            org.robolectric.shadows.ShadowLooper.idleMainLooper(50, java.util.concurrent.TimeUnit.MILLISECONDS)
+            rule.onAllNodes(hasTestTag("tryon_disabled")).fetchSemanticsNodes().isNotEmpty()
+        }
     }
 
     @Test fun failedGenerationExplainsAndRefunds() {

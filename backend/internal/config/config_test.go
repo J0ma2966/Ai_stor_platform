@@ -19,6 +19,13 @@ func TestSMSProviderRules(t *testing.T) {
 		t.Fatalf("dev with log sender must load: %v", err)
 	}
 	t.Setenv("APP_ENV", "prod")
+	t.Setenv("MAIL_PROVIDER", "smtp")
+	t.Setenv("SMTP_HOST", "smtp.test")
+	t.Setenv("MAIL_FROM", "Boutique <no-reply@shop.uz>")
+	if _, err := Load(); err != nil && strings.Contains(err.Error(), "SMS_PROVIDER") {
+		t.Fatalf("prod without SMS sign-up must not need an SMS provider: %v", err)
+	}
+	t.Setenv("SMS_AUTH_ENABLED", "true")
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "SMS_PROVIDER=log") {
 		t.Fatalf("prod must reject log sender: %v", err)
 	}
@@ -67,6 +74,9 @@ func TestPaymentProdRules(t *testing.T) {
 	t.Setenv("ESKIZ_EMAIL", "a@b.uz")
 	t.Setenv("ESKIZ_PASSWORD", "pw")
 	t.Setenv("PAYMENT_RETURN_URL", "https://shop.uz/account/balance")
+	t.Setenv("MAIL_PROVIDER", "smtp")
+	t.Setenv("SMTP_HOST", "smtp.test")
+	t.Setenv("MAIL_FROM", "no-reply@shop.uz")
 	t.Setenv("PAYME_MERCHANT_ID", "m")
 	t.Setenv("PAYME_KEY", "k")
 	t.Setenv("CLICK_SERVICE_ID", "1")
@@ -168,5 +178,32 @@ func TestOpenAINotInProdWithoutApproval(t *testing.T) {
 	t.Setenv("OPENAI_PROD_APPROVED", "true")
 	if _, err := Load(); err != nil && strings.Contains(err.Error(), "OPENAI_PROD_APPROVED") {
 		t.Fatalf("approval flag ignored: %v", err)
+	}
+}
+
+func TestAuthMethodsConfig(t *testing.T) {
+	base(t)
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.EmailAuthEnabled || !c.SMSAuthEnabled || c.MailProvider != "log" {
+		t.Fatalf("dev defaults: %+v", c)
+	}
+	t.Setenv("APP_ENV", "prod")
+	c, err = Load()
+	if c.SMSAuthEnabled {
+		t.Fatal("SMS sign-up must be off by default in prod")
+	}
+	if err == nil || !strings.Contains(err.Error(), "MAIL_PROVIDER=log") {
+		t.Fatalf("prod email sign-up needs smtp: %v", err)
+	}
+	t.Setenv("MAIL_PROVIDER", "smtp")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "SMTP_HOST") {
+		t.Fatalf("smtp needs host: %v", err)
+	}
+	t.Setenv("GOOGLE_CLIENT_IDS", "123-abc.apps.googleusercontent.com, evil")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "evil") {
+		t.Fatalf("bad google client id: %v", err)
 	}
 }
