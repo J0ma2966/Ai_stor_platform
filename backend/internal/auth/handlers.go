@@ -37,11 +37,15 @@ var (
 )
 
 func (h *Handlers) Routes(r chi.Router) {
-	r.Post("/otp/request", h.requestOTP)
-	r.Post("/otp/verify", h.verifyOTP)
 	r.Post("/login", h.login)
 	r.Post("/refresh", h.refresh)
 	r.Post("/logout", h.logout)
+}
+
+// SMSRoutes — вход и регистрация клиента по SMS-коду (только при SMS_AUTH_ENABLED).
+func (h *Handlers) SMSRoutes(r chi.Router) {
+	r.Post("/otp/request", h.requestOTP)
+	r.Post("/otp/verify", h.verifyOTP)
 }
 
 type otpRequest struct {
@@ -147,6 +151,9 @@ func (h *Handlers) finish(w http.ResponseWriter, r *http.Request, sess *Session,
 		return
 	case errors.Is(err, ErrBadCredentials):
 		httpx.Fail(w, r, httpx.NewError(http.StatusUnauthorized, "bad_credentials", "invalid login or password"))
+		return
+	case errors.Is(err, ErrTelegramLoginExpired):
+		httpx.Fail(w, r, httpx.NewError(http.StatusGone, "telegram_login_expired", "login link expired, start again"))
 		return
 	case errors.Is(err, ErrAccountBlocked):
 		httpx.Fail(w, r, httpx.NewError(http.StatusForbidden, "account_blocked", "account is blocked"))

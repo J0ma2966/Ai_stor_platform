@@ -19,6 +19,7 @@ import (
 	"github.com/boutique-market/backend/internal/catalogadmin"
 	"github.com/boutique-market/backend/internal/config"
 	"github.com/boutique-market/backend/internal/httpx"
+	"github.com/boutique-market/backend/internal/mail"
 	"github.com/boutique-market/backend/internal/media"
 	"github.com/boutique-market/backend/internal/notify"
 	"github.com/boutique-market/backend/internal/orders"
@@ -41,7 +42,10 @@ type Deps struct {
 	Redis   *redis.Client
 	Storage media.Storage
 	SMS     auth.SMSSender
-	Views   *products.ViewCounter // nil — просмотры не считаются (тесты)
+	Mail    mail.Sender // nil — письма с кодами пишутся в лог (dev/test)
+	// GoogleCertsURL — подмена адреса ключей Google в тестах; пусто — настоящий.
+	GoogleCertsURL string
+	Views          *products.ViewCounter // nil — просмотры не считаются (тесты)
 	// UserPurge — очистка данных клиента в других модулях при удалении аккаунта.
 	UserPurge []users.PurgeFunc
 	Fitting   *tryon.FittingCounter // nil — счётчик «В примерочную» отключён
@@ -51,9 +55,22 @@ type Deps struct {
 func New(d Deps) http.Handler {
 	signer := auth.NewSigner(d.Cfg.JWTSecret, d.Cfg.AccessTTL)
 	limiter := ratelimit.New(d.Redis)
+	mailer := d.Mail
+	if mailer == nil {
+		mailer = mail.LogSender{Log: d.Log}
+	}
 	authSvc := &auth.Service{
-		DB: d.DB, Signer: signer, SMS: d.SMS, RefreshTTL: d.Cfg.RefreshTTL,
-		OTP: auth.NewOTP(d.Redis, d.Cfg.OTPPepper, d.Cfg.OTPTTL, d.Cfg.OTPCooldown, d.Cfg.OTPMaxTries),
+		DB: d.DB, Redis: d.Redis, Signer: signer, SMS: d.SMS, RefreshTTL: d.Cfg.RefreshTTL,
+		OTP:      auth.NewOTP(d.Redis, d.Cfg.OTPPepper, d.Cfg.OTPTTL, d.Cfg.OTPCooldown, d.Cfg.OTPMaxTries),
+		EmailOTP: auth.NewOTP(d.Redis, d.Cfg.OTPPepper, 10*time.Minute, time.Minute, 5),
+		Mail:     mailer,
+	}
+	if len(d.Cfg.GoogleClientIDs) > 0 {
+		authSvc.Google = &auth.GoogleVerifier{ClientIDs: d.Cfg.GoogleClientIDs, CertsURL: d.GoogleCertsURL}
+	}
+	telegramLogin := d.Telegram != nil && d.Cfg.TelegramBotUsername != ""
+	if telegramLogin {
+		authSvc.TelegramBot = d.Cfg.TelegramBotUsername
 	}
 	revoker := auth.NewRevoker(d.Redis, d.Cfg.AccessTTL)
 	authH := &auth.Handlers{Svc: authSvc, Limiter: limiter, AllowedPrefixes: d.Cfg.OTPAllowedPrefixes,
@@ -75,20 +92,18 @@ func New(d Deps) http.Handler {
 	ordersH := &orders.Handlers{DB: d.DB, Media: d.Storage, Limiter: limiter, PublicBase: d.Cfg.PublicMediaURL,
 		SiteURL: d.Cfg.SiteURL, OrderSMS: d.Cfg.OrderSMS, AllowedPrefixes: d.Cfg.OTPAllowedPrefixes}
 	telegramH := &telegram.Handlers{DB: d.DB, Bot: d.Telegram, BotUsername: d.Cfg.TelegramBotUsername,
-		Secret: d.Cfg.TelegramWebhookSecret, Orders: ordersH}
+		Secret: d.Cfg.TelegramWebhookSecret, Orders: ordersH, Login: authSvc}
 	tryonH := &tryon.Handlers{DB: d.DB, Store: d.Storage, Limiter: limiter, Redis: d.Redis, PublicBase: d.Cfg.PublicMediaURL,
 		Retention: RetentionFrom(d.Cfg), MaxActive: d.Cfg.TryOn.MaxActive, Provider: d.Cfg.TryOn.Provider, Fitting: d.Fitting}
 	// Удаление аккаунта стирает и биометрию (фото тела, результаты примерок).
 	usersH.Purge = append(usersH.Purge, func(ctx context.Context, tx pgx.Tx, userID uuid.UUID) error {
 		return tryon.PurgeUser(ctx, tx, tryonH.Store, userID)
 	})
-	// ВРЕМЕННО: тестовый вход по почте — удаление аккаунта стирает почту и пароль.
-	usersH.Purge = append(usersH.Purge, auth.PurgeEmail)
+	// Удаление аккаунта стирает почту, пароль и привязки Telegram и Google.
+	usersH.Purge = append(usersH.Purge, auth.PurgeIdentities)
 	// Отзывы удалённого клиента убираются, средние оценки товаров пересчитываются.
 	usersH.Purge = append(usersH.Purge, reviews.PurgeUser)
-	if d.Cfg.EmailAuthEnabled && d.Cfg.IsProd() {
-		d.Log.Warn("EMAIL_AUTH_ENABLED=true in prod: temporary email sign-up without verification is open")
-	}
+	usersH.SMSAuth = d.Cfg.SMSAuthEnabled
 	paymentsH, err := payments.New(d.DB, d.Cfg, limiter)
 	if err != nil {
 		panic("payments config: " + err.Error()) // неверный CLICK_/PAYME_ALLOWED_IPS — ошибка конфигурации
@@ -128,8 +143,21 @@ func New(d Deps) http.Handler {
 
 				r.Route("/auth", func(r chi.Router) {
 					authH.Routes(r)
-					r.Route("/password", authH.PasswordRoutes)                   // вход клиента по паролю, сброс через SMS
-					r.Route("/email", authH.EmailRoutes(d.Cfg.EmailAuthEnabled)) // ВРЕМЕННО, см. auth/email_temp.go
+					// какие способы входа показывать клиенту (сайт и приложение)
+					r.Get("/methods", authMethods(d.Cfg, telegramLogin))
+					if d.Cfg.SMSAuthEnabled {
+						authH.SMSRoutes(r)
+					}
+					r.Route("/password", authH.PasswordRoutes(d.Cfg.SMSAuthEnabled))
+					if d.Cfg.EmailAuthEnabled {
+						r.Route("/email", authH.EmailRoutes)
+					}
+					if authSvc.Google != nil {
+						r.Route("/google", authH.GoogleRoutes)
+					}
+					if telegramLogin {
+						r.Route("/telegram", authH.TelegramRoutes)
+					}
 				})
 				productsH.PublicRoutes(r)
 				reviewsH.PublicRoutes(r)
@@ -236,4 +264,20 @@ func timeout(d time.Duration) func(http.Handler) http.Handler {
 // RetentionFrom — сроки хранения биометрии из конфигурации.
 func RetentionFrom(c config.Config) tryon.Retention {
 	return tryon.Retention{Photo: c.TryOn.PhotoTTL, SavedPhoto: c.TryOn.SavedPhotoTTL, Result: c.TryOn.ResultTTL, SavedLook: c.TryOn.SavedLookTTL}
+}
+
+// authMethods: GET /v1/auth/methods — способы входа клиента. Google client_id и
+// имя бота публичные (их всё равно видно на странице входа).
+func authMethods(c config.Config, telegram bool) http.HandlerFunc {
+	body := map[string]any{"email": c.EmailAuthEnabled, "sms": c.SMSAuthEnabled, "google": nil, "telegram": nil}
+	if len(c.GoogleClientIDs) > 0 {
+		body["google"] = map[string]any{"client_id": c.GoogleClientIDs[0]}
+	}
+	if telegram {
+		body["telegram"] = map[string]any{"bot_username": c.TelegramBotUsername}
+	}
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Cache-Control", "public, max-age=300")
+		httpx.JSON(w, http.StatusOK, body)
+	}
 }

@@ -51,9 +51,22 @@ type Config struct {
 
 	AutoMigrate bool
 
-	// ВРЕМЕННО (тестирование): вход клиента по почте и паролю, см. auth/email_temp.go.
-	// EMAIL_AUTH_ENABLED; по умолчанию включено в dev/test и выключено в prod.
+	// Способы входа клиента (docs/AUTH.md): почта, Google, Telegram-бот; SMS — выключено.
+	// EMAIL_AUTH_ENABLED (по умолчанию true): регистрация по почте с кодом из письма.
 	EmailAuthEnabled bool
+	// SMS_AUTH_ENABLED: вход и регистрация по номеру телефона и SMS-коду (Eskiz).
+	// По умолчанию включено только в dev/test; в prod — выключено (решение 2026-11-13).
+	SMSAuthEnabled bool
+	// GOOGLE_CLIENT_IDS: OAuth client ID (через запятую). Первый — веб-клиент: его
+	// показывает сайт и им же Android-приложение запрашивает ID-токен (serverClientId).
+	GoogleClientIDs []string
+	// Почта: MAIL_PROVIDER=log (только dev/test) | smtp.
+	MailProvider string
+	SMTPHost     string
+	SMTPPort     int // 587 — STARTTLS, 465 — TLS сразу
+	SMTPUser     string
+	SMTPPassword string
+	MailFrom     string // напр. "Boutique <no-reply@shop.uz>"
 
 	// SMS: log (только dev/test) | eskiz
 	SMSProvider   string
@@ -191,7 +204,15 @@ func Load() (Config, error) {
 		PublicMediaURL:     get("PUBLIC_MEDIA_URL", "http://localhost:9000/boutique-media"),
 		UploadConcurrency:  min(max(getInt("UPLOAD_CONCURRENCY", 4), 1), 64),
 		AutoMigrate:        getBool("AUTO_MIGRATE", false),
-		EmailAuthEnabled:   getBool("EMAIL_AUTH_ENABLED", get("APP_ENV", "dev") != "prod"),
+		EmailAuthEnabled:   getBool("EMAIL_AUTH_ENABLED", true),
+		SMSAuthEnabled:     getBool("SMS_AUTH_ENABLED", get("APP_ENV", "dev") != "prod"),
+		GoogleClientIDs:    splitList(os.Getenv("GOOGLE_CLIENT_IDS")),
+		MailProvider:       get("MAIL_PROVIDER", "log"),
+		SMTPHost:           os.Getenv("SMTP_HOST"),
+		SMTPPort:           getInt("SMTP_PORT", 587),
+		SMTPUser:           os.Getenv("SMTP_USER"),
+		SMTPPassword:       os.Getenv("SMTP_PASSWORD"),
+		MailFrom:           os.Getenv("MAIL_FROM"),
 
 		BiometricS3Endpoint:  os.Getenv("BIOMETRIC_S3_ENDPOINT"),
 		BiometricS3Region:    get("BIOMETRIC_S3_REGION", "uz-tashkent-1"),
@@ -282,9 +303,11 @@ func Load() (Config, error) {
 	if c.OrderSMS && c.SMSProvider != "eskiz" && c.IsProd() {
 		errs = append(errs, errors.New("ORDER_SMS_ENABLED needs SMS_PROVIDER=eskiz"))
 	}
+	errs = append(errs, c.validateMail()...)
 	switch c.SMSProvider {
 	case "log":
-		if c.IsProd() {
+		// SMS в prod нужны только для входа по номеру или уведомлений о заказах.
+		if c.IsProd() && (c.SMSAuthEnabled || c.OrderSMS) {
 			errs = append(errs, errors.New("SMS_PROVIDER=log is forbidden in prod (use eskiz)"))
 		}
 	case "eskiz":
@@ -451,6 +474,36 @@ func (c Config) String() string {
 	if c.BiometricS3Endpoint != "" {
 		bio = c.BiometricS3Endpoint + "/" + c.BiometricS3Bucket + " (" + c.BiometricCountry + ")"
 	}
-	return fmt.Sprintf("env=%s http=%s internal=%s s3=%s/%s biometric=%s tryon=%s email_auth=%t",
-		c.Env, c.HTTPAddr, c.InternalAddr, c.S3Endpoint, c.S3Bucket, bio, c.TryOn.Provider, c.EmailAuthEnabled)
+	return fmt.Sprintf("env=%s http=%s internal=%s s3=%s/%s biometric=%s tryon=%s email_auth=%t sms_auth=%t google=%t mail=%s",
+		c.Env, c.HTTPAddr, c.InternalAddr, c.S3Endpoint, c.S3Bucket, bio, c.TryOn.Provider, c.EmailAuthEnabled,
+		c.SMSAuthEnabled, len(c.GoogleClientIDs) > 0, c.MailProvider)
+}
+
+// validateMail: письма с кодами нужны для регистрации по почте; в prod — только SMTP.
+func (c Config) validateMail() []error {
+	var errs []error
+	switch c.MailProvider {
+	case "log":
+		if c.IsProd() && c.EmailAuthEnabled {
+			errs = append(errs, errors.New("MAIL_PROVIDER=log is forbidden in prod with EMAIL_AUTH_ENABLED (use smtp)"))
+		}
+	case "smtp":
+		if c.SMTPHost == "" || c.MailFrom == "" {
+			errs = append(errs, errors.New("SMTP_HOST and MAIL_FROM are required for MAIL_PROVIDER=smtp"))
+		}
+		if c.SMTPPort <= 0 || c.SMTPPort > 65535 {
+			errs = append(errs, errors.New("SMTP_PORT is invalid"))
+		}
+		if strings.ContainsAny(c.MailFrom, "\r\n") {
+			errs = append(errs, errors.New("MAIL_FROM must be a single line"))
+		}
+	default:
+		errs = append(errs, fmt.Errorf("unknown MAIL_PROVIDER %q", c.MailProvider))
+	}
+	for _, id := range c.GoogleClientIDs {
+		if !strings.HasSuffix(id, ".apps.googleusercontent.com") {
+			errs = append(errs, fmt.Errorf("GOOGLE_CLIENT_IDS: %q is not a Google OAuth client ID", id))
+		}
+	}
+	return errs
 }

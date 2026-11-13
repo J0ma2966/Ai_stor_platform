@@ -51,8 +51,9 @@ func (c *captureSMS) last(phone string) string {
 type env struct {
 	t   *testing.T
 	srv *httptest.Server
-	sms *captureSMS
-	mr  *miniredis.Miniredis
+	sms  *captureSMS
+	mail *captureMail
+	mr   *miniredis.Miniredis
 	d   Deps
 }
 
@@ -60,25 +61,26 @@ func setup(t *testing.T, mods ...func(*Deps)) *env {
 	pool := testutil.DB(t)
 	mr := miniredis.RunT(t)
 	sms := &captureSMS{codes: map[string]string{}}
+	mailer := &captureMail{codes: map[string]string{}}
 	d := Deps{
 		Cfg: config.Config{
 			Env: "test", JWTSecret: []byte(strings.Repeat("k", 32)), AccessTTL: 15 * time.Minute, RefreshTTL: 24 * time.Hour,
 			OTPTTL: 5 * time.Minute, OTPCooldown: time.Minute, OTPMaxTries: 5, OTPPepper: []byte("pepper-pepper-pepper"),
 			MaxUploadMB: 5, CookieSecure: false, OTPAllowedPrefixes: []string{"+998"},
-			PublicMediaURL: "https://cdn.test", UploadConcurrency: 2, EmailAuthEnabled: true,
+			PublicMediaURL: "https://cdn.test", UploadConcurrency: 2, EmailAuthEnabled: true, SMSAuthEnabled: true,
 			PaymentReturnURL: "https://shop.test/account/balance",
 			ClickServiceID:   "777", ClickMerchantID: "555", ClickSecretKey: testClickSecret,
 			PaymeMerchantID: "pm-merchant", PaymeKey: testPaymeKey, PaymeTest: true, PaymeAccountKey: "payment_id",
 		},
 		Log: slog.New(slog.NewJSONHandler(io.Discard, nil)), DB: pool,
-		Redis: redis.NewClient(&redis.Options{Addr: mr.Addr()}), Storage: media.NewMemory(), SMS: sms,
+		Redis: redis.NewClient(&redis.Options{Addr: mr.Addr()}), Storage: media.NewMemory(), SMS: sms, Mail: mailer,
 	}
 	for _, m := range mods {
 		m(&d)
 	}
 	srv := httptest.NewServer(New(d))
 	t.Cleanup(srv.Close)
-	return &env{t: t, srv: srv, sms: sms, mr: mr, d: d}
+	return &env{t: t, srv: srv, sms: sms, mail: mailer, mr: mr, d: d}
 }
 
 // client — HTTP-клиент со своей cookie-jar (отдельное «устройство»).

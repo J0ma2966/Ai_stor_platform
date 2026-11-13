@@ -41,10 +41,16 @@ var (
 )
 
 // PasswordRoutes монтируется в /v1/auth/password.
-func (h *Handlers) PasswordRoutes(r chi.Router) {
-	r.Post("/login", h.passwordLogin)
-	r.Post("/reset", h.passwordReset)
-	r.With(RequireRole(RoleClient)).Post("/", h.setPassword)
+// Вход по номеру и сброс по SMS — только при sms (SMS_AUTH_ENABLED); задать или
+// сменить пароль вошедший клиент может всегда.
+func (h *Handlers) PasswordRoutes(sms bool) func(chi.Router) {
+	return func(r chi.Router) {
+		if sms {
+			r.Post("/login", h.passwordLogin)
+			r.Post("/reset", h.passwordReset)
+		}
+		r.With(RequireRole(RoleClient)).Post("/", h.setPassword)
+	}
 }
 
 type pwLoginReq struct {

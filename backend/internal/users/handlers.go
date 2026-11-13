@@ -25,6 +25,7 @@ type Handlers struct {
 	DB      *pgxpool.Pool
 	Revoker *auth.Revoker // отзыв access-токенов при удалении аккаунта
 	Purge   []PurgeFunc   // очистка данных в других модулях при удалении аккаунта
+	SMSAuth bool          // вход по номеру и SMS включён (SMS_AUTH_ENABLED)
 }
 
 // Routes монтируются за RequireRole(client) — кроме GET /me, доступного всем ролям.
@@ -53,21 +54,30 @@ type Me struct {
 	BodyParams   json.RawMessage `json:"body_params"`
 	Registered   bool            `json:"registration_complete"`
 	HasPassword  bool            `json:"has_password"`
-	PDConsentAt  *time.Time      `json:"pd_consent_at"`
-	CreatedAt    time.Time       `json:"created_at"`
+	Email        *string         `json:"email,omitempty"`
+	HasTelegram  bool            `json:"has_telegram"`
+	HasGoogle    bool            `json:"has_google"`
+	// NeedsPassword — клиент вошёл по SMS и ещё не задал пароль: без пароля ему
+	// пришлось бы каждый раз платить за SMS. Остальным способам входа пароль не нужен.
+	NeedsPassword bool       `json:"needs_password"`
+	PDConsentAt   *time.Time `json:"pd_consent_at"`
+	CreatedAt     time.Time  `json:"created_at"`
 }
 
 func (h *Handlers) load(r *http.Request, id uuid.UUID) (*Me, error) {
 	var m Me
 	err := h.DB.QueryRow(r.Context(), `
 		SELECT id, role, phone, login, store_id, gender, lang, token_balance, height_cm, weight_kg::float8, body_params, pd_consent_at, created_at,
-		       password_hash IS NOT NULL
+		       password_hash IS NOT NULL, email, telegram_user_id IS NOT NULL, google_sub IS NOT NULL
 		FROM users WHERE id = $1`, id).
-		Scan(&m.ID, &m.Role, &m.Phone, &m.Login, &m.StoreID, &m.Gender, &m.Lang, &m.TokenBalance, &m.HeightCM, &m.WeightKG, &m.BodyParams, &m.PDConsentAt, &m.CreatedAt, &m.HasPassword)
+		Scan(&m.ID, &m.Role, &m.Phone, &m.Login, &m.StoreID, &m.Gender, &m.Lang, &m.TokenBalance, &m.HeightCM, &m.WeightKG, &m.BodyParams, &m.PDConsentAt, &m.CreatedAt, &m.HasPassword,
+			&m.Email, &m.HasTelegram, &m.HasGoogle)
 	if err != nil {
 		return nil, db.NotFound(err)
 	}
 	m.Registered = m.Role != "client" || (m.Gender != nil && m.PDConsentAt != nil)
+	m.NeedsPassword = h.SMSAuth && m.Role == "client" && !m.HasPassword && m.Phone != nil &&
+		m.Email == nil && !m.HasTelegram && !m.HasGoogle
 	return &m, nil
 }
 

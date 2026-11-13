@@ -12,6 +12,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
+
+	"github.com/boutique-market/backend/internal/mail"
 
 	"github.com/boutique-market/backend/internal/platform/db"
 )
@@ -25,10 +28,19 @@ var (
 
 type Service struct {
 	DB         *pgxpool.Pool
+	Redis      *redis.Client
 	Signer     *Signer
 	OTP        *OTP
 	SMS        SMSSender
 	RefreshTTL time.Duration
+
+	// Вход по почте: коды подтверждения (отдельно от SMS-кодов) и отправка писем.
+	EmailOTP *OTP
+	Mail     mail.Sender
+	// Вход через Google; nil — выключен.
+	Google *GoogleVerifier
+	// Имя Telegram-бота без @ для ссылок входа; пусто — вход через Telegram выключен.
+	TelegramBot string
 }
 
 type Session struct {

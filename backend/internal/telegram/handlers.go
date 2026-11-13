@@ -34,11 +34,22 @@ type Confirmer interface {
 // ConfirmPrefix — callback-данные кнопки «Подтвердить» (orders.CallbackConfirm).
 const ConfirmPrefix = "confirm:"
 
+// LoginService — вход клиентов через бота (auth.Service, auth/telegram_login.go).
+type LoginService interface {
+	TelegramLoginOpened(ctx context.Context, id string, tgUserID int64) (auth.TelegramLoginState, error)
+	TelegramLoginPendingFor(ctx context.Context, tgUserID int64) (string, error)
+	ConfirmTelegramLogin(ctx context.Context, id string, tgUserID int64, phone string) (auth.TelegramLoginState, error)
+}
+
+// LoginPrefix — callback-данные кнопки «Войти».
+const LoginPrefix = "login:"
+
 type Handlers struct {
 	DB          *pgxpool.Pool
-	Bot         *Bot   // nil — бот не настроен
-	BotUsername string // без @
-	Secret      string // TELEGRAM_WEBHOOK_SECRET
+	Login       LoginService // nil — вход клиентов через бота выключен
+	Bot         *Bot         // nil — бот не настроен
+	BotUsername string       // без @
+	Secret      string       // TELEGRAM_WEBHOOK_SECRET
 	Orders      Confirmer
 }
 
@@ -102,17 +113,31 @@ func UnlinkChat(ctx context.Context, pool *pgxpool.Pool, chatID int64) error {
 
 // ---------- вебхук ----------
 
+type tgUser struct {
+	ID           int64  `json:"id"`
+	IsBot        bool   `json:"is_bot"`
+	LanguageCode string `json:"language_code"`
+}
+
+type message struct {
+	Chat struct {
+		ID   int64  `json:"id"`
+		Type string `json:"type"`
+	} `json:"chat"`
+	From    *tgUser `json:"from"`
+	Text    string  `json:"text"`
+	Contact *struct {
+		PhoneNumber string `json:"phone_number"`
+		UserID      int64  `json:"user_id"`
+	} `json:"contact"`
+}
+
 type update struct {
-	Message *struct {
-		Chat struct {
-			ID   int64  `json:"id"`
-			Type string `json:"type"`
-		} `json:"chat"`
-		Text string `json:"text"`
-	} `json:"message"`
+	Message       *message `json:"message"`
 	CallbackQuery *struct {
-		ID      string `json:"id"`
-		Data    string `json:"data"`
+		ID      string  `json:"id"`
+		From    *tgUser `json:"from"`
+		Data    string  `json:"data"`
 		Message *struct {
 			MessageID int64  `json:"message_id"`
 			Text      string `json:"text"`
@@ -144,9 +169,18 @@ func (h *Handlers) Webhook(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := httpx.LoggerFrom(ctx)
 	switch {
+	case u.Message != nil && h.isLoginMessage(u.Message):
+		if err := h.onLoginMessage(ctx, u.Message); err != nil {
+			log.Warn("telegram login", "err", err.Error())
+		}
 	case u.Message != nil:
 		if err := h.onMessage(ctx, u.Message.Chat.ID, u.Message.Text); err != nil {
 			log.Warn("telegram message", "err", err.Error())
+		}
+	case u.CallbackQuery != nil && u.CallbackQuery.Message != nil && strings.HasPrefix(u.CallbackQuery.Data, LoginPrefix):
+		q := u.CallbackQuery
+		if err := h.onLoginCallback(ctx, q.ID, q.From, q.Message.Chat.ID, q.Message.MessageID, strings.TrimPrefix(q.Data, LoginPrefix)); err != nil {
+			log.Warn("telegram login callback", "err", err.Error())
 		}
 	case u.CallbackQuery != nil && u.CallbackQuery.Message != nil:
 		q := u.CallbackQuery
@@ -164,8 +198,8 @@ func (h *Handlers) reply(ctx context.Context, chatID int64, text string) error {
 func (h *Handlers) onMessage(ctx context.Context, chatID int64, text string) error {
 	text = strings.TrimSpace(text)
 	if !strings.HasPrefix(text, "/start") {
-		return h.reply(ctx, chatID, "Этот бот присылает уведомления о заказах вашего бутика. "+
-			"Подключить его можно в кабинете магазина → Профиль → Telegram.")
+		return h.reply(ctx, chatID, "Через этого бота можно войти на сайт и в приложение: нажмите «Войти через Telegram» "+
+			"на странице входа. Бутикам бот присылает уведомления о заказах (кабинет магазина → Профиль → Telegram).")
 	}
 	code := strings.TrimSpace(strings.TrimPrefix(text, "/start"))
 	if code == "" || len(code) > 64 {
