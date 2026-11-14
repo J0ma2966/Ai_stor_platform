@@ -52,6 +52,7 @@
     <string name="err_validation_failed">Belgilangan maydonlarni tekshiring.</string>
     <string name="err_rate_limited">Juda ko‘p urinish. Biroz kutib, qayta urinib ko‘ring.</string>
     <string name="err_otp_cooldown">Kod yuborilgan. Bir daqiqadan so‘ng qayta so‘rash mumkin.</string>
+    <string name="err_mail_unavailable">Kodli xatni yuborib bo‘lmadi. Keyinroq urinib ko‘ring yoki boshqa usul bilan kiring.</string>
     <string name="err_otp_invalid">Kod noto‘g‘ri.</string>
     <string name="err_bad_credentials">Raqam, login yoki parol noto‘g‘ri.</string>
     <string name="err_store_not_active">Do‘kon hali faollashtirilmagan.</string>

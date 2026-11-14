@@ -3,7 +3,10 @@ package mail
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"net/mail"
 	"strings"
 	"testing"
@@ -80,5 +83,40 @@ func TestSMTPRequiresTLS(t *testing.T) {
 		default:
 			return
 		}
+	}
+}
+
+func TestHTTPAPI(t *testing.T) {
+	for _, p := range []string{"brevo", "resend"} {
+		var body map[string]any
+		var hdr http.Header
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			hdr = r.Header.Clone()
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			w.WriteHeader(http.StatusCreated)
+		}))
+		s := &HTTPAPI{Provider: p, APIKey: "k-123", From: "Shop <no-reply@shop.uz>", Endpoint: srv.URL}
+		if err := s.SendCode(context.Background(), "a@b.uz", "123456", PurposeRegister, "ru"); err != nil {
+			t.Fatalf("%s: %v", p, err)
+		}
+		srv.Close()
+		raw, _ := json.Marshal(body)
+		if !strings.Contains(string(raw), "123456") || !strings.Contains(string(raw), "a@b.uz") || !strings.Contains(string(raw), "no-reply@shop.uz") {
+			t.Fatalf("%s payload: %s", p, raw)
+		}
+		if hdr.Get("api-key") != "k-123" && hdr.Get("Authorization") != "Bearer k-123" {
+			t.Fatalf("%s: no key header", p)
+		}
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, `{"message":"sender not verified"}`, http.StatusBadRequest)
+	}))
+	defer srv.Close()
+	err := (&HTTPAPI{Provider: "brevo", APIKey: "k", From: "a@shop.uz", Endpoint: srv.URL}).SendCode(context.Background(), "a@b.uz", "1", PurposeReset, "uz")
+	if err == nil || !strings.Contains(err.Error(), "sender not verified") {
+		t.Fatalf("want provider error, got %v", err)
+	}
+	if !KnownAPIProvider("resend") || KnownAPIProvider("smtp") {
+		t.Fatal("KnownAPIProvider")
 	}
 }

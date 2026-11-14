@@ -13,6 +13,8 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -75,6 +77,11 @@ func (h *Handlers) emailCode(w http.ResponseWriter, r *http.Request) {
 	if errors.Is(err, ErrOTPCooldown) {
 		w.Header().Set("Retry-After", "60")
 		httpx.Fail(w, r, httpx.NewError(http.StatusTooManyRequests, "otp_cooldown", "wait before requesting a new code"))
+		return
+	}
+	if errors.Is(err, ErrMailUnavailable) {
+		httpx.LoggerFrom(r.Context()).Error("email code not sent", slog.String("err", err.Error()))
+		httpx.Fail(w, r, httpx.NewError(http.StatusServiceUnavailable, "mail_unavailable", "could not send the email, try again later"))
 		return
 	}
 	if err != nil {
@@ -161,8 +168,16 @@ func (s *Service) SendEmailCode(ctx context.Context, email string, purpose mail.
 	if err != nil {
 		return err
 	}
-	return s.Mail.SendCode(ctx, email, code, purpose, lang)
+	if err := s.Mail.SendCode(ctx, email, code, purpose, lang); err != nil {
+		s.EmailOTP.Cancel(context.WithoutCancel(ctx), emailOTPKey(purpose, email))
+		return fmt.Errorf("%w: %v", ErrMailUnavailable, err)
+	}
+	return nil
 }
+
+// ErrMailUnavailable: письмо с кодом не удалось отправить (почтовый сервис недоступен
+// или отклонил письмо). Клиент получает понятное сообщение, причина остаётся в журнале.
+var ErrMailUnavailable = errors.New("mail unavailable")
 
 // RegisterEmail создаёт клиента с подтверждённой почтой. Дальше — тот же путь,
 // что у любого нового клиента: is_new_user=true, выбор пола и согласие.

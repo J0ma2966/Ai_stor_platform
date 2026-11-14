@@ -14,6 +14,7 @@
 |---|---|---|
 | Telegram | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, `TELEGRAM_WEBHOOK_SECRET`, `TELEGRAM_WEBHOOK_URL=https://api.<домен>/v1/telegram/webhook` | @BotFather → /newbot. Это тот же бот, что присылает магазинам заказы |
 | Почта | `MAIL_PROVIDER=smtp`, `SMTP_HOST`, `SMTP_PORT` (587 или 465), `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM` | Любой SMTP: Яндекс 360 для бизнеса, Google Workspace, Mailgun, SendGrid. Для доставляемости настройте SPF/DKIM домена |
+| Почта по HTTPS | `MAIL_PROVIDER=brevo` или `resend`, `MAIL_API_KEY`, `MAIL_FROM` | Для хостингов, где закрыты исходящие SMTP-порты: письмо уходит через API сервиса по порту 443. Отправитель должен быть подтверждён в сервисе |
 | Google | `GOOGLE_CLIENT_IDS=<веб-клиент>[,<другие>]` | Google Cloud Console → APIs & Services → Credentials (см. ниже) |
 | SMS (выключено) | `SMS_AUTH_ENABLED=true`, `SMS_PROVIDER=eskiz`, `ESKIZ_*` | docs/PAYMENTS.md |
 

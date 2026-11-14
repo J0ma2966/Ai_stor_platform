@@ -52,6 +52,7 @@
     <string name="err_validation_failed">Проверьте выделенные поля.</string>
     <string name="err_rate_limited">Слишком много попыток. Подождите и повторите.</string>
     <string name="err_otp_cooldown">Код уже отправлен. Повторно можно через минуту.</string>
+    <string name="err_mail_unavailable">Не удалось отправить письмо с кодом. Попробуйте позже или войдите другим способом.</string>
     <string name="err_otp_invalid">Неверный код.</string>
     <string name="err_bad_credentials">Неверный номер, логин или пароль.</string>
     <string name="err_store_not_active">Магазин ещё не активирован.</string>
