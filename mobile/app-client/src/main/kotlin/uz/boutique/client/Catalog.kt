@@ -17,7 +17,6 @@ import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Checkroom
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -67,7 +66,6 @@ import uz.boutique.ui.PagedFooter
 import uz.boutique.ui.ProductImage
 import uz.boutique.ui.R as UiR
 import uz.boutique.ui.RatingRow
-import uz.boutique.ui.ThemeToggleButton
 import uz.boutique.ui.currentLang
 import uz.boutique.ui.errorRes
 import uz.boutique.ui.money
@@ -109,36 +107,30 @@ fun CatalogScreen(
         delay(400) // не дёргаем API на каждую букву
         applied = query
     }
+    // Переход с главной («Новинки недели», категория, «Смотреть все»): сбросить поиск и применить выбор.
+    val request = shop.catalogRequest
+    LaunchedEffect(request) {
+        if (request != null && storeSlug == null) {
+            query = ""
+            applied = ""
+            inStock = false
+            category = request.category
+            sort = request.sort ?: "popular"
+            shop.catalogRequest = null
+        }
+    }
     val categories = rememberLoader("categories") { api.catalog.categories() }
     val filters = CatalogFilters(q = applied.ifBlank { null }, category = category, store = storeSlug, inStock = inStock, sort = sort)
     val paged = rememberPaged(filters) { c -> api.catalog.products(filters, c) }
-    // Карусель «Реклама» — только на главной (весь каталог без поиска и фильтров).
-    // Ошибка загрузки рекламы не мешает каталогу: карусель просто не показывается.
-    val promos = rememberLoader("promoted") {
-        try {
-            api.catalog.promoted()
-        } catch (e: ApiException) {
-            emptyList()
-        }
-    }
-    val showPromos = storeSlug == null && applied.isBlank() && category == null && !inStock
+    // весь каталог без поиска и фильтров: пустой ответ значит, что товаров ещё нет вообще
+    val unfiltered = storeSlug == null && applied.isBlank() && category == null && !inStock
 
     AppScaffold(
         title = storeName?.takeIf { it.isNotBlank() } ?: stringResource(UiR.string.nav_catalog),
         onBack = onBack,
         actions = {
-            if (storeSlug == null) ThemeToggleButton()
-            if (tryonEnabled) {
-                IconButton(onClick = onFitting, modifier = Modifier.testTag("open_fitting")) {
-                    if (fittingCount > 0) {
-                        androidx.compose.material3.BadgedBox(badge = { androidx.compose.material3.Badge { Text(fittingCount.toString()) } }) {
-                            Icon(Icons.Filled.Checkroom, contentDescription = stringResource(UiR.string.tryon_room))
-                        }
-                    } else {
-                        Icon(Icons.Filled.Checkroom, contentDescription = stringResource(UiR.string.tryon_room))
-                    }
-                }
-            }
+            if (storeSlug == null) FavoritesAction(shop.favIds.size, onFavorites)
+            if (tryonEnabled) FittingAction(fittingCount, onFitting)
             Box {
                 IconButton(onClick = { sortMenu = true }, modifier = Modifier.testTag("sort")) {
                     Icon(Icons.Filled.FilterList, contentDescription = stringResource(UiR.string.catalog_sort))
@@ -188,13 +180,13 @@ fun CatalogScreen(
             }
             PullToRefreshBox(
                 isRefreshing = paged.loading && paged.loadedOnce,
-                onRefresh = { paged.refresh(); if (showPromos) promos.reload() },
+                onRefresh = { paged.refresh() },
                 modifier = Modifier.fillMaxSize(),
             ) {
                 when {
                     !paged.loadedOnce && paged.error != null -> ErrorState(paged.error!!, onRetry = { paged.refresh() })
                     !paged.loadedOnce -> CenterLoading()
-                    paged.items.isEmpty() -> EmptyState(stringResource(UiR.string.catalog_empty))
+                    paged.items.isEmpty() -> EmptyState(stringResource(if (unfiltered) UiR.string.catalog_empty_all else UiR.string.catalog_empty))
                     else -> LazyVerticalGrid(
                         columns = GridCells.Adaptive(160.dp),
                         contentPadding = PaddingValues(16.dp),
@@ -202,27 +194,6 @@ fun CatalogScreen(
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                         modifier = Modifier.fillMaxSize().testTag("catalog_grid"),
                     ) {
-                        if (showPromos) {
-                            item(span = { GridItemSpan(maxLineSpan) }, key = "home_hero") {
-                                HomeHero(
-                                    showFitting = tryonEnabled,
-                                    fittingCount = fittingCount,
-                                    favCount = shop.favIds.size,
-                                    heroImage = paged.items.firstNotNullOfOrNull { it.cardImage },
-                                    onFitting = onFitting,
-                                    onNew = { sort = "new" },
-                                    onFavorites = onFavorites,
-                                    modifier = Modifier.padding(bottom = 8.dp),
-                                )
-                            }
-                        }
-                        val promoItems = promos.value.orEmpty()
-                        if (showPromos && promoItems.isNotEmpty()) {
-                            item(span = { GridItemSpan(maxLineSpan) }, key = "promo_carousel") {
-                                // сетка уже даёт отступ 16 dp по краям — свой отступ карусели не нужен
-                                PromoCarousel(promoItems, onProduct = onProduct, edge = 0.dp, modifier = Modifier.padding(bottom = 8.dp))
-                            }
-                        }
                         itemsIndexed(paged.items, key = { _, p -> p.id }) { i, p ->
                             if (i >= paged.items.size - 6) LaunchedEffect(paged.items.size) { paged.loadMore() }
                             ProductCard(p, onClick = { onProduct(p.id) }, onNeedLogin = onNeedLogin)
