@@ -68,8 +68,8 @@ import uz.boutique.ui.R as UiR
 
 /** Раздел требует входа: короткое объяснение и кнопка «Войти». */
 @Composable
-fun GuestScreen(title: Int, onLogin: () -> Unit) {
-    AppScaffold(title = stringResource(title)) { pad ->
+fun GuestScreen(title: Int, onBack: (() -> Unit)? = null, onLogin: () -> Unit) {
+    AppScaffold(title = stringResource(title), onBack = onBack) { pad ->
         EmptyState(stringResource(UiR.string.login_guest_hint), Modifier.padding(pad)) {
             PrimaryButton(stringResource(UiR.string.login_sign_in), onClick = onLogin, modifier = Modifier.testTag("guest_login"))
         }
@@ -78,11 +78,11 @@ fun GuestScreen(title: Int, onLogin: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FavoritesScreen(onProduct: (String) -> Unit) {
+fun FavoritesScreen(onProduct: (String) -> Unit, onBack: (() -> Unit)? = null) {
     val api = LocalGraph.current.api
     val shop = LocalShop.current
     val paged = rememberPaged<CartItem>("favorites", shop.favIds.size) { c -> api.shop.favorites(c) }
-    AppScaffold(title = stringResource(UiR.string.nav_favorites)) { pad ->
+    AppScaffold(title = stringResource(UiR.string.nav_favorites), onBack = onBack) { pad ->
         PullToRefreshBox(isRefreshing = paged.loading && paged.loadedOnce, onRefresh = { paged.refresh() }, modifier = Modifier.padding(pad).fillMaxSize()) {
             PagedState(paged, stringResource(UiR.string.fav_empty)) {
                 LazyVerticalGrid(

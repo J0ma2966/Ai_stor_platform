@@ -8,7 +8,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.Person
@@ -118,6 +118,9 @@ class ShopState(private val api: Api, fittingStore: KeyValueStore = MemoryStore(
         fittingItems = fitting.all
     }
     var cartCount by mutableIntStateOf(0)
+
+    /** Что открыть в каталоге после нажатия на главной (сортировка, категория). Каталог сбрасывает в null. */
+    var catalogRequest by mutableStateOf<CatalogRequest?>(null)
     /** Позиции, выбранные для оформления (корзина → оформление). */
     var checkoutItems: List<CartItem> = emptyList()
 
@@ -144,10 +147,14 @@ class ShopState(private val api: Api, fittingStore: KeyValueStore = MemoryStore(
     }
 }
 
+data class CatalogRequest(val sort: String? = null, val category: String? = null)
+
 val LocalShop = staticCompositionLocalOf<ShopState> { error("ShopState is not provided") }
 
 object Routes {
+    const val HOME = "home"
     const val CATALOG = "catalog"
+    const val STORES = "stores"
     const val FAVORITES = "favorites"
     const val CART = "cart"
     const val ORDERS = "orders"
@@ -176,14 +183,15 @@ object Routes {
     fun generation(id: String) = "tryon/gen/$id"
     fun store(slug: String, name: String) = "store/$slug?name=${android.net.Uri.encode(name)}"
 
-    val TABS = listOf(CATALOG, FAVORITES, CART, ORDERS, PROFILE)
+    // Избранное — сердечко в верхней панели главной и каталога (как в шапке сайта), не вкладка.
+    val TABS = listOf(HOME, CATALOG, CART, ORDERS, PROFILE)
 }
 
 private data class Tab(val route: String, val label: Int, val icon: ImageVector)
 
 private val tabs = listOf(
-    Tab(Routes.CATALOG, UiR.string.nav_catalog, Icons.Filled.Home),
-    Tab(Routes.FAVORITES, UiR.string.nav_favorites, Icons.Filled.Favorite),
+    Tab(Routes.HOME, UiR.string.nav_home, Icons.Filled.Home),
+    Tab(Routes.CATALOG, UiR.string.nav_catalog, Icons.Filled.GridView),
     Tab(Routes.CART, UiR.string.nav_cart, Icons.Filled.ShoppingCart),
     Tab(Routes.ORDERS, UiR.string.nav_orders, Icons.Filled.LocalShipping),
     Tab(Routes.PROFILE, UiR.string.nav_profile, Icons.Filled.Person),
@@ -203,7 +211,7 @@ fun NavHostController.finishLogin(next: String?) {
     if (next == null) {
         if (!popBackStack(Routes.LOGIN, inclusive = true)) {
             // вход открыт не с экрана входа (например, после SMS-регистрации из профиля)
-            navigate(Routes.CATALOG) { popUpTo(0) }
+            navigate(Routes.HOME) { popUpTo(0) }
         }
     } else {
         navigate(next) { popUpTo(Routes.LOGIN) { inclusive = true } }
@@ -213,7 +221,7 @@ fun NavHostController.finishLogin(next: String?) {
 /** Переход на вкладку нижнего меню с сохранением состояния вкладок. */
 fun NavHostController.switchTab(route: String) {
     navigate(route) {
-        popUpTo(Routes.CATALOG) { saveState = true }
+        popUpTo(Routes.HOME) { saveState = true }
         launchSingleTop = true
         restoreState = true
     }
@@ -300,7 +308,24 @@ fun ClientNav(onRestart: () -> Unit) {
             }
         },
     ) { pad ->
-        NavHost(nav, startDestination = Routes.CATALOG, modifier = Modifier.padding(bottom = pad.calculateBottomPadding())) {
+        NavHost(nav, startDestination = Routes.HOME, modifier = Modifier.padding(bottom = pad.calculateBottomPadding())) {
+            composable(Routes.HOME) {
+                HomeScreen(
+                    onCatalog = { sort, category ->
+                        shop.catalogRequest = CatalogRequest(sort, category)
+                        nav.switchTab(Routes.CATALOG)
+                    },
+                    onProduct = { nav.navigate(Routes.product(it)) },
+                    onStores = { nav.navigate(Routes.STORES) },
+                    onStore = { nav.navigate(Routes.store(it.slug, it.name)) },
+                    onFitting = { nav.navigate(Routes.FITTING) },
+                    onFavorites = { nav.navigate(Routes.FAVORITES) },
+                    onNeedLogin = { nav.navigate(Routes.LOGIN) },
+                )
+            }
+            composable(Routes.STORES) {
+                StoresScreen(onBack = { nav.popBackStack() }, onStore = { nav.navigate(Routes.store(it.slug, it.name)) })
+            }
             composable(Routes.CATALOG) {
                 CatalogScreen(
                     storeSlug = null, storeName = null,
@@ -308,7 +333,7 @@ fun ClientNav(onRestart: () -> Unit) {
                     onBack = null,
                     onNeedLogin = { nav.navigate(Routes.LOGIN) },
                     onFitting = { nav.navigate(Routes.FITTING) },
-                    onFavorites = { nav.switchTab(Routes.FAVORITES) },
+                    onFavorites = { nav.navigate(Routes.FAVORITES) },
                 )
             }
             composable(
@@ -334,14 +359,18 @@ fun ClientNav(onRestart: () -> Unit) {
                 )
             }
             composable(Routes.FAVORITES) {
-                if (loggedIn) FavoritesScreen(onProduct = { nav.navigate(Routes.product(it)) }) else GuestScreen(UiR.string.nav_favorites) { nav.navigate(Routes.LOGIN) }
+                if (loggedIn) {
+                    FavoritesScreen(onProduct = { nav.navigate(Routes.product(it)) }, onBack = { nav.popBackStack() })
+                } else {
+                    GuestScreen(UiR.string.nav_favorites, onBack = { nav.popBackStack() }) { nav.navigate(Routes.LOGIN) }
+                }
             }
             composable(Routes.CART) {
                 if (loggedIn) {
                     CartScreen(
                         onProduct = { nav.navigate(Routes.product(it)) },
                         onCheckout = { nav.navigate(Routes.CHECKOUT) },
-                        onCatalog = { nav.navigate(Routes.CATALOG) { popUpTo(Routes.CATALOG) { inclusive = true } } },
+                        onCatalog = { nav.switchTab(Routes.CATALOG) },
                     )
                 } else {
                     GuestScreen(UiR.string.nav_cart) { nav.navigate(Routes.LOGIN) }
@@ -350,7 +379,7 @@ fun ClientNav(onRestart: () -> Unit) {
             composable(Routes.CHECKOUT) {
                 CheckoutScreen(
                     onBack = { nav.popBackStack() },
-                    onOrders = { nav.navigate(Routes.ORDERS) { popUpTo(Routes.CATALOG) } },
+                    onOrders = { nav.navigate(Routes.ORDERS) { popUpTo(Routes.HOME) } },
                 )
             }
             composable(Routes.ORDERS) {
@@ -376,14 +405,14 @@ fun ClientNav(onRestart: () -> Unit) {
                     onProduct = { nav.navigate(Routes.product(it)) },
                     onStart = { if (loggedIn) nav.navigate(Routes.TRYON_NEW) else nav.navigate(Routes.LOGIN) },
                     onHistory = { if (loggedIn) nav.navigate(Routes.TRYON_HISTORY) else nav.navigate(Routes.LOGIN) },
-                    onCatalog = { nav.navigate(Routes.CATALOG) { popUpTo(Routes.CATALOG) { inclusive = true } } },
+                    onCatalog = { nav.switchTab(Routes.CATALOG) },
                 )
             }
             composable(Routes.TRYON_NEW) {
                 TryonWizardScreen(
                     onBack = { nav.popBackStack() },
                     onStarted = { id -> nav.navigate(Routes.generation(id)) { popUpTo(Routes.TRYON_NEW) { inclusive = true } } },
-                    onCatalog = { nav.navigate(Routes.CATALOG) { popUpTo(Routes.CATALOG) { inclusive = true } } },
+                    onCatalog = { nav.switchTab(Routes.CATALOG) },
                 )
             }
             composable(Routes.GENERATION, arguments = listOf(navArgument("id") { type = NavType.StringType })) { e ->
@@ -441,13 +470,13 @@ fun ClientNav(onRestart: () -> Unit) {
             }
             composable(Routes.WELCOME) {
                 WelcomeScreen(onDone = { next ->
-                    if (next == null) nav.navigate(Routes.CATALOG) { popUpTo(0) } else nav.navigate(next) { popUpTo(Routes.WELCOME) { inclusive = true } }
+                    if (next == null) nav.navigate(Routes.HOME) { popUpTo(0) } else nav.navigate(next) { popUpTo(Routes.WELCOME) { inclusive = true } }
                 })
             }
             composable(Routes.PASSWORD, arguments = listOf(navArgument("mode") { type = NavType.StringType })) { e ->
                 val change = e.arguments?.getString("mode") == "change"
                 PasswordScreen(change = change, onBack = if (change) ({ nav.popBackStack() }) else null, onDone = {
-                    if (change) nav.popBackStack() else nav.navigate(Routes.CATALOG) { popUpTo(0) }
+                    if (change) nav.popBackStack() else nav.navigate(Routes.HOME) { popUpTo(0) }
                 })
             }
         }
