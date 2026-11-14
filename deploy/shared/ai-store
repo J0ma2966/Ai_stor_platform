@@ -37,8 +37,9 @@ envset() { # заменить значение KEY или дописать ст�
 # Проверка .env новым образом API без остановки работающего: при ошибке печатает причину.
 check_config() {
   local out
-  if ! out=$(dc run --rm --no-deps -T api /api check-config 2>&1); then
-    printf '%s\n' "$out" | grep -o '"err":"[^"]*"' | sed 's/^"err":/  /' || printf '%s\n' "$out" | tail -5
+  # у образа ENTRYPOINT ["/api"], поэтому аргумент — только имя команды
+  if ! out=$(dc run --rm --no-deps -T api check-config 2>&1); then
+    printf '%s\n' "$out" | grep '"err":' | sed -e 's/.*"err":"//' -e 's/"}$//' -e 's/\\"/"/g' -e 's/^/  /' || printf '%s\n' "$out" | tail -5
     return 1
   fi
 }
