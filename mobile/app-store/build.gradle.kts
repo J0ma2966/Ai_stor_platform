@@ -16,7 +16,8 @@ android {
         applicationId = "uz.boutique.store"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
+        // Номер сборки растёт с каждым ручным запуском CI, чтобы новый APK вставал поверх старого.
+        versionCode = providers.gradleProperty("boutique.versionCode").getOrElse("1").toInt()
         versionName = "1.0.0"
         buildConfigField("String", "SITE_URL", "\"$siteUrl\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
