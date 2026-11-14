@@ -59,6 +59,7 @@ S = [
 ("err_validation_failed", "Проверьте выделенные поля.", "Belgilangan maydonlarni tekshiring."),
 ("err_rate_limited", "Слишком много попыток. Подождите и повторите.", "Juda ko‘p urinish. Biroz kutib, qayta urinib ko‘ring."),
 ("err_otp_cooldown", "Код уже отправлен. Повторно можно через минуту.", "Kod yuborilgan. Bir daqiqadan so‘ng qayta so‘rash mumkin."),
+("err_mail_unavailable", "Не удалось отправить письмо с кодом. Попробуйте позже или войдите другим способом.", "Kodli xatni yuborib bo‘lmadi. Keyinroq urinib ko‘ring yoki boshqa usul bilan kiring."),
 ("err_otp_invalid", "Неверный код.", "Kod noto‘g‘ri."),
 ("err_bad_credentials", "Неверный номер, логин или пароль.", "Raqam, login yoki parol noto‘g‘ri."),
 ("err_store_not_active", "Магазин ещё не активирован.", "Do‘kon hali faollashtirilmagan."),

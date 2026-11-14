@@ -90,6 +90,12 @@ func (o *OTP) Issue(ctx context.Context, phone string) (string, error) {
 	return code, nil
 }
 
+// Cancel снимает выданный код и cooldown: код не дошёл до клиента (сбой отправки),
+// поэтому повторный запрос не должен упираться в «код уже отправлен».
+func (o *OTP) Cancel(ctx context.Context, phone string) {
+	_ = o.rdb.Del(ctx, "otp:"+phone, "otp:cd:"+phone).Err()
+}
+
 // попытка засчитывается атомарно и до сравнения
 var otpAttempt = redis.NewScript(`
 if redis.call('EXISTS', KEYS[1]) == 0 then return false end

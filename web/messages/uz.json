@@ -37,6 +37,7 @@
     "validation_failed": "Belgilangan maydonlarni tekshiring.",
     "rate_limited": "Juda ko‘p urinish. Biroz kutib, qayta urinib ko‘ring.",
     "otp_cooldown": "Kod yuborilgan. Bir daqiqadan so‘ng qayta so‘rash mumkin.",
+    "mail_unavailable": "Kodli xatni yuborib bo‘lmadi. Keyinroq urinib ko‘ring yoki boshqa usul bilan kiring.",
     "otp_invalid": "Kod noto‘g‘ri.",
     "bad_credentials": "Raqam, login yoki parol noto‘g‘ri.",
     "store_not_active": "Do‘kon hali faollashtirilmagan.",

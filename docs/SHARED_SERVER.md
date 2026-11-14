@@ -64,6 +64,10 @@ ai-store create-admin admin
 1. В `/opt/ai-store/.env` заполнить почту: `MAIL_PROVIDER=smtp`, `SMTP_HOST`, `SMTP_PORT`,
    `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM` (адрес того же ящика). Для Gmail:
    `smtp.gmail.com`, порт `587`, пароль приложения (не пароль от аккаунта).
+   Если хостинг закрывает исходящие почтовые порты (проверка:
+   `timeout 5 bash -c '</dev/tcp/smtp.gmail.com/465' && echo открыт || echo закрыт`),
+   письма отправляются по HTTPS через почтовый сервис: `MAIL_PROVIDER=brevo` (или `resend`),
+   `MAIL_API_KEY` (ключ API сервиса) и `MAIL_FROM` (адрес отправителя, подтверждённый в сервисе).
 2. По желанию: `TELEGRAM_BOT_TOKEN` и `TELEGRAM_BOT_USERNAME` (вход и уведомления через бота),
    `GOOGLE_CLIENT_IDS` (вход через Google; в консоли Google разрешить источник `https://<домен>`).
 3. `ai-store prod`.

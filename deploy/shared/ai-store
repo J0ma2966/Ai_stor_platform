@@ -31,6 +31,12 @@ envset() { # заменить значение KEY или дописать ст�
 }
 # настройки, появившиеся после первой установки, дописываются в существующий .env
 env_defaults() {
+  grep -qE '^MAIL_API_KEY=' "$ENV_FILE" || cat >> "$ENV_FILE" <<EOF
+
+# Письма по HTTPS (если хостинг закрывает почтовые порты): MAIL_PROVIDER=brevo или resend
+# и ключ API сервиса. MAIL_FROM должен быть адресом, подтверждённым в этом сервисе.
+MAIL_API_KEY=
+EOF
   grep -qE '^BACKUP_PASSPHRASE=' "$ENV_FILE" || cat >> "$ENV_FILE" <<EOF
 
 # Копия базы вне сервера: зашифрованный файл уходит в Telegram после каждого ai-store backup.
@@ -132,7 +138,7 @@ OTP_PEPPER=$(rnd 24)
 INTERNAL_API_TOKEN=$(rnd 32)
 
 # staging = тестовый запуск: коды входа пишутся в журнал (ai-store logs api), письма и SMS не уходят.
-# Для реальных покупателей: APP_ENV=prod, MAIL_PROVIDER=smtp и заполненные SMTP_*.
+# Для реальных покупателей: команда ai-store prod; почта через smtp либо brevo/resend (MAIL_API_KEY).
 APP_ENV=staging
 SITE_URL=https://$domain
 OTP_ALLOWED_PREFIXES=+998
@@ -285,8 +291,11 @@ cmd_mode() {
   [[ $prev != "$mode" ]] || { echo "Режим уже $mode"; return 0; }
   env_defaults
   if [[ $mode == prod ]]; then
-    [[ $(envget MAIL_PROVIDER) == smtp ]] || miss+=("MAIL_PROVIDER=smtp")
-    for k in SMTP_HOST SMTP_USER SMTP_PASSWORD MAIL_FROM; do [[ -n $(envget $k) ]] || miss+=("$k"); done
+    case "$(envget MAIL_PROVIDER)" in
+      smtp) for k in SMTP_HOST SMTP_USER SMTP_PASSWORD MAIL_FROM; do [[ -n $(envget $k) ]] || miss+=("$k"); done ;;
+      brevo|resend) for k in MAIL_API_KEY MAIL_FROM; do [[ -n $(envget $k) ]] || miss+=("$k"); done ;;
+      *) miss+=("MAIL_PROVIDER=smtp, brevo или resend") ;;
+    esac
     (( ${#miss[@]} == 0 )) || die "для боевого режима заполните в $ENV_FILE: ${miss[*]}"
   fi
   cp -p "$ENV_FILE" "$ENV_FILE.bak"

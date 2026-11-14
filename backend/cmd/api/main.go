@@ -137,7 +137,9 @@ func run(log *slog.Logger, args []string) error {
 	// config.Load уже запретил SMS_PROVIDER=log в prod (когда SMS вообще нужны)
 	// и MAIL_PROVIDER=log при включённом входе по почте.
 	var mailSender mail.Sender = mail.LogSender{Log: log}
-	if cfg.MailProvider == "smtp" {
+	if mail.KnownAPIProvider(cfg.MailProvider) {
+		mailSender = &mail.HTTPAPI{Provider: cfg.MailProvider, APIKey: cfg.MailAPIKey, From: cfg.MailFrom}
+	} else if cfg.MailProvider == "smtp" {
 		mailSender = &mail.SMTP{Host: cfg.SMTPHost, Port: cfg.SMTPPort, User: cfg.SMTPUser, Password: cfg.SMTPPassword, From: cfg.MailFrom}
 	}
 	var smsSender auth.SMSSender = auth.LogSender{Log: log}

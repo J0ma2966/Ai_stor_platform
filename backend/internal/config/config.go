@@ -60,8 +60,11 @@ type Config struct {
 	// GOOGLE_CLIENT_IDS: OAuth client ID (через запятую). Первый — веб-клиент: его
 	// показывает сайт и им же Android-приложение запрашивает ID-токен (serverClientId).
 	GoogleClientIDs []string
-	// Почта: MAIL_PROVIDER=log (только dev/test) | smtp.
+	// Почта: MAIL_PROVIDER=log (только dev/test) | smtp | brevo | resend.
+	// brevo и resend — отправка по HTTPS (443) с ключом MAIL_API_KEY: для хостингов,
+	// где закрыты исходящие SMTP-порты.
 	MailProvider string
+	MailAPIKey   string
 	SMTPHost     string
 	SMTPPort     int // 587 — STARTTLS, 465 — TLS сразу
 	SMTPUser     string
@@ -208,6 +211,7 @@ func Load() (Config, error) {
 		SMSAuthEnabled:     getBool("SMS_AUTH_ENABLED", get("APP_ENV", "dev") != "prod"),
 		GoogleClientIDs:    splitList(os.Getenv("GOOGLE_CLIENT_IDS")),
 		MailProvider:       get("MAIL_PROVIDER", "log"),
+		MailAPIKey:         os.Getenv("MAIL_API_KEY"),
 		SMTPHost:           os.Getenv("SMTP_HOST"),
 		SMTPPort:           getInt("SMTP_PORT", 587),
 		SMTPUser:           os.Getenv("SMTP_USER"),
@@ -485,7 +489,7 @@ func (c Config) validateMail() []error {
 	switch c.MailProvider {
 	case "log":
 		if c.IsProd() && c.EmailAuthEnabled {
-			errs = append(errs, errors.New("MAIL_PROVIDER=log is forbidden in prod with EMAIL_AUTH_ENABLED (use smtp)"))
+			errs = append(errs, errors.New("MAIL_PROVIDER=log is forbidden in prod with EMAIL_AUTH_ENABLED (use smtp, brevo or resend)"))
 		}
 	case "smtp":
 		if c.SMTPHost == "" || c.MailFrom == "" {
@@ -496,6 +500,13 @@ func (c Config) validateMail() []error {
 		}
 		if strings.ContainsAny(c.MailFrom, "\r\n") {
 			errs = append(errs, errors.New("MAIL_FROM must be a single line"))
+		}
+	case "brevo", "resend":
+		if c.MailAPIKey == "" || c.MailFrom == "" {
+			errs = append(errs, errors.New("MAIL_API_KEY and MAIL_FROM are required for MAIL_PROVIDER=brevo|resend"))
+		}
+		if strings.ContainsAny(c.MailFrom+c.MailAPIKey, "\r\n") {
+			errs = append(errs, errors.New("MAIL_FROM and MAIL_API_KEY must be single lines"))
 		}
 	default:
 		errs = append(errs, fmt.Errorf("unknown MAIL_PROVIDER %q", c.MailProvider))

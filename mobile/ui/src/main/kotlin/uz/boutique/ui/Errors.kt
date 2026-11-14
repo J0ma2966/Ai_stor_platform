@@ -19,6 +19,7 @@ fun errorRes(code: String, appRole: Role): Int? = when (code) {
     "validation_failed" -> R.string.err_validation_failed
     "rate_limited" -> R.string.err_rate_limited
     "otp_cooldown" -> R.string.err_otp_cooldown
+    "mail_unavailable" -> R.string.err_mail_unavailable
     "otp_invalid" -> R.string.err_otp_invalid
     "bad_credentials" -> R.string.err_bad_credentials
     "telegram_login_expired" -> R.string.err_telegram_login_expired
