@@ -62,6 +62,12 @@ func run(log *slog.Logger, args []string) error {
 	if err != nil {
 		return err
 	}
+	// «api check-config»: только проверка настроек, без базы — ai-store вызывает её
+	// перед перезапуском, чтобы неверный .env не останавливал работающий магазин.
+	if len(args) > 0 && args[0] == "check-config" {
+		fmt.Println("config ok")
+		return nil
+	}
 	pool, err := db.Connect(ctx, cfg.DatabaseURL, cfg.DBMaxConns)
 	if err != nil {
 		return err

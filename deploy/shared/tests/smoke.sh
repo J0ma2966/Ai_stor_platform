@@ -132,7 +132,19 @@ fit() { curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/jso
 check "try-on is off by default (503)" test "$(fit)" = 503
 if ai-store tryon on --yes >/dev/null 2>&1; then bad "tryon on without OPENAI_API_KEY must be refused"; else pass "tryon on without key refused"; fi
 sed -i 's/^OPENAI_API_KEY=.*/OPENAI_API_KEY=sk-smoke-not-a-real-key/' $AI_STORE_ROOT/.env
+started() { docker inspect -f '{{.State.StartedAt}}' ai-store-api-1; }
+# неверная настройка: команда должна отказаться ДО перезапуска работающего API
+before=$(started)
+echo 'OPENAI_IMAGE_QUALITY=bogus' >> $AI_STORE_ROOT/.env
+if SKIP_OPENAI_CHECK=1 ai-store tryon on --yes 2>&1 | tee /tmp/tryon-bad.out; then bad "invalid try-on config must be refused"; else pass "invalid try-on config refused"; fi
+check "refusal names the bad setting" grep -q OPENAI_IMAGE_QUALITY /tmp/tryon-bad.out
+check "running API was not restarted" test "$(started)" = "$before"
+check ".env restored after refusal" bash -c "grep -q '^TRYON_PROVIDER=off' $AI_STORE_ROOT/.env"
+sed -i '/^OPENAI_IMAGE_QUALITY=bogus$/d' $AI_STORE_ROOT/.env
+# .env, отредактированный вручную без перевода строки в конце (ключ — последняя строка)
+grep -v '^OPENAI_API_KEY=' $AI_STORE_ROOT/.env > /tmp/env.tmp && printf 'OPENAI_API_KEY=sk-smoke-not-a-real-key' >> /tmp/env.tmp && cat /tmp/env.tmp > $AI_STORE_ROOT/.env
 SKIP_OPENAI_CHECK=1 ai-store tryon on --yes && pass "tryon on" || bad "tryon on"
+check "key line kept intact" grep -qx 'OPENAI_API_KEY=sk-smoke-not-a-real-key' $AI_STORE_ROOT/.env
 check "prod still on, try-on settings saved" bash -c "grep -q '^APP_ENV=prod' $AI_STORE_ROOT/.env && grep -q '^TRYON_PROVIDER=openai' $AI_STORE_ROOT/.env && grep -q '^BIOMETRIC_FOREIGN_APPROVED=true' $AI_STORE_ROOT/.env"
 check "try-on API is on (not 503)" bash -c '[[ $(curl -s -o /dev/null -w "%{http_code}" -H "Content-Type: application/json" -d "{}" http://127.0.0.1:8180/v1/fitting/adds) != 503 ]]'
 check "API log shows the in-process try-on worker" bash -c "docker compose -p ai-store logs --no-log-prefix api | grep -q 'tryon worker started'"
