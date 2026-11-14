@@ -64,12 +64,15 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       S3_BUCKET: ${S3_BUCKET:-boutique-media}
+      BIOMETRIC_S3_BUCKET: ${BIOMETRIC_S3_BUCKET:-boutique-biometric}
     entrypoint:
       - /bin/sh
       - -c
       - |
         until mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" >/dev/null 2>&1; do sleep 1; done
         mc mb -p "local/$$S3_BUCKET" && mc anonymous set none "local/$$S3_BUCKET" && mc anonymous set download "local/$$S3_BUCKET/pub"
+        # фото тела и результаты AI-примерки: отдельный полностью закрытый бакет
+        mc mb -p "local/$$BIOMETRIC_S3_BUCKET" && mc anonymous set none "local/$$BIOMETRIC_S3_BUCKET"
 
   api:
     build: ../../backend
@@ -92,6 +95,18 @@ services:
       S3_BUCKET: ${S3_BUCKET:-boutique-media}
       S3_ACCESS_KEY: ${MINIO_ROOT_USER}
       S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      # Фото тела (AI-примерка) — в отдельном закрытом бакете того же MinIO. Страну хранения
+      # и согласие владельца (BIOMETRIC_STORAGE_COUNTRY, BIOMETRIC_FOREIGN_APPROVED) задаёт
+      # команда ai-store tryon on в .env.
+      BIOMETRIC_S3_ENDPOINT: ${S3_DOMAIN}
+      BIOMETRIC_S3_REGION: us-east-1
+      BIOMETRIC_S3_USE_SSL: "true"
+      BIOMETRIC_S3_BUCKET: ${BIOMETRIC_S3_BUCKET:-boutique-biometric}
+      BIOMETRIC_S3_ACCESS_KEY: ${MINIO_ROOT_USER}
+      BIOMETRIC_S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      # очередь генераций работает внутри API (отдельный воркер на общем сервере не нужен)
+      TRYON_WORKER_INPROCESS: "true"
+      TRYON_WORKERS: ${TRYON_WORKERS:-2}
       PUBLIC_MEDIA_URL: https://${MEDIA_DOMAIN:?}
       CORS_ORIGINS: https://${SITE_DOMAIN:?}
       COOKIE_SECURE: "true"
@@ -104,7 +119,7 @@ services:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
       minio-init: {condition: service_completed_successfully}
-    deploy: {resources: {limits: {memory: 768m}}}
+    deploy: {resources: {limits: {memory: 1g}}}
 
   web:
     build:

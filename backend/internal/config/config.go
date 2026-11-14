@@ -118,8 +118,12 @@ type Config struct {
 	BiometricS3AccessKey string
 	BiometricS3SecretKey string
 	BiometricS3UseSSL    bool
-	// Страна размещения хранилища биометрии (ISO 3166-1). В prod обязана быть UZ.
+	// Страна размещения хранилища биометрии (ISO 3166-1). В prod — UZ; другая страна
+	// допускается только с BIOMETRIC_FOREIGN_APPROVED=true (владелец письменно принял
+	// риск хранения биометрии вне Узбекистана, см. docs/SHARED_SERVER.md).
 	BiometricCountry string
+	// BiometricForeignApproved — BIOMETRIC_FOREIGN_APPROVED=true.
+	BiometricForeignApproved bool
 
 	TryOn TryOnConfig
 }
@@ -218,13 +222,14 @@ func Load() (Config, error) {
 		SMTPPassword:       os.Getenv("SMTP_PASSWORD"),
 		MailFrom:           os.Getenv("MAIL_FROM"),
 
-		BiometricS3Endpoint:  os.Getenv("BIOMETRIC_S3_ENDPOINT"),
-		BiometricS3Region:    get("BIOMETRIC_S3_REGION", "uz-tashkent-1"),
-		BiometricS3Bucket:    get("BIOMETRIC_S3_BUCKET", "boutique-biometric"),
-		BiometricS3AccessKey: os.Getenv("BIOMETRIC_S3_ACCESS_KEY"),
-		BiometricS3SecretKey: os.Getenv("BIOMETRIC_S3_SECRET_KEY"),
-		BiometricS3UseSSL:    getBool("BIOMETRIC_S3_USE_SSL", true),
-		BiometricCountry:     strings.ToUpper(get("BIOMETRIC_STORAGE_COUNTRY", "")),
+		BiometricS3Endpoint:      os.Getenv("BIOMETRIC_S3_ENDPOINT"),
+		BiometricS3Region:        get("BIOMETRIC_S3_REGION", "uz-tashkent-1"),
+		BiometricS3Bucket:        get("BIOMETRIC_S3_BUCKET", "boutique-biometric"),
+		BiometricS3AccessKey:     os.Getenv("BIOMETRIC_S3_ACCESS_KEY"),
+		BiometricS3SecretKey:     os.Getenv("BIOMETRIC_S3_SECRET_KEY"),
+		BiometricS3UseSSL:        getBool("BIOMETRIC_S3_USE_SSL", true),
+		BiometricCountry:         strings.ToUpper(get("BIOMETRIC_STORAGE_COUNTRY", "")),
+		BiometricForeignApproved: getBool("BIOMETRIC_FOREIGN_APPROVED", false),
 		TryOn: TryOnConfig{
 			Provider:      get("TRYON_PROVIDER", "mock"),
 			APIKey:        os.Getenv("TRYON_API_KEY"),
@@ -376,8 +381,15 @@ func (c Config) validateTryOn() []error {
 		if c.BiometricS3Endpoint == "" {
 			errs = append(errs, errors.New("BIOMETRIC_S3_ENDPOINT is required in prod (biometric data must be stored in Uzbekistan)"))
 		}
-		if c.BiometricCountry != "UZ" {
+		switch {
+		case c.BiometricCountry == "UZ":
+		case c.BiometricCountry != "" && c.BiometricForeignApproved:
+			// хранилище вне UZ: владелец явно принял риск (ai-store tryon on)
+		case c.BiometricCountry == "":
 			errs = append(errs, errors.New("BIOMETRIC_STORAGE_COUNTRY must be UZ in prod"))
+		default:
+			errs = append(errs, fmt.Errorf("BIOMETRIC_STORAGE_COUNTRY=%s in prod needs BIOMETRIC_FOREIGN_APPROVED=true "+
+				"(biometric data outside Uzbekistan, ZRU on personal data art. 27-1)", c.BiometricCountry))
 		}
 	}
 	return errs

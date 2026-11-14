@@ -127,6 +127,24 @@ ai-store backup 2>&1 | tee /tmp/backup.out
 check "failed offsite upload is reported but the local backup is kept" grep -q 'ВНИМАНИЕ' /tmp/backup.out
 check "no encrypted leftovers" bash -c '! ls /opt/ai-store/backups/*.enc >/dev/null 2>&1'
 
+step "AI try-on: refused without a key, then switched on in prod"
+fit() { curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:8180/v1/fitting/adds; }
+check "try-on is off by default (503)" test "$(fit)" = 503
+if ai-store tryon on --yes >/dev/null 2>&1; then bad "tryon on without OPENAI_API_KEY must be refused"; else pass "tryon on without key refused"; fi
+sed -i 's/^OPENAI_API_KEY=.*/OPENAI_API_KEY=sk-smoke-not-a-real-key/' $AI_STORE_ROOT/.env
+SKIP_OPENAI_CHECK=1 ai-store tryon on --yes && pass "tryon on" || bad "tryon on"
+check "prod still on, try-on settings saved" bash -c "grep -q '^APP_ENV=prod' $AI_STORE_ROOT/.env && grep -q '^TRYON_PROVIDER=openai' $AI_STORE_ROOT/.env && grep -q '^BIOMETRIC_FOREIGN_APPROVED=true' $AI_STORE_ROOT/.env"
+check "try-on API is on (not 503)" bash -c '[[ $(curl -s -o /dev/null -w "%{http_code}" -H "Content-Type: application/json" -d "{}" http://127.0.0.1:8180/v1/fitting/adds) != 503 ]]'
+check "API log shows the in-process try-on worker" bash -c "docker compose -p ai-store logs --no-log-prefix api | grep -q 'tryon worker started'"
+docker run --rm --network ai-store_default --entrypoint sh \
+  -e U="$(grep ^MINIO_ROOT_USER= $AI_STORE_ROOT/.env | cut -d= -f2)" -e P="$(grep ^MINIO_ROOT_PASSWORD= $AI_STORE_ROOT/.env | cut -d= -f2)" \
+  pgsty/mc@sha256:ce62c9053c69ce12a527a322345b5ad9f44b5f8a7b8189f82e516f2e3f30f1d8 \
+  -c 'mc alias set l http://minio:9000 "$U" "$P" >/dev/null && mc ls l/boutique-biometric >/dev/null && mc anonymous get l/boutique-biometric' > /tmp/bio.out 2>&1 || true
+cat /tmp/bio.out
+check "separate biometric bucket exists and is private" grep -qi 'private\|none' /tmp/bio.out
+check "biometric bucket is not reachable through media domain" test "$(code https://media.$D/boutique-biometric/x)" = 404
+check "fitting page answers" test "$(code https://$D/fitting)" = 200
+
 step "a broken nginx config is rolled back"
 cp $AI_STORE_ROOT/src/deploy/shared/nginx/ai-store.conf.tmpl /tmp/tmpl.bak
 echo 'this is not nginx syntax;' >> $AI_STORE_ROOT/src/deploy/shared/nginx/ai-store.conf.tmpl

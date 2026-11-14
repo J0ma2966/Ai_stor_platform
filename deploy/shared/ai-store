@@ -3,6 +3,7 @@
 #   ai-store install <домен> <email>   первая установка (root)
 #   ai-store status | update | restart | logs [сервис] | backup | create-admin <логин> | env
 #   ai-store prod | staging            боевой режим (нужна настроенная почта) | обратно в тестовый
+#   ai-store tryon on | off            AI-примерка (нужен OPENAI_API_KEY в .env) | выключить
 # Всё лежит в одной папке (по умолчанию /opt/ai-store) и не трогает другие проекты сервера:
 # занимает только 127.0.0.1:3100/8180/9100 и один файл в настройках nginx.
 set -euo pipefail
@@ -44,6 +45,12 @@ EOF
 BACKUP_TELEGRAM_BOT_TOKEN=
 BACKUP_TELEGRAM_CHAT_ID=
 BACKUP_PASSPHRASE=$(rnd 24)
+EOF
+  grep -qE '^OPENAI_API_KEY=' "$ENV_FILE" || cat >> "$ENV_FILE" <<EOF
+
+# AI-примерка через OpenAI: впишите ключ (platform.openai.com → API keys), затем ai-store tryon on.
+# Ключ никому не пересылайте; на балансе OpenAI должны быть деньги.
+OPENAI_API_KEY=
 EOF
 }
 
@@ -153,7 +160,7 @@ GOOGLE_CLIENT_IDS=
 SMS_AUTH_ENABLED=false
 SMS_PROVIDER=log
 ORDER_SMS_ENABLED=false
-# AI-примерка выключена (включение: docs/TRYON.md и TRYON_ENABLED=true, затем ai-store update)
+# AI-примерка выключена; включение: OPENAI_API_KEY ниже, затем ai-store tryon on
 TRYON_PROVIDER=off
 TRYON_ENABLED=false
 # Telegram-бот (docs/NOTIFICATIONS.md); включается, когда задан токен
@@ -208,7 +215,7 @@ AI-магазин (https://$site). Всё, что относится к прое
   backups/   ночные копии базы и фото, хранятся 7 дней
 Вне папки: /etc/nginx/sites-available/ai-store.conf, /etc/nginx/snippets/ai-store-*.conf,
 /etc/cron.d/ai-store, /usr/local/bin/ai-store, сертификат /etc/letsencrypt/live/$site.
-Команды: ai-store status | update | restart | logs [api|web|postgres|minio] | backup | create-admin <логин> | prod | staging
+Команды: ai-store status | update | restart | logs [api|web|postgres|minio] | backup | create-admin <логин> | prod | staging | tryon on|off
 EOF
   say "Готово: https://$site"
   echo "Дальше: ai-store create-admin <логин>   (вход в панель: https://$site/admin)"
@@ -310,6 +317,68 @@ cmd_mode() {
   fi
 }
 
+# AI-примерка: фото тела покупателей (биометрия) хранятся на этом сервере и уходят в OpenAI (США).
+# Включение требует явного согласия владельца; сайт пересобирается (кнопки примерки), при
+# неудаче всё возвращается как было.
+cmd_tryon() {
+  need_root tryon
+  local want="${1:-}" yes="${2:-}" key prev_env country ans
+  [[ $want == on || $want == off ]] || die "нужно: ai-store tryon on | off"
+  env_defaults
+  if [[ $want == on ]]; then
+    key=$(envget OPENAI_API_KEY || true)
+    [[ -n $key ]] || die "впишите ключ OpenAI в $ENV_FILE (строка OPENAI_API_KEY=...) и повторите"
+    if [[ -z ${SKIP_OPENAI_CHECK:-} ]]; then
+      say "Проверка ключа OpenAI"
+      local code
+      code=$(curl -sS -m 20 -o /dev/null -w '%{http_code}' -H @<(printf 'Authorization: Bearer %s' "$key") \
+        https://api.openai.com/v1/models 2>/dev/null || true)
+      case "$code" in
+        200) echo "ключ рабочий" ;;
+        401) die "OpenAI не принял ключ (401): проверьте OPENAI_API_KEY" ;;
+        000|"") die "сервер не достучался до api.openai.com: проверьте выход в интернет по 443" ;;
+        *) die "OpenAI ответил $code на проверку ключа" ;;
+      esac
+    fi
+    country=$(envget BIOMETRIC_STORAGE_COUNTRY || true)
+    [[ -n $country ]] || country=${AI_STORE_COUNTRY:-PL}
+    if [[ $yes != --yes ]]; then
+      cat <<EOF
+
+ВНИМАНИЕ. Фото тела покупателей — биометрические персональные данные.
+Они будут храниться на этом сервере (страна: $country) и отправляться в OpenAI (США),
+который хранит запросы до 30 дней. Закон РУз «О персональных данных» (ст. 27-1)
+требует хранить такие данные в Узбекистане. Включая примерку, вы принимаете этот риск.
+EOF
+      read -rp "Включить AI-примерку? Напишите да: " ans
+      [[ $ans == да || $ans == yes ]] || die "отменено"
+    fi
+  fi
+  check_memory
+  cp -p "$ENV_FILE" "$ENV_FILE.bak"
+  prev_env="$ENV_FILE.bak"
+  if [[ $want == on ]]; then
+    envset TRYON_PROVIDER openai
+    envset TRYON_ENABLED true
+    envset OPENAI_PROD_APPROVED true
+    envset BIOMETRIC_STORAGE_COUNTRY "$country"
+    [[ $country == UZ ]] || envset BIOMETRIC_FOREIGN_APPROVED true
+  else
+    envset TRYON_PROVIDER off
+    envset TRYON_ENABLED false
+  fi
+  say "Сборка сайта (кнопки примерки), 3–6 минут"
+  if dc build web && dc up -d minio-init && dc up -d --force-recreate api web && ( wait_ready ); then
+    echo "AI-примерка: $want"
+    [[ $want == off ]] || echo "Проверка: https://$(envget SITE_DOMAIN)/fitting ; журнал генераций: ai-store logs api"
+  else
+    dc logs --tail 30 api || true
+    cp -p "$prev_env" "$ENV_FILE"
+    dc build web && dc up -d --force-recreate api web || true
+    die "не получилось (причина в журнале выше); настройки возвращены как были"
+  fi
+}
+
 cmd_create_admin() {
   need_root create-admin
   local login="${1:-}" pw pw2
@@ -339,6 +408,7 @@ case "${1:-}" in
   create-admin) shift; cmd_create_admin "$@" ;;
   add-swap) cmd_add_swap ;;
   prod|staging) cmd_mode "$1" ;;
+  tryon) shift; cmd_tryon "$@" ;;
   env) echo "$ENV_FILE" ;;
-  *) sed -n '2,6p' "$0"; exit 1 ;;
+  *) sed -n '2,7p' "$0"; exit 1 ;;
 esac

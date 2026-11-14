@@ -127,6 +127,28 @@ func TestTryOnEnabledInProdRequiresUZStorage(t *testing.T) {
 	}
 }
 
+func TestTryOnForeignBiometricStorageNeedsApproval(t *testing.T) {
+	c := Config{Env: "prod", BiometricS3Endpoint: "s3.example.pl", BiometricCountry: "PL"}
+	c.TryOn.Provider = "gemini"
+	c.TryOn.APIKey = "k"
+	errs := c.validateTryOn()
+	if len(errs) != 1 || !strings.Contains(errs[0].Error(), "BIOMETRIC_FOREIGN_APPROVED") {
+		t.Fatalf("storage outside UZ must need explicit approval, got %v", errs)
+	}
+	c.BiometricForeignApproved = true
+	if errs := c.validateTryOn(); len(errs) != 0 {
+		t.Fatalf("approved foreign storage must pass: %v", errs)
+	}
+	c.BiometricCountry = ""
+	if len(c.validateTryOn()) == 0 {
+		t.Fatal("approval without a country must still be refused")
+	}
+	c.BiometricCountry, c.BiometricS3Endpoint = "PL", ""
+	if len(c.validateTryOn()) == 0 {
+		t.Fatal("a separate biometric storage is required even with approval")
+	}
+}
+
 func TestOpenAIConfig(t *testing.T) {
 	base(t)
 	t.Setenv("TRYON_PROVIDER", "openai")
