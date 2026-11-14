@@ -28,7 +28,20 @@ dc() {
 envget() { grep -E "^$1=" "$ENV_FILE" | head -1 | cut -d= -f2-; }
 rnd() { openssl rand -hex "${1:-24}"; }
 envset() { # заменить значение KEY или дописать строку, если её нет
-  if grep -qE "^$1=" "$ENV_FILE"; then sed -i "s|^$1=.*|$1=$2|" "$ENV_FILE"; else printf '%s=%s\n' "$1" "$2" >> "$ENV_FILE"; fi
+  if grep -qE "^$1=" "$ENV_FILE"; then sed -i "s|^$1=.*|$1=$2|" "$ENV_FILE"; else
+    # если файл правили вручную и в конце нет перевода строки, новая строка склеилась бы с последней
+    [[ ! -s $ENV_FILE || -z $(tail -c1 "$ENV_FILE") ]] || echo >> "$ENV_FILE"
+    printf '%s=%s\n' "$1" "$2" >> "$ENV_FILE"
+  fi
+}
+# Проверка .env новым образом API без остановки работающего: при ошибке печатает причину.
+check_config() {
+  local out
+  # у образа ENTRYPOINT ["/api"], поэтому аргумент — только имя команды
+  if ! out=$(dc run --rm --no-deps -T api check-config 2>&1); then
+    printf '%s\n' "$out" | grep '"err":' | sed -e 's/.*"err":"//' -e 's/"}$//' -e 's/\\"/"/g' -e 's/^/  /' || printf '%s\n' "$out" | tail -5
+    return 1
+  fi
 }
 # настройки, появившиеся после первой установки, дописываются в существующий .env
 env_defaults() {
@@ -307,6 +320,10 @@ cmd_mode() {
   fi
   cp -p "$ENV_FILE" "$ENV_FILE.bak"
   envset APP_ENV "$mode"
+  if ! check_config; then
+    envset APP_ENV "$prev"
+    die "в режиме $mode настройки не прошли проверку (причина выше); магазин не перезапускался"
+  fi
   dc up -d --force-recreate api web
   if ( wait_ready ); then
     echo "Режим: $mode"
@@ -367,6 +384,12 @@ EOF
     envset TRYON_PROVIDER off
     envset TRYON_ENABLED false
   fi
+  say "Проверка настроек"
+  if ! check_config; then
+    cp -p "$prev_env" "$ENV_FILE"
+    die "настройки не прошли проверку (причина выше); магазин не перезапускался, .env возвращён как был"
+  fi
+  echo "настройки в порядке"
   say "Сборка сайта (кнопки примерки), 3–6 минут"
   if dc build web && dc up -d minio-init && dc up -d --force-recreate api web && ( wait_ready ); then
     echo "AI-примерка: $want"
