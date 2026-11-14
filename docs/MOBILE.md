@@ -45,6 +45,8 @@ BOUTIQUE_IT_STORE_LOGIN=shop BOUTIQUE_IT_STORE_PASSWORD=... \
 
 Переменные окружения `BOUTIQUE_KEYSTORE`, `BOUTIQUE_KEYSTORE_PASSWORD`, `BOUTIQUE_KEY_ALIAS`, `BOUTIQUE_KEY_PASSWORD`. Без них release собирается неподписанным.
 
+APK для раздачи: Actions → Android → Run workflow (адреса API и сайта, галочка «AI-примерка»). Артефакт `apk-testers`. Если в репозитории заданы секреты `BOUTIQUE_KEYSTORE_BASE64` (keystore в base64), `BOUTIQUE_KEYSTORE_PASSWORD`, `BOUTIQUE_KEY_ALIAS`, `BOUTIQUE_KEY_PASSWORD`, APK подписаны постоянным ключом и обновляются поверх; без них — одноразовым debug-ключом (перед установкой новой сборки старую нужно удалить). `versionCode` = номер запуска workflow.
+
 ## Проверка с телефона на локальном сервере (Windows, Wi-Fi)
 
 1. Узнайте IP компьютера в Wi-Fi: `ipconfig` → «IPv4-адрес», например `192.168.1.50`. Телефон должен быть в той же сети.
