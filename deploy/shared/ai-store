@@ -2,6 +2,7 @@
 # Управление AI-магазином на общем сервере (docs/SHARED_SERVER.md).
 #   ai-store install <домен> <email>   первая установка (root)
 #   ai-store status | update | restart | logs [сервис] | backup | create-admin <логин> | env
+#   ai-store prod | staging            боевой режим (нужна настроенная почта) | обратно в тестовый
 # Всё лежит в одной папке (по умолчанию /opt/ai-store) и не трогает другие проекты сервера:
 # занимает только 127.0.0.1:3100/8180/9100 и один файл в настройках nginx.
 set -euo pipefail
@@ -25,6 +26,20 @@ dc() {
 }
 envget() { grep -E "^$1=" "$ENV_FILE" | head -1 | cut -d= -f2-; }
 rnd() { openssl rand -hex "${1:-24}"; }
+envset() { # заменить значение KEY или дописать строку, если её нет
+  if grep -qE "^$1=" "$ENV_FILE"; then sed -i "s|^$1=.*|$1=$2|" "$ENV_FILE"; else printf '%s=%s\n' "$1" "$2" >> "$ENV_FILE"; fi
+}
+# настройки, появившиеся после первой установки, дописываются в существующий .env
+env_defaults() {
+  grep -qE '^BACKUP_PASSPHRASE=' "$ENV_FILE" || cat >> "$ENV_FILE" <<EOF
+
+# Копия базы вне сервера: зашифрованный файл уходит в Telegram после каждого ai-store backup.
+# Нужны токен бота и chat id (личный чат с ботом или группа). Пароль шифра сохраните отдельно!
+BACKUP_TELEGRAM_BOT_TOKEN=
+BACKUP_TELEGRAM_CHAT_ID=
+BACKUP_PASSPHRASE=$(rnd 24)
+EOF
+}
 
 # Перед сборкой: сборка сайта на пике занимает около 2 ГБ; при нехватке памяти система
 # могла бы остановить соседний проект, поэтому лучше отказаться заранее.
@@ -154,6 +169,7 @@ EOF
   else
     say "$ENV_FILE уже есть, оставляю как есть"
   fi
+  env_defaults
   chmod 600 "$ENV_FILE"
   mkdir -p "$ROOT/data/postgres" "$ROOT/data/redis" "$ROOT/data/minio" "$ROOT/backups"
   chmod 700 "$ROOT/data" "$ROOT/backups"
@@ -186,7 +202,7 @@ AI-магазин (https://$site). Всё, что относится к прое
   backups/   ночные копии базы и фото, хранятся 7 дней
 Вне папки: /etc/nginx/sites-available/ai-store.conf, /etc/nginx/snippets/ai-store-*.conf,
 /etc/cron.d/ai-store, /usr/local/bin/ai-store, сертификат /etc/letsencrypt/live/$site.
-Команды: ai-store status | update | restart | logs [api|web|postgres|minio] | backup | create-admin <логин>
+Команды: ai-store status | update | restart | logs [api|web|postgres|minio] | backup | create-admin <логин> | prod | staging
 EOF
   say "Готово: https://$site"
   echo "Дальше: ai-store create-admin <логин>   (вход в панель: https://$site/admin)"
@@ -194,7 +210,7 @@ EOF
 
 wait_ready() {
   local api_port web_port; api_port=$(envget API_PORT); web_port=$(envget WEB_PORT)
-  for _ in $(seq 1 60); do
+  for _ in $(seq 1 "${READY_TRIES:-60}"); do
     if curl -fsS -m 3 "http://127.0.0.1:$api_port/readyz" >/dev/null 2>&1 &&
        curl -fsS -m 3 "http://127.0.0.1:$web_port/api/healthz" >/dev/null 2>&1; then
       echo "API и сайт отвечают"; return 0
@@ -202,7 +218,7 @@ wait_ready() {
     sleep 3
   done
   dc ps
-  die "сервисы не ответили за 3 минуты: ai-store logs api"
+  die "сервисы не ответили за ${READY_TRIES:-60}x3 секунд: ai-store logs api"
 }
 
 cmd_status() {
@@ -238,7 +254,51 @@ cmd_backup() {
     mv "$out/media-$ts.tar.gz.tmp" "$out/media-$ts.tar.gz"
     echo "$(date -Is) фото: $out/media-$ts.tar.gz ($(du -h "$out/media-$ts.tar.gz" | cut -f1))"
   fi
-  find "$out" -maxdepth 1 -type f \( -name 'db-*.dump' -o -name 'media-*.tar.gz' -o -name '*.tmp' \) -mtime +"${BACKUP_KEEP_DAYS:-7}" -delete
+  find "$out" -maxdepth 1 -type f \( -name 'db-*.dump' -o -name 'media-*.tar.gz' -o -name '*.tmp' -o -name '*.enc' \) -mtime +"${BACKUP_KEEP_DAYS:-7}" -delete
+  offsite_backup "$out/db-$ts.dump" || echo "$(date -Is) ВНИМАНИЕ: копия вне сервера не отправлена (локальная копия на месте)"
+}
+
+# Зашифрованная копия базы в Telegram: при потере сервера данные можно восстановить.
+# Расшифровка: openssl enc -d -aes-256-cbc -pbkdf2 -pass pass:ПАРОЛЬ -in файл.enc -out db.dump
+offsite_backup() {
+  local token chat pass f="$1"
+  token=$(envget BACKUP_TELEGRAM_BOT_TOKEN || true); chat=$(envget BACKUP_TELEGRAM_CHAT_ID || true); pass=$(envget BACKUP_PASSPHRASE || true)
+  [[ -n $token && -n $chat ]] || return 0
+  [[ -n $pass ]] || { echo "нет BACKUP_PASSPHRASE в $ENV_FILE"; return 1; }
+  BACKUP_PASS="$pass" openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:BACKUP_PASS -in "$f" -out "$f.enc"
+  if (( $(stat -c %s "$f.enc") > 49000000 )); then
+    rm -f "$f.enc"; echo "копия больше 49 МБ, Telegram такую не примет: нужно другое хранилище"; return 1
+  fi
+  local resp; resp=$(curl -sS -m 120 -F chat_id="$chat" -F caption="AI-магазин $(envget SITE_DOMAIN): копия базы $(date +%F)" \
+    -F document=@"$f.enc" "https://api.telegram.org/bot$token/sendDocument" 2>&1 || true)
+  rm -f "$f.enc"
+  [[ $resp == *'"ok":true'* ]] || { echo "Telegram не принял копию: ${resp:0:200}"; return 1; }
+  echo "$(date -Is) копия базы отправлена в Telegram"
+}
+
+# Боевой режим: API не стартует в prod без настоящей почты, поэтому сначала проверка,
+# а при неудаче магазин возвращается в прежний режим и продолжает работать.
+cmd_mode() {
+  need_root "$1"
+  local mode="$1" prev k miss=()
+  prev=$(envget APP_ENV)
+  [[ $prev != "$mode" ]] || { echo "Режим уже $mode"; return 0; }
+  env_defaults
+  if [[ $mode == prod ]]; then
+    [[ $(envget MAIL_PROVIDER) == smtp ]] || miss+=("MAIL_PROVIDER=smtp")
+    for k in SMTP_HOST SMTP_USER SMTP_PASSWORD MAIL_FROM; do [[ -n $(envget $k) ]] || miss+=("$k"); done
+    (( ${#miss[@]} == 0 )) || die "для боевого режима заполните в $ENV_FILE: ${miss[*]}"
+  fi
+  cp -p "$ENV_FILE" "$ENV_FILE.bak"
+  envset APP_ENV "$mode"
+  dc up -d --force-recreate api web
+  if ( wait_ready ); then
+    echo "Режим: $mode"
+  else
+    dc logs --tail 20 api || true
+    envset APP_ENV "$prev"; dc up -d --force-recreate api web
+    die "в режиме $mode API не запустился (причина в журнале выше); возвращён режим $prev"
+  fi
 }
 
 cmd_create_admin() {
@@ -269,6 +329,7 @@ case "${1:-}" in
   backup) cmd_backup all ;;
   create-admin) shift; cmd_create_admin "$@" ;;
   add-swap) cmd_add_swap ;;
+  prod|staging) cmd_mode "$1" ;;
   env) echo "$ENV_FILE" ;;
   *) sed -n '2,6p' "$0"; exit 1 ;;
 esac
