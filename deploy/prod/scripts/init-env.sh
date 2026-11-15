@@ -83,7 +83,7 @@ SMTP_HOST=
 SMTP_PORT=587
 SMTP_USER=
 SMTP_PASSWORD=
-MAIL_FROM=Boutique <no-reply@$domain>
+MAIL_FROM=Vesta <no-reply@$domain>
 # OAuth client ID из Google Cloud Console (веб-клиент первым); пусто — кнопки Google нет
 GOOGLE_CLIENT_IDS=
 SMS_AUTH_ENABLED=false

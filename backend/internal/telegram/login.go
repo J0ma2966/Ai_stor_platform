@@ -18,9 +18,9 @@ type loginTexts struct {
 
 var loginRU = loginTexts{
 	expired:  "Ссылка для входа устарела. Нажмите «Войти через Telegram» на сайте или в приложении ещё раз.",
-	known:    "Подтвердите вход в Boutique.\n\nНажимайте, только если вы сами сейчас входите на сайт или в приложение. Если нет — просто проигнорируйте это сообщение.",
+	known:    "Подтвердите вход в Vesta.\n\nНажимайте, только если вы сами сейчас входите на сайт или в приложение. Если нет — просто проигнорируйте это сообщение.",
 	knownBtn: "✅ Войти",
-	newUser: "Добро пожаловать в Boutique!\n\nЧтобы зарегистрироваться, поделитесь номером телефона кнопкой ниже: " +
+	newUser: "Добро пожаловать в Vesta!\n\nЧтобы зарегистрироваться, поделитесь номером телефона кнопкой ниже: " +
 		"он нужен для доставки заказов. Делайте это, только если вы сами сейчас входите на сайт или в приложение.",
 	shareBtn:  "📱 Поделиться номером",
 	done:      "Готово! Вернитесь на сайт или в приложение — вход выполнится сам.",
@@ -32,9 +32,9 @@ var loginRU = loginTexts{
 
 var loginUZ = loginTexts{
 	expired:  "Kirish havolasi eskirgan. Sayt yoki ilovada «Telegram orqali kirish» tugmasini qayta bosing.",
-	known:    "Boutique'ga kirishni tasdiqlang.\n\nFaqat hozir o'zingiz saytga yoki ilovaga kirayotgan bo'lsangiz bosing. Aks holda bu xabarni e'tiborsiz qoldiring.",
+	known:    "Vesta’ga kirishni tasdiqlang.\n\nFaqat hozir o'zingiz saytga yoki ilovaga kirayotgan bo'lsangiz bosing. Aks holda bu xabarni e'tiborsiz qoldiring.",
 	knownBtn: "✅ Kirish",
-	newUser: "Boutique'ga xush kelibsiz!\n\nRo'yxatdan o'tish uchun quyidagi tugma orqali telefon raqamingizni yuboring: " +
+	newUser: "Vesta’ga xush kelibsiz!\n\nRo'yxatdan o'tish uchun quyidagi tugma orqali telefon raqamingizni yuboring: " +
 		"u buyurtmalarni yetkazish uchun kerak. Faqat hozir o'zingiz saytga yoki ilovaga kirayotgan bo'lsangiz yuboring.",
 	shareBtn:  "📱 Raqamni yuborish",
 	done:      "Tayyor! Sayt yoki ilovaga qayting — kirish avtomatik bajariladi.",

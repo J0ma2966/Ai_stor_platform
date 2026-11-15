@@ -10,7 +10,7 @@ const ru: Record<LegalKey, LegalDoc> = {
     title: "Пользовательское соглашение",
     updated: UPDATED,
     sections: [
-      { h: "1. Общие положения", p: ["Платформа Butik (далее — Платформа) — онлайн-маркетплейс, на котором бутики (далее — Магазины) размещают товары, а пользователи (далее — Клиенты) выбирают товары, пользуются AI-примеркой и оформляют заказы.", "Используя Платформу, вы принимаете условия настоящего соглашения. Если вы не согласны с условиями, не используйте Платформу."] },
+      { h: "1. Общие положения", p: ["Платформа Vesta (далее — Платформа) — онлайн-маркетплейс, на котором бутики (далее — Магазины) размещают товары, а пользователи (далее — Клиенты) выбирают товары, пользуются AI-примеркой и оформляют заказы.", "Используя Платформу, вы принимаете условия настоящего соглашения. Если вы не согласны с условиями, не используйте Платформу."] },
       { h: "2. Регистрация", p: ["Клиент регистрируется по номеру мобильного телефона Узбекистана и подтверждает его кодом из SMS. При регистрации указывается пол — он нужен для выбора манекена в примерочной и может быть изменён в профиле.", "Клиент отвечает за сохранность доступа к своему номеру телефона. Учётные записи Магазинов создаёт только администрация Платформы."] },
       { h: "3. Товары и заказы", p: ["Продавцом товара является Магазин. Магазин отвечает за описание, цену, наличие и качество товара, а также за доставку заказа.", "При оформлении корзина делится на отдельные заказы по Магазинам. Каждый Магазин подтверждает или отклоняет свой заказ; статус заказа отображается в личном кабинете.", "Оплата заказа производится при получении, если иное не указано при оформлении. Вопросы возврата и обмена решаются с Магазином в соответствии с законодательством Республики Узбекистан о защите прав потребителей."] },
       { h: "4. AI-примерка и токены", p: ["AI-примерка создаёт изображение Клиента в выбранном образе по загруженным фотографиям. Результат носит иллюстративный характер: Платформа не гарантирует точную посадку и соответствие размера.", "Примерка оплачивается внутренними токенами. После регистрации Клиент однократно получает приветственные токены. Стоимость одной генерации отображается перед запуском.", "Если генерация не удалась по технической причине, списанные токены возвращаются автоматически. Токены не являются денежными средствами, не подлежат обмену на деньги и сгорают при удалении аккаунта."] },
@@ -45,7 +45,7 @@ const ru: Record<LegalKey, LegalDoc> = {
     title: "О платформе",
     updated: UPDATED,
     sections: [
-      { h: "Butik", p: ["Butik объединяет каталоги бутиков в одном месте: один поиск, одна корзина и единый личный кабинет.", "Главная особенность — виртуальная примерочная: соберите образ из товаров разных магазинов и посмотрите на себя в нём по трём своим фотографиям."] },
+      { h: "Vesta", p: ["Vesta объединяет каталоги бутиков в одном месте: один поиск, одна корзина и единый личный кабинет.", "Главная особенность — виртуальная примерочная: соберите образ из товаров разных магазинов и посмотрите на себя в нём по трём своим фотографиям."] },
       { h: "Магазинам", p: ["Бутики подключаются по приглашению администрации. Магазин сам управляет профилем и товарами, загружает каталог из Excel, видит статистику просмотров, добавлений в примерочную и заказов.", "Чтобы подключить бутик, свяжитесь с поддержкой."] },
     ],
   },
@@ -61,7 +61,7 @@ const uz: Record<LegalKey, LegalDoc> = {
     title: "Foydalanuvchi shartnomasi",
     updated: UPDATED,
     sections: [
-      { h: "1. Umumiy qoidalar", p: ["Butik platformasi (keyingi o‘rinlarda — Platforma) — butiklar (Do‘konlar) mahsulot joylaydigan, foydalanuvchilar (Mijozlar) esa mahsulot tanlaydigan, AI-kiyib ko‘rishdan foydalanadigan va buyurtma beradigan onlayn-marketpleys.", "Platformadan foydalanib, siz ushbu shartnoma shartlarini qabul qilasiz. Agar rozi bo‘lmasangiz, Platformadan foydalanmang."] },
+      { h: "1. Umumiy qoidalar", p: ["Vesta platformasi (keyingi o‘rinlarda — Platforma) — butiklar (Do‘konlar) mahsulot joylaydigan, foydalanuvchilar (Mijozlar) esa mahsulot tanlaydigan, AI-kiyib ko‘rishdan foydalanadigan va buyurtma beradigan onlayn-marketpleys.", "Platformadan foydalanib, siz ushbu shartnoma shartlarini qabul qilasiz. Agar rozi bo‘lmasangiz, Platformadan foydalanmang."] },
       { h: "2. Ro‘yxatdan o‘tish", p: ["Mijoz O‘zbekiston mobil raqami orqali ro‘yxatdan o‘tadi va uni SMS-kod bilan tasdiqlaydi. Ro‘yxatdan o‘tishda jins ko‘rsatiladi — u kiyib ko‘rish xonasidagi manekenni tanlash uchun kerak va profilda o‘zgartirilishi mumkin.", "Mijoz o‘z telefon raqamiga kirish xavfsizligi uchun javobgar. Do‘kon hisoblarini faqat Platforma ma’muriyati yaratadi."] },
       { h: "3. Mahsulotlar va buyurtmalar", p: ["Mahsulot sotuvchisi — Do‘kon. Do‘kon mahsulot tavsifi, narxi, mavjudligi, sifati va buyurtmani yetkazib berish uchun javobgar.", "Rasmiylashtirishda savat Do‘konlar bo‘yicha alohida buyurtmalarga bo‘linadi. Har bir Do‘kon o‘z buyurtmasini tasdiqlaydi yoki rad etadi; holat shaxsiy kabinetda ko‘rinadi.", "Buyurtma uchun to‘lov, agar boshqacha ko‘rsatilmagan bo‘lsa, qabul qilishda amalga oshiriladi. Qaytarish va almashtirish masalalari O‘zbekiston Respublikasining iste’molchilar huquqlarini himoya qilish to‘g‘risidagi qonunchiligiga muvofiq Do‘kon bilan hal qilinadi."] },
       { h: "4. AI-kiyib ko‘rish va tokenlar", p: ["AI-kiyib ko‘rish yuklangan suratlar bo‘yicha Mijozning tanlangan obrazdagi tasvirini yaratadi. Natija illyustrativ xususiyatga ega: Platforma aniq yarashish va o‘lchamni kafolatlamaydi.", "Kiyib ko‘rish ichki tokenlar bilan to‘lanadi. Ro‘yxatdan o‘tgach, Mijoz bir marta xush kelibsiz tokenlarini oladi. Bitta generatsiya narxi ishga tushirishdan oldin ko‘rsatiladi.", "Generatsiya texnik sababga ko‘ra amalga oshmasa, yechilgan tokenlar avtomatik qaytariladi. Tokenlar pul mablag‘i emas, pulga almashtirilmaydi va akkaunt o‘chirilganda yo‘qoladi."] },
@@ -96,7 +96,7 @@ const uz: Record<LegalKey, LegalDoc> = {
     title: "Platforma haqida",
     updated: UPDATED,
     sections: [
-      { h: "Butik", p: ["Butik butiklar kataloglarini bir joyga jamlaydi: bitta qidiruv, bitta savat va yagona shaxsiy kabinet.", "Asosiy xususiyat — virtual kiyib ko‘rish xonasi: turli do‘konlar mahsulotlaridan obraz yig‘ing va uchta suratingiz bo‘yicha o‘zingizni unda ko‘ring."] },
+      { h: "Vesta", p: ["Vesta butiklar kataloglarini bir joyga jamlaydi: bitta qidiruv, bitta savat va yagona shaxsiy kabinet.", "Asosiy xususiyat — virtual kiyib ko‘rish xonasi: turli do‘konlar mahsulotlaridan obraz yig‘ing va uchta suratingiz bo‘yicha o‘zingizni unda ko‘ring."] },
       { h: "Do‘konlar uchun", p: ["Butiklar ma’muriyat taklifi bilan ulanadi. Do‘kon profil va mahsulotlarni o‘zi boshqaradi, katalogni Excel’dan yuklaydi, ko‘rishlar, kiyib ko‘rish xonasiga qo‘shishlar va buyurtmalar statistikasini ko‘radi.", "Butikni ulash uchun qo‘llab-quvvatlash bilan bog‘laning."] },
     ],
   },

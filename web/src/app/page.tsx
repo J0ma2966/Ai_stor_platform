@@ -41,7 +41,7 @@ export default async function Home() {
   const heroImg = [...popular.items, ...fresh.items].map(frontImage).find(Boolean) ?? "";
   return (
     <div className="stack-lg">
-      <JsonLd data={{ "@context": "https://schema.org", "@type": "Organization", name: "Butik", url: siteUrl() }} />
+      <JsonLd data={{ "@context": "https://schema.org", "@type": "Organization", name: "Vesta", url: siteUrl() }} />
       <div className="home-top">
         <section className="hero" aria-labelledby="h-hero">
           {heroImg && (
