@@ -74,6 +74,7 @@ func hashHex(s string) string {
 func (h *Handlers) TelegramRoutes(r chi.Router) {
 	r.Post("/start", h.telegramStart)
 	r.Post("/poll", h.telegramPoll)
+	r.Post("/webapp", h.telegramWebApp)
 }
 
 func (h *Handlers) telegramStart(w http.ResponseWriter, r *http.Request) {

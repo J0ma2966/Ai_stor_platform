@@ -919,3 +919,42 @@ input:focus, textarea:focus, select:focus, .admin-main input[type="search"]:focu
   .auth-spinner { animation-duration: 2.4s; }
   .auth-wait, .auth-skeleton { animation: none; }
 }
+
+/* ---------- телефон как приложение: нижняя панель (TabBar) и Telegram Mini App ----------
+   Как NavigationBar в Android-приложении покупателя: 5 вкладок, у выбранной — «таблетка»
+   под иконкой. На компьютере панели нет. Отступ снизу учитывает «полоску» iPhone. */
+.tabbar { display: none; }
+@media (max-width: 760px) {
+  :root { --tabbar-h: 64px; --tabbar-safe: max(env(safe-area-inset-bottom, 0px), var(--tg-safe-area-inset-bottom, 0px)); }
+  .tabbar {
+    display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 25;
+    padding: 6px max(4px, env(safe-area-inset-left, 0px)) calc(6px + var(--tabbar-safe)) max(4px, env(safe-area-inset-right, 0px));
+    background: var(--surface); border-top: 1px solid var(--border);
+    box-shadow: 0 -6px 24px rgba(0, 0, 0, .06);
+  }
+  .tabbar-item {
+    display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 52px; justify-content: center;
+    color: var(--muted); text-decoration: none; font-size: .72rem; font-weight: 600; line-height: 1.1;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .tabbar-icon { position: relative; display: grid; place-items: center; width: 56px; height: 30px; border-radius: 999px; transition: background-color .2s ease, color .2s ease; }
+  .tabbar-item[aria-current="page"] { color: var(--text); }
+  .tabbar-item[aria-current="page"] .tabbar-icon { background: var(--accent-soft); color: var(--accent); }
+  .tabbar-item .count-badge { top: -4px; right: 8px; }
+  .tabbar-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tabbar-item:active .tabbar-icon { transform: scale(.94); }
+  /* место под панель, чтобы она не закрывала низ страницы */
+  body:has(.tabbar) { padding-bottom: calc(var(--tabbar-h) + var(--tabbar-safe)); }
+  /* корзина, «Каталог» и кабинет есть в панели — в шапке не дублируем */
+  .hdr-tabdup { display: none !important; }
+  .header-row { grid-template-columns: auto minmax(0, 1fr) auto auto; grid-template-areas: "logo . nav act" "search search search search"; }
+}
+@media (max-width: 360px) { .tabbar-item { font-size: .64rem; } .tabbar-icon { width: 48px; } }
+@media (max-width: 760px) and (prefers-reduced-motion: reduce) { .tabbar-icon { transition: none; } }
+
+/* Внутри Telegram: экран как у приложения — без подвала сайта, шапка не уезжает под шапку Telegram */
+:root[data-tg] .site-footer { display: none; }
+:root[data-tg] body { overscroll-behavior-y: none; }
+:root[data-tg] .site-header { padding-top: var(--tg-content-safe-area-inset-top, 0px); }
+:root[data-tg] .main { padding-bottom: 24px; }
