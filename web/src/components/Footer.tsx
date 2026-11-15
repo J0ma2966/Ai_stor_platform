@@ -9,7 +9,10 @@ export async function Footer() {
     <footer className="site-footer">
       <div className="container footer-grid">
         <div>
-          <p className="logo">{t("app.name")}</p>
+          <p className="logo">
+            <img className="logo-mark" src="/brand/vesta-icon.svg" alt="" width={38} height={38} loading="lazy" />
+            <span>{t("app.name")}</span>
+          </p>
           <p className="muted small">{t("app.tagline")}</p>
         </div>
         <nav aria-label={t("footer.about")}>

@@ -62,7 +62,8 @@ export function Header({ theme = "system" }: { theme?: Theme }) {
       <a href="#main" className="skip-link">{t("app.skip")}</a>
       <div className="container header-row">
         <Link href="/" className="logo" aria-label={t("app.name")}>
-          <span className="logo-mark" aria-hidden="true">B</span>
+          {/* знак Vesta, вариант 6 логотипа */}
+          <img className="logo-mark" src="/brand/vesta-icon.svg" alt="" width={38} height={38} />
           <span>{t("app.name")}</span>
         </Link>
         <Link href="/catalog" className={`btn btn-primary hdr-catalog${dup}`}>

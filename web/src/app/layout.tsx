@@ -22,10 +22,10 @@ export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations({ locale, namespace: "seo" });
   return {
     metadataBase: new URL(siteUrl()),
-    title: { default: t("homeTitle"), template: `%s — Butik` },
+    title: { default: t("homeTitle"), template: `%s — Vesta` },
     description: t("homeDesc"),
     alternates: alternates(locale, "/"),
-    openGraph: { type: "website", siteName: "Butik", locale: locale === "uz" ? "uz_UZ" : "ru_RU", title: t("homeTitle"), description: t("homeDesc") },
+    openGraph: { type: "website", siteName: "Vesta", locale: locale === "uz" ? "uz_UZ" : "ru_RU", title: t("homeTitle"), description: t("homeDesc") },
     robots: { index: true, follow: true },
   };
 }

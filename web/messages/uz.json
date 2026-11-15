@@ -1,6 +1,6 @@
 {
   "app": {
-    "name": "Butik",
+    "name": "Vesta",
     "lang": "Русский",
     "logout": "Chiqish",
     "loading": "Yuklanmoqda…",
@@ -324,7 +324,7 @@
     "privacy": "Maxfiylik siyosati",
     "photos": "Suratlarni qayta ishlash qoidalari",
     "forStores": "Do‘konlar uchun",
-    "rights": "© {year} Butik. Barcha huquqlar himoyalangan.",
+    "rights": "© {year} Vesta. Barcha huquqlar himoyalangan.",
     "support": "Qo‘llab-quvvatlash"
   },
   "home": {
@@ -748,12 +748,12 @@
     "draftNote": "Matn shablon sifatida tayyorlangan va ishga tushirishdan oldin yurist tomonidan tekshirilishi kerak."
   },
   "seo": {
-    "homeTitle": "Butik — AI-kiyib ko‘rish bilan butiklar marketpleysi",
+    "homeTitle": "Vesta — AI-kiyib ko‘rish bilan butiklar marketpleysi",
     "homeDesc": "O‘zbekiston butiklaridan kiyim, poyabzal va aksessuarlar. Obraz yig‘ing va uni AI yordamida o‘z suratlaringizda kiyib ko‘ring.",
     "catalogTitle": "Kiyim va poyabzal katalogi",
     "catalogDesc": "Butiklar katalogi: qidiruv, narx, brend va do‘kon bo‘yicha filtrlar.",
     "storesTitle": "Butiklar",
-    "storesDesc": "Butik platformasining barcha butiklari.",
+    "storesDesc": "Vesta platformasining barcha butiklari.",
     "price": "{price}"
   },
   "notFound": {

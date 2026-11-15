@@ -18,7 +18,7 @@ import (
 type HTTPAPI struct {
 	Provider string // "brevo" | "resend"
 	APIKey   string
-	From     string // "Boutique <no-reply@shop.uz>"
+	From     string // "Vesta <no-reply@shop.uz>"
 	SiteName string
 	Endpoint string // пусто — адрес провайдера; задаётся в тестах
 	Client   *http.Client
@@ -43,7 +43,7 @@ func (s *HTTPAPI) SendCode(ctx context.Context, to, code string, purpose Purpose
 	}
 	site := s.SiteName
 	if site == "" {
-		site = "Boutique"
+		site = "Vesta"
 	}
 	name := from.Name
 	if name == "" {

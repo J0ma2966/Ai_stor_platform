@@ -54,8 +54,8 @@ type SMTP struct {
 	Port     int
 	User     string
 	Password string
-	From     string // "Boutique <no-reply@shop.uz>"
-	SiteName string // в теме письма; пусто — «Boutique»
+	From     string // "Vesta <no-reply@shop.uz>"
+	SiteName string // в теме письма; пусто — «Vesta»
 	Timeout  time.Duration
 }
 
@@ -132,7 +132,7 @@ func (s *SMTP) SendCode(ctx context.Context, to, code string, purpose Purpose, l
 
 func (s *SMTP) siteName() string {
 	if s.SiteName == "" {
-		return "Boutique"
+		return "Vesta"
 	}
 	return s.SiteName
 }

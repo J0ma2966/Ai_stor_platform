@@ -69,7 +69,7 @@ type Config struct {
 	SMTPPort     int // 587 — STARTTLS, 465 — TLS сразу
 	SMTPUser     string
 	SMTPPassword string
-	MailFrom     string // напр. "Boutique <no-reply@shop.uz>"
+	MailFrom     string // напр. "Vesta <no-reply@shop.uz>"
 
 	// SMS: log (только dev/test) | eskiz
 	SMSProvider   string
