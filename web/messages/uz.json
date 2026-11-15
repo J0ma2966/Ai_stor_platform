@@ -299,6 +299,9 @@
     "finished": "Buyurtma yakunlangan, holat endi o‘zgarmaydi."
   },
   "nav": {
+    "home": "Bosh sahifa",
+    "orders": "Buyurtmalar",
+    "profile": "Profil",
     "catalog": "Katalog",
     "stores": "Butiklar",
     "fitting": "Kiyib ko‘rish xonasi",

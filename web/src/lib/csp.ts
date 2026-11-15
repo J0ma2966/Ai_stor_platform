@@ -24,7 +24,9 @@ export function buildCsp(nonce: string, dev = process.env.NODE_ENV === "developm
     "style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style",
     "font-src 'self'",
     "object-src 'none'",
-    "frame-ancestors 'none'",
+    // встраивать нельзя никому, кроме веб-версии Telegram (магазин как Mini App в боте;
+    // в приложениях Telegram для телефона и компьютера страница открывается не во фрейме)
+    "frame-ancestors https://web.telegram.org",
     "base-uri 'self'",
     "form-action 'self'",
   ].join("; ");

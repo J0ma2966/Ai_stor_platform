@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { ApiError, pollTelegramLogin, startTelegramLogin, type TelegramStart } from "@/lib/api";
 import { ErrorBox } from "@/components/ErrorBox";
+import { telegramWebApp } from "@/lib/telegram";
 
 const POLL_MS = 2000;
 
@@ -62,11 +63,15 @@ export function TelegramLogin({ onSignedIn }: { onSignedIn: () => Promise<void> 
   async function start() {
     setError(null);
     setBusy(true);
+    // Внутри Telegram Mini App чат с ботом открывает сам Telegram (новых вкладок там нет).
+    const tg = telegramWebApp();
     // Вкладку открываем сразу по клику: после await браузер счёл бы её всплывающим окном.
-    const tab = typeof window !== "undefined" ? window.open("", "_blank") : null;
+    const tab = !tg && typeof window !== "undefined" ? window.open("", "_blank") : null;
     try {
       const a = await startTelegramLogin();
-      if (tab) {
+      if (tg) {
+        tg.openTelegramLink(a.url);
+      } else if (tab) {
         tab.opener = null;
         tab.location.href = a.url;
       }
@@ -87,7 +92,19 @@ export function TelegramLogin({ onSignedIn }: { onSignedIn: () => Promise<void> 
           <strong>{t("waitTitle")}</strong>
           <p className="muted small">{t("waitText")}</p>
           <div className="auth-links">
-            <a className="btn-link" href={attempt.url} target="_blank" rel="noopener noreferrer">{t("openAgain")}</a>
+            <a
+              className="btn-link"
+              href={attempt.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => {
+                const tg = telegramWebApp();
+                if (tg) {
+                  e.preventDefault();
+                  tg.openTelegramLink(attempt.url);
+                }
+              }}
+            >{t("openAgain")}</a>
             <button type="button" className="btn-link" onClick={() => setAttempt(null)}>{t("cancel")}</button>
           </div>
         </div>

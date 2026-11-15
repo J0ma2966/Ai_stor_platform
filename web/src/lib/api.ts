@@ -223,6 +223,10 @@ export async function pollTelegramLogin(t: Pick<TelegramStart, "login_id" | "pol
   return r;
 }
 
+// Внутри Telegram Mini App: вход по подписанным данным запуска, если Telegram уже привязан
+// к покупателю. ApiError telegram_not_linked — нужен обычный вход через бота.
+export const loginTelegramWebApp = (initData: string) => signIn("/v1/auth/telegram/webapp", { init_data: initData });
+
 export async function loginStaff(login: string, password: string) {
   const s = await api<SessionResp>("/v1/auth/login", { method: "POST", body: { login, password } });
   setSession(s.access_token, s.user.role);

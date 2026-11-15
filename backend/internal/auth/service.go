@@ -41,6 +41,8 @@ type Service struct {
 	Google *GoogleVerifier
 	// Имя Telegram-бота без @ для ссылок входа; пусто — вход через Telegram выключен.
 	TelegramBot string
+	// Токен того же бота: им подписаны данные запуска Telegram Mini App (telegram_webapp.go).
+	TelegramBotToken string
 }
 
 type Session struct {

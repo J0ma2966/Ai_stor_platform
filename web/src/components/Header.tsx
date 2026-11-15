@@ -54,6 +54,8 @@ export function Header({ theme = "system" }: { theme?: Theme }) {
   const cabinet = role === "store" ? "/store" : role === "admin" ? "/admin" : "/account";
   const notifHref = role === "store" ? "/store/notifications" : "/account/notifications";
   const query = sp.toString();
+  // на телефоне корзина и кабинет покупателя — в нижней панели (TabBar), в шапке их прячем
+  const dup = role !== "store" && role !== "admin" ? " hdr-tabdup" : "";
 
   return (
     <header className="site-header">
@@ -63,7 +65,7 @@ export function Header({ theme = "system" }: { theme?: Theme }) {
           <span className="logo-mark" aria-hidden="true">B</span>
           <span>{t("app.name")}</span>
         </Link>
-        <Link href="/catalog" className="btn btn-primary hdr-catalog">
+        <Link href="/catalog" className={`btn btn-primary hdr-catalog${dup}`}>
           <Icon name="menu" size={20} strokeWidth={2.2} />
           <span>{t("nav.catalog")}</span>
         </Link>
@@ -97,7 +99,7 @@ export function Header({ theme = "system" }: { theme?: Theme }) {
                 <Icon name="heart" />
                 <span className="hdr-label">{t("nav.favorites")}</span>
               </Link>
-              <Link href="/cart" className="hdr-btn" aria-label={`${t("nav.cart")}${cartQty ? ` (${cartQty})` : ""}`} title={t("nav.cart")}>
+              <Link href="/cart" className="hdr-btn hdr-tabdup" aria-label={`${t("nav.cart")}${cartQty ? ` (${cartQty})` : ""}`} title={t("nav.cart")}>
                 <Icon name="bag" />
                 <span className="hdr-label">{t("nav.cart")}</span>
                 <Badge n={cartQty} />
@@ -112,9 +114,9 @@ export function Header({ theme = "system" }: { theme?: Theme }) {
             </Link>
           )}
           {!ready ? (
-            <span className="hdr-btn muted" aria-hidden="true">…</span>
+            <span className={`hdr-btn muted${dup}`} aria-hidden="true">…</span>
           ) : me ? (
-            <div className="hdr-user">
+            <div className={`hdr-user${dup}`}>
               <button type="button" className="hdr-btn" aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen((v) => !v)}>
                 <Icon name="user" />
                 <span className="hdr-label">{role === "store" ? t("nav.store") : role === "admin" ? t("nav.admin") : t("nav.account")}</span>
@@ -138,7 +140,7 @@ export function Header({ theme = "system" }: { theme?: Theme }) {
               )}
             </div>
           ) : (
-            <Link href={`/login?next=${encodeURIComponent(pathname)}`} className="hdr-btn"><Icon name="user" /><span className="hdr-label">{t("nav.login")}</span></Link>
+            <Link href={`/login?next=${encodeURIComponent(pathname)}`} className="hdr-btn hdr-tabdup"><Icon name="user" /><span className="hdr-label">{t("nav.login")}</span></Link>
           )}
         </div>
       </div>

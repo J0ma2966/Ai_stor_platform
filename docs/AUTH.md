@@ -48,6 +48,15 @@
 пользователь Telegram, который открыл ссылку (чужой контакт и чужое нажатие не принимаются);
 бот предупреждает, что нажимать нужно, только если вы сами сейчас входите.
 
+### Telegram Mini App (`backend/internal/auth/telegram_webapp.go`, `web/src/components/TelegramMiniApp.tsx`)
+
+Магазин можно открыть кнопкой в том же боте (docs/TELEGRAM_MINI_APP.md). Внутри Telegram сайт
+отправляет подписанные данные запуска: `POST /v1/auth/telegram/webapp {init_data}`. API проверяет
+подпись токеном бота (HMAC, как в документации Telegram) и срок (24 часа). Если этот Telegram уже
+привязан к покупателю — выдаёт обычную сессию, человек входит без кнопок. Если нет — 404
+`telegram_not_linked`, и человек входит обычной кнопкой Telegram: чат с ботом открывается через
+`Telegram.WebApp.openTelegramLink`, бот просит номер, после этого автовход работает.
+
 ### Почта (`backend/internal/auth/email.go`, `backend/internal/mail`)
 
 - `POST /v1/auth/email/code {email, purpose: register|reset, lang}` → 202 всегда (без перечисления

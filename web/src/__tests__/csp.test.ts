@@ -20,6 +20,10 @@ describe("csp", () => {
     expect(csp).toContain("https://accounts.google.com/gsi/style");
     expect(csp).not.toContain("frame-src *");
   });
+  it("can be embedded only by Telegram Web (Mini App)", () => {
+    const fa = buildCsp("n", false).split("; ").find((d) => d.startsWith("frame-ancestors"))!;
+    expect(fa).toBe("frame-ancestors https://web.telegram.org");
+  });
   it("generates unique nonces", () => {
     expect(newNonce()).not.toBe(newNonce());
   });

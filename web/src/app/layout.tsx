@@ -8,6 +8,9 @@ import { LocaleSync } from "@/i18n/switch";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { StaleWorkerGuard } from "@/components/StaleWorkerGuard";
+import { TabBar } from "@/components/TabBar";
+import { TelegramMiniApp } from "@/components/TelegramMiniApp";
+import { TG_COOKIE } from "@/lib/telegram";
 import { SessionProvider } from "@/lib/session";
 import { alternates, siteUrl } from "@/lib/site";
 import { parseTheme, themeAttr, THEME_COOKIE } from "@/lib/theme";
@@ -30,6 +33,8 @@ export async function generateMetadata(): Promise<Metadata> {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  // нижняя панель уходит под «полоску» iPhone и учитывает её отступом env(safe-area-inset-bottom)
+  viewportFit: "cover",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#fff4f0" },
     { media: "(prefers-color-scheme: dark)", color: "#111111" },
@@ -42,9 +47,12 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const locale = await getLocale();
   // страницы рендерятся на каждый запрос: иначе в статическом HTML не будет nonce для CSP
   await headers();
-  const theme = parseTheme((await cookies()).get(THEME_COOKIE)?.value);
+  const jar = await cookies();
+  const theme = parseTheme(jar.get(THEME_COOKIE)?.value);
+  // открыто в Telegram Mini App (cookie ставит <TelegramMiniApp> при первом открытии)
+  const tg = jar.get(TG_COOKIE)?.value === "1" ? "1" : undefined;
   return (
-    <html lang={locale} data-theme={themeAttr(theme)}>
+    <html lang={locale} data-theme={themeAttr(theme)} data-tg={tg}>
       <head>
         <StaleWorkerGuard />
       </head>
@@ -61,6 +69,8 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
               {children}
             </main>
             <Footer />
+            <TabBar />
+            <TelegramMiniApp />
           </SessionProvider>
           </ClientMessages>
         </NextIntlClientProvider>

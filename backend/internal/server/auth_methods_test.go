@@ -8,9 +8,12 @@ import (
 	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -18,6 +21,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
+	"github.com/boutique-market/backend/internal/auth"
 	"github.com/boutique-market/backend/internal/config"
 	"github.com/boutique-market/backend/internal/mail"
 	"github.com/boutique-market/backend/internal/telegram"
@@ -394,6 +398,27 @@ func TestTelegramLogin(t *testing.T) {
 	}
 	if txt, _ := lastText(); !strings.Contains(txt, "Tayyor") {
 		t.Fatalf("uz text: %s", txt)
+	}
+
+	// 5. Mini App: вход по подписанным данным запуска, только для привязанного аккаунта
+	initData := func(user int64, token string) map[string]any {
+		v := url.Values{"auth_date": {strconv.FormatInt(time.Now().Unix(), 10)}, "user": {fmt.Sprintf(`{"id":%d,"first_name":"A"}`, user)}}
+		return map[string]any{"init_data": auth.SignTelegramInitData(v, token)}
+	}
+	wa := e.client()
+	r = wa.must(200, "POST", "/v1/auth/telegram/webapp", initData(tgUser, "123:ABC"))
+	if r.data()["access_token"] == nil || r.data()["is_new_user"] != false {
+		t.Fatalf("webapp login: %s", r.Raw)
+	}
+	wa.token = r.data()["access_token"].(string)
+	if me := wa.must(200, "GET", "/v1/me", nil).data(); me["phone"] != "+998901112233" {
+		t.Fatalf("webapp me: %v", me)
+	}
+	if r := e.client().do("POST", "/v1/auth/telegram/webapp", initData(555, "123:ABC")); r.Status != 404 || !strings.Contains(string(r.Raw), "telegram_not_linked") {
+		t.Fatalf("unknown tg user: %d %s", r.Status, r.Raw)
+	}
+	if r := e.client().do("POST", "/v1/auth/telegram/webapp", initData(tgUser, "999:FAKE")); r.Status != 401 {
+		t.Fatalf("forged init data: %d %s", r.Status, r.Raw)
 	}
 }
 

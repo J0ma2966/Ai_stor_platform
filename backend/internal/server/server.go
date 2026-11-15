@@ -72,6 +72,7 @@ func New(d Deps) http.Handler {
 	telegramLogin := d.Telegram != nil && d.Cfg.TelegramBotUsername != ""
 	if telegramLogin {
 		authSvc.TelegramBot = d.Cfg.TelegramBotUsername
+		authSvc.TelegramBotToken = d.Telegram.Token
 	}
 	revoker := auth.NewRevoker(d.Redis, d.Cfg.AccessTTL)
 	authH := &auth.Handlers{Svc: authSvc, Limiter: limiter, AllowedPrefixes: d.Cfg.OTPAllowedPrefixes,
