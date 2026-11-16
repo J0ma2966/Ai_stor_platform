@@ -349,6 +349,36 @@ func TestStoreLifecycleAndCatalog(t *testing.T) {
 	}
 	anon.must(400, "GET", "/v1/products?sort=drop_table", nil)
 
+	// фильтр каталога: сайт шлёт id категории/бутика, Android-приложение — slug.
+	// Оба варианта должны работать; неизвестный slug — пустая выдача, а не ошибка.
+	catSlug := cats[0].(map[string]any)["slug"].(string)
+	otherCat := cats[1].(map[string]any)["slug"].(string)
+	count := func(query string) int {
+		t.Helper()
+		return len(anon.must(200, "GET", "/v1/products?"+query, nil).Body["data"].([]any))
+	}
+	for query, want := range map[string]int{
+		"category=" + catID:                     1,
+		"category=" + catSlug:                   1,
+		"category=" + catSlug + "&sort=popular": 1,
+		"category=" + otherCat:                  0,
+		"category=no-such-category":             0,
+		"store=" + s1:                           1,
+		"store=alpha":                           1,
+		"store=beta":                            0,
+		"store=alpha&category=" + catSlug:       1,
+		"store=beta&category=" + catSlug:        0,
+	} {
+		if got := count(query); got != want {
+			t.Errorf("GET /v1/products?%s: %d items, want %d", query, got, want)
+		}
+	}
+	for _, bad := range []string{"category=Head%20Wear", "category=%27%3Bdrop", "store=ALPHA", "category=" + strings.Repeat("a", 70)} {
+		if r := anon.do("GET", "/v1/products?"+bad, nil); r.Status != 400 || r.errCode() != "bad_filter" {
+			t.Errorf("GET /v1/products?%s: %d %s, want 400 bad_filter", bad, r.Status, r.Raw)
+		}
+	}
+
 	// блокировка магазина: товары исчезают из каталога, сессии отозваны
 	adm.must(200, "POST", "/v1/admin/stores/"+s1+"/status", map[string]any{"status": "blocked", "reason": "test"})
 	if n := len(anon.must(200, "GET", "/v1/products", nil).Body["data"].([]any)); n != 0 {

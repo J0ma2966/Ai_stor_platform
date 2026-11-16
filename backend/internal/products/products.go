@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -136,6 +137,9 @@ var sorts = map[string]struct {
 	"rating":     {"p.rating_avg", true, "numeric"},
 }
 
+// slugRe — допустимый slug категории или бутика в фильтре каталога.
+var slugRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,62}$`)
+
 // list: GET /v1/products?q=&category=&store=&brand=&price_min=&price_max=&in_stock=&sort=&cursor=&limit=
 func (h *Handlers) list(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
@@ -152,14 +156,18 @@ func (h *Handlers) list(w http.ResponseWriter, r *http.Request) {
 	var args []any
 	arg := func(v any) string { args = append(args, v); return "$" + strconv.Itoa(len(args)) }
 
-	for _, f := range []struct{ name, col string }{{"category", "p.category_id"}, {"store", "p.store_id"}} {
+	// category и store принимают id (сайт) или slug (Android-приложение шлёт slug категории
+	// и бутика). Неизвестный slug даёт пустую выдачу, а не ошибку.
+	for _, f := range []struct{ name, col, table string }{{"category", "p.category_id", "categories"}, {"store", "p.store_id", "stores"}} {
 		if v := q.Get(f.name); v != "" {
-			id, err := uuid.Parse(v)
-			if err != nil {
-				httpx.Fail(w, r, httpx.NewError(400, "bad_filter", f.name+" must be uuid"))
+			if id, err := uuid.Parse(v); err == nil {
+				where = append(where, f.col+" = "+arg(id))
+			} else if slugRe.MatchString(v) {
+				where = append(where, f.col+" = (SELECT id FROM "+f.table+" WHERE slug = "+arg(v)+")")
+			} else {
+				httpx.Fail(w, r, httpx.NewError(400, "bad_filter", f.name+" must be an id or a slug"))
 				return
 			}
-			where = append(where, f.col+" = "+arg(id))
 		}
 	}
 	if v := strings.TrimSpace(q.Get("q")); v != "" {
