@@ -80,6 +80,17 @@ class LiveApiTest {
         assertEquals("published", mine.status)
         assertTrue(store.store.products().any { it.id == created.id })
 
+        // ---- фильтры каталога так, как их шлёт приложение: slug категории и бутика ----
+        // (чипы категорий на «Главной» и в «Каталоге», страница бутика, все сортировки)
+        val anon = app(Role.CLIENT).catalog
+        for (sort in CatalogFilters.SORTS) {
+            val byCategory = anon.products(CatalogFilters(category = category.slug, sort = sort, inStock = true))
+            assertTrue(byCategory.items.any { it.id == created.id }, "category=${category.slug} sort=$sort")
+            assertTrue(byCategory.items.all { it.categoryId == category.id }, "foreign category in sort=$sort")
+        }
+        val byStore = anon.products(CatalogFilters(store = profile.slug, category = category.slug))
+        assertTrue(byStore.items.any { it.id == created.id }, "store=${profile.slug}")
+
         // ---- клиент: регистрация по SMS, пароль, повторный вход по паролю ----
         val phone = "+99890" + (1_000_000..9_999_999).random()
         val client = app(Role.CLIENT)
