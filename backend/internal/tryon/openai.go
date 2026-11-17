@@ -192,7 +192,8 @@ func prepareImage(b []byte) ([]byte, error) {
 // попадают: это текст продавца, а промпт должен оставаться под нашим контролем.
 func OpenAIPrompt(images []labeledImage, missing []string, gender string, body Body) string {
 	var b strings.Builder
-	b.WriteString("Create one photorealistic virtual clothing try-on image showing the same person in three full-body views arranged horizontally in a single image.\n\n")
+	b.WriteString("Create one photorealistic virtual clothing try-on image showing the same person in three full-body views arranged horizontally in a single image.\n")
+	b.WriteString(openAIFaceRule)
 	b.WriteString("INPUT IMAGES (in the order they are attached):\n")
 	for i, im := range images {
 		fmt.Fprintf(&b, "- Image %d: %s.\n", i+1, im.label)
@@ -216,7 +217,7 @@ func OpenAIPrompt(images []labeledImage, missing []string, gender string, body B
 				fmt.Fprintf(&b, " %s %.1f cm;", name, v)
 			}
 		}
-		b.WriteString("\n")
+		b.WriteString(" use them only to size the garments, never to reshape the person's body.\n")
 	}
 	b.WriteString(`
 The three panels must show, from left to right:
@@ -224,11 +225,15 @@ The three panels must show, from left to right:
 2. SIDE VIEW - the person viewed from the side (use Image 2 as the reference).
 3. BACK VIEW - the person viewed from behind (use Image 3 as the reference).
 
-IDENTITY PRESERVATION:
-- Preserve the identity and facial appearance of the person.
-- Preserve natural body proportions, skin tone, hairstyle and physical characteristics.
-- Use the three supplied photographs as references for the corresponding views.
-- Do not invent a different person.
+IDENTITY AND FACE (STRICT, HIGHEST PRIORITY - overrides every other instruction):
+- This is the SAME real person from Images 1-3, not a model or a look-alike. Only the clothing may change.
+- Copy the face exactly from the person's photographs: same face shape, eyes, eyebrows, nose, lips, ears, jawline, chin, cheeks, teeth, wrinkles, moles, freckles, scars, beard or stubble, glasses and makeup (or no makeup).
+- Keep the same facial expression, the same age and the same skin tone and skin texture. Do not smooth, beautify, retouch, slim, rejuvenate or idealize the face or the body.
+- Do not change the head size or head shape, do not stylize the face, do not make it look like a cartoon, painting, mannequin or CGI.
+- Keep the same hairstyle, hair length, hair color and hairline. Headwear may cover the hair only if a HEADWEAR reference is supplied.
+- Keep the same body shape, height, build, proportions and limbs. Do not make the person thinner, fatter, taller, more muscular or change the figure.
+- In the FRONT VIEW the face must be clearly visible, sharp and identical to Image 1. In the SIDE VIEW the profile must match Image 2.
+- If the face cannot be reproduced faithfully, keep it exactly as in the photograph rather than inventing new features.
 
 CLOTHING:
 - Apply all supplied garment reference images to the person, each to its own body zone as labelled above.
@@ -260,9 +265,16 @@ COMPOSITION:
 - No cropped body parts.
 - Photorealistic result.
 
-The output must be one image, not three separate files.`)
+FINAL CHECK: the face, hair and body must be unchanged from the person's photographs; only the garments are different. The output must be one image, not three separate files.`)
 	return b.String()
 }
+
+// openAIFaceRule — жёсткое требование неизменности лица в самом начале промпта
+// (модель сильнее следует первым указаниям); подробности — в блоке IDENTITY AND FACE,
+// напоминание — в FINAL CHECK в конце. У моделей gpt-image-2.x все входные фото и так
+// обрабатываются с высокой точностью (input_fidelity не передаётся), маска для
+// трёхракурсной картинки неприменима — поэтому сохранение лица задаётся промптом.
+const openAIFaceRule = "ABSOLUTE RULE: do not alter, distort, replace, beautify or regenerate the person's face. The face must stay exactly the same as in the supplied photographs. Change only the clothing.\n\n"
 
 type openAIResponse struct {
 	Data []struct {

@@ -43,6 +43,7 @@ func Prompt(req Request) string {
 	fmt.Fprintf(&b, "Virtual try-on. The first image is a full-body photo of a real person seen %s. ", angleText[req.Angle])
 	b.WriteString("Dress this exact person in the clothing items shown in the following product images, replacing only the matching garments. ")
 	b.WriteString("Preserve the person's face, identity, body shape and proportions, skin tone, hair, pose, camera angle, framing and background. ")
+	b.WriteString("STRICT: do not alter, distort, beautify, retouch or regenerate the face; keep every facial feature, the expression, age, skin texture and hairstyle exactly as in the first image. Change only the clothing. ")
 	fmt.Fprintf(&b, "The output must remain a single photorealistic full-body view %s, head to feet, with realistic fabric drape, fit, lighting and shadows. ", angleText[req.Angle])
 	b.WriteString("Keep each item's color, pattern, material and details exactly as in its product photo. Do not add text, logos or watermarks. Do not add other people.")
 	if req.Body.HeightCM != nil || req.Body.WeightKG != nil || len(req.Body.Params) > 0 {
