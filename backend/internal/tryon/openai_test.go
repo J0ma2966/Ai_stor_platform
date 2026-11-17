@@ -93,10 +93,16 @@ func TestOpenAIPrompt(t *testing.T) {
 		"three full-body views arranged horizontally", "Image 1: FRONT", "Image 2: SIDE", "Image 3: BACK", "Image 4: TOP",
 		"The person is a man.", "height 180 cm", "waistIGNORE 80.0 cm", "No reference was provided for: HEADWEAR, BOTTOM, SHOES",
 		"Do not invent a hat, shoes, top or bottom", "The output must be one image, not three separate files.",
+		"ABSOLUTE RULE: do not alter, distort", "IDENTITY AND FACE (STRICT, HIGHEST PRIORITY", "Do not smooth, beautify, retouch",
+		"identical to Image 1", "never to reshape the person's body", "FINAL CHECK: the face, hair and body must be unchanged",
 	} {
 		if !strings.Contains(p, want) {
 			t.Fatalf("prompt lacks %q:\n%s", want, p)
 		}
+	}
+	// требование про лицо стоит до списка изображений — модель сильнее следует началу промпта
+	if strings.Index(p, "ABSOLUTE RULE") > strings.Index(p, "INPUT IMAGES") {
+		t.Fatal("face rule must open the prompt")
 	}
 	if strings.Contains(p, "Ignore previous instructions") {
 		t.Fatal("seller-provided titles must not reach the prompt")
